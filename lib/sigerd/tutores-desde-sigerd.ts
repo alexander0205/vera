@@ -15,6 +15,7 @@ import { adminEscolarTutores } from '@/lib/db/schema';
 import type { SigerdClient } from './client';
 import { traerParientesEstudiante, type ParienteSigerd } from './parientes';
 import { traerParientesDesdePdf } from './ficha-pdf';
+import { sinInvisibles, textoLimpio } from '@/lib/utils/format';
 
 export interface TutorDeSigerd {
   tutorId: number;
@@ -29,9 +30,10 @@ export interface TutorDeSigerd {
 
 /** El PDF trae el nombre entero en una pieza; la pestaña lo trae partido. */
 function nombreDe(p: { nombreCompleto?: string } & Partial<Omit<ParienteSigerd, 'tipo'>>): string {
-  if (p.nombreCompleto?.trim()) return p.nombreCompleto.replace(/\s+/g, ' ').trim();
-  return [p.primerNombre, p.segundoNombre, p.primerApellido, p.segundoApellido]
-    .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  const completo = textoLimpio(p.nombreCompleto);
+  if (completo) return completo.replace(/\s+/g, ' ');
+  return sinInvisibles([p.primerNombre, p.segundoNombre, p.primerApellido, p.segundoApellido]
+    .filter(Boolean).join(' ')).replace(/\s+/g, ' ').trim();
 }
 
 /** Un nombre que se puede guardar como persona: con letras, sin tiras de cifras. */
@@ -50,7 +52,7 @@ export function claveDeNombre(nombre: string): string {
 /** Un teléfono que se pueda marcar; el PDF a veces deja solo el prefijo «(829)». */
 function telefonoDe(p: { celular: string | null; telefono: string | null }): string | null {
   for (const t of [p.celular, p.telefono]) {
-    if (t && soloCifras(t).length >= 7) return t.trim();
+    if (t && soloCifras(t).length >= 7) return textoLimpio(t);
   }
   return null;
 }
@@ -105,7 +107,11 @@ export async function traerTutoresDeSigerd(
     // verdad, o con una tira de cifras, no se crea un tutor con eso.
     if (!esNombreDePersona(nombre)) continue;
 
-    const documento = p.cedula?.trim() || null;
+    // Sin invisibles (un U+200E pegado de WhatsApp o del PDF): se guarda limpio
+    // y no rompe después al hacerlo responsable de pago.
+    const documento = textoLimpio(p.cedula);
+    const telefono = telefonoDe(p);
+    const email = textoLimpio(p.email);
 
     // Reutilizar antes que duplicar. La cédula manda —es la identidad— y se
     // compara por sus cifras: el colegio la guarda sin guiones y el PDF con
@@ -135,9 +141,9 @@ export async function traerTutoresDeSigerd(
         nombre,
         documento,
         // El portal guarda los dos; el celular es el que contesta.
-        telefono: telefonoDe(p),
-        email: p.email?.trim() || null,
-        direccion: p.direccion?.trim() || null,
+        telefono,
+        email,
+        direccion: textoLimpio(p.direccion),
       }).returning({ id: adminEscolarTutores.id });
       tutorId = creado.id;
       clientId = null;
@@ -147,8 +153,8 @@ export async function traerTutoresDeSigerd(
       tutorId,
       nombre,
       documento,
-      telefono: telefonoDe(p),
-      email: p.email?.trim() || null,
+      telefono,
+      email,
       clientId,
       // `padre` | `madre` | `tutor` son tres de nuestras cinco relaciones, así
       // que el tipo del portal entra tal cual.
