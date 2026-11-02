@@ -3,6 +3,7 @@ import { db } from '@/lib/db/drizzle';
 import { adminEscolarTutores, clients } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, asc, and } from 'drizzle-orm';
+import { textoLimpio } from '@/lib/utils/format';
 
 export async function GET() {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
@@ -34,7 +35,10 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { nombre, documento, telefono, whatsapp, email, direccion, clientId, imagen } = await req.json();
-  if (!nombre?.trim()) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
+  // Sin invisibles: un U+200E pegado de WhatsApp en la cédula hacía imposible
+  // convertir al tutor en responsable de pago, y nadie lo podía ver.
+  const nombreLimpio = textoLimpio(nombre);
+  if (!nombreLimpio) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
 
   // clientId opcional: si viene, debe pertenecer al team.
   if (clientId !== undefined && clientId !== null) {
@@ -47,15 +51,15 @@ export async function POST(req: NextRequest) {
   const [row] = await db.insert(adminEscolarTutores).values({
     teamId,
     clientId: clientId ?? null,
-    nombre: nombre.trim(),
-    documento: documento?.trim() || null,
-    telefono: telefono?.trim() || null,
+    nombre: nombreLimpio,
+    documento: textoLimpio(documento),
+    telefono: textoLimpio(telefono),
     // El numero por el que se le escribe de verdad. La columna existia y
     // ningun endpoint la leia ni la escribia: el formulario lo pedia y se
     // perdia en el camino, asi que al tutor nunca se le podia avisar.
-    whatsapp: whatsapp?.trim() || null,
-    email: email?.trim() || null,
-    direccion: direccion?.trim() || null,
+    whatsapp: textoLimpio(whatsapp),
+    email: textoLimpio(email),
+    direccion: textoLimpio(direccion),
     imagen: imagen || null,
   }).returning();
   return NextResponse.json({ tutor: row });

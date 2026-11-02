@@ -22,14 +22,16 @@ import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { traerParientesEstudiante, type ParienteSigerd } from '@/lib/sigerd/parientes';
 import { traerParientesDesdePdf } from '@/lib/sigerd/ficha-pdf';
 import { conSesionSigerdAuto } from '@/lib/sigerd/sesion-auto';
+import { sinInvisibles, textoLimpio } from '@/lib/utils/format';
 
 export const dynamic = 'force-dynamic';
 
 /** El PDF trae el nombre entero en una pieza; la pestaña lo trae partido. */
 function nombreDe(p: { nombreCompleto?: string } & Partial<Omit<ParienteSigerd, 'tipo'>>): string {
-  if (p.nombreCompleto?.trim()) return p.nombreCompleto.replace(/\s+/g, ' ').trim();
-  return [p.primerNombre, p.segundoNombre, p.primerApellido, p.segundoApellido]
-    .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  const completo = textoLimpio(p.nombreCompleto);
+  if (completo) return completo.replace(/\s+/g, ' ');
+  return sinInvisibles([p.primerNombre, p.segundoNombre, p.primerApellido, p.segundoApellido]
+    .filter(Boolean).join(' ')).replace(/\s+/g, ' ').trim();
 }
 
 export async function POST(req: NextRequest) {
@@ -88,7 +90,11 @@ export async function POST(req: NextRequest) {
       // Sin nombre no hay tutor que crear: el hueco del portal estaba a medias.
       if (!nombre) continue;
 
-      const documento = p.cedula?.trim() || null;
+      // Sin invisibles también para buscar: con un U+200E delante, la misma
+      // cédula no se encontraba y el padre se creaba otra vez.
+      const documento = textoLimpio(p.cedula);
+      const telefono = textoLimpio(p.celular) ?? textoLimpio(p.telefono);
+      const email = textoLimpio(p.email);
 
       // Reutilizar antes que duplicar. La cédula manda —es la identidad— y solo
       // cuando falta se cae al nombre exacto. Sin esto, traer los parientes de
@@ -115,9 +121,9 @@ export async function POST(req: NextRequest) {
           nombre,
           documento,
           // El portal guarda los dos; el celular es el que contesta.
-          telefono: p.celular?.trim() || p.telefono?.trim() || null,
-          email: p.email?.trim() || null,
-          direccion: p.direccion?.trim() || null,
+          telefono,
+          email,
+          direccion: textoLimpio(p.direccion),
         }).returning({ id: adminEscolarTutores.id });
         tutorId = creado.id;
         clientId = null;
@@ -127,8 +133,8 @@ export async function POST(req: NextRequest) {
         tutorId,
         nombre,
         documento,
-        telefono: p.celular?.trim() || p.telefono?.trim() || null,
-        email: p.email?.trim() || null,
+        telefono,
+        email,
         clientId,
         // `padre` | `madre` | `tutor` son tres de nuestras cinco relaciones, así
         // que el tipo del portal entra tal cual.
