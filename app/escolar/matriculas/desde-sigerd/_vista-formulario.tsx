@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronRight, Search, UserRound } from 'lucide-react';
-import { titulo, type Alumno, type Grupo } from './_compartido';
+import { esSinCurso, titulo, type Alumno, type Grupo } from './_compartido';
 
 /**
  * La migración de un colegio alumno por alumno, como el formulario de Jelisa:
@@ -183,7 +183,7 @@ export function VistaFormulario({
                               <ul className="ml-3 border-l border-gray-100 pl-2">
                                 {g.estudiantes.map((e) => (
                                   <FilaAlumno key={e.id} e={e} activo={editandoId === e.id} hecho={hecho(e.id)}
-                                    excluido={fuera.has(e.id)}
+                                    excluido={fuera.has(e.id)} sinCurso={esSinCurso(g)}
                                     onAbrir={() => onAbrir(e, g)} onIncluir={() => onIncluir(e.id)} />
                                 ))}
                               </ul>
@@ -232,10 +232,12 @@ export function VistaFormulario({
   );
 }
 
-function FilaAlumno({ e, activo, hecho, excluido, onAbrir, onIncluir }: {
-  e: Alumno; activo: boolean; hecho: boolean; excluido: boolean; onAbrir: () => void; onIncluir: () => void;
+function FilaAlumno({ e, activo, hecho, excluido, sinCurso, onAbrir, onIncluir }: {
+  e: Alumno; activo: boolean; hecho: boolean; excluido: boolean; sinCurso: boolean; onAbrir: () => void; onIncluir: () => void;
 }) {
-  const estado = excluido ? 'No se matricula ahora' : e.matriculaId != null ? 'Ya matriculado' : 'Por matricular';
+  const estado = excluido ? 'No se matricula ahora'
+    : sinCurso ? 'Sin curso: elígele uno'
+    : e.matriculaId != null ? 'Ya matriculado' : 'Por matricular';
   return (
     <li className={`flex items-start gap-2 rounded-lg px-2 py-2 ${activo ? 'bg-zero-50 ring-1 ring-inset ring-zero-300' : ''}`}>
       <span title={hecho ? 'Completado' : 'Pendiente'}
@@ -243,6 +245,13 @@ function FilaAlumno({ e, activo, hecho, excluido, onAbrir, onIncluir }: {
       <button type="button" onClick={onAbrir} aria-pressed={activo} className="min-w-0 flex-1 text-left">
         <span className={`block text-sm leading-snug ${excluido ? 'text-gray-400 line-through' : 'font-medium text-gray-900'}`}>{e.nombre}</span>
         <span className="block text-[11px] text-gray-500">
+          {e.origen && (
+            // De dónde sale su sección: el portal, o Zero (su matrícula o el curso elegido aquí).
+            <span className={`mr-1 rounded px-1 py-px text-[10px] font-semibold ${e.origen === 'sigerd'
+              ? 'bg-sky-50 text-sky-700' : 'bg-violet-50 text-violet-700'}`}>
+              {e.origen === 'sigerd' ? 'SIGERD' : 'Zero'}
+            </span>
+          )}
           {estado}
           {e.sinResponsable && !excluido && <span className="font-medium text-amber-700"> · Sin responsable</span>}
         </span>

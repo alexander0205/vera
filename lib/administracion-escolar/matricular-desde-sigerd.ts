@@ -58,7 +58,36 @@ export interface GrupoSigerd {
     matriculaId?: number;
     /** Lo que su matrícula cobra hoy, si ya la tiene. */
     conceptos?: number[];
+    /**
+     * De dónde sale que está en esta sección: `sigerd` (el portal lo pone
+     * aquí y falta matricularlo) o `zero` (su matrícula de este año en Zero).
+     */
+    origen: 'sigerd' | 'zero';
   }>;
+}
+
+/** Una sección del año en Zero, tenga o no enlace con SIGERD: para ubicar a mano. */
+export interface CursoZero {
+  cursoId: number;
+  curso: string;
+  servicio: string;
+  grado: string;
+  seccion: string;
+  tanda: string | null;
+}
+
+/**
+ * Un alumno activo en Zero, sin matrícula este año, que SIGERD no pone en una
+ * sección de Zero: no está en el portal, su sección de allí no está enlazada,
+ * lo tiene en dos, o el colegio no usa SIGERD. Se matricula eligiéndole el
+ * curso en la pantalla.
+ */
+export interface SinCursoZero {
+  id: number;
+  nombre: string;
+  sinResponsable: boolean;
+  /** Por qué no tiene curso: «No está en SIGERD», o dónde lo tiene el portal. */
+  motivo: string;
 }
 
 /** Alguien que SIGERD lista pero que no se puede matricular, y dónde lo tiene. */
@@ -69,9 +98,15 @@ export interface OmitidoSigerd {
 }
 
 export interface PendientesSigerd {
-  /** Falso si no hay descarga de SIGERD o no hay año escolar activo. */
+  /** Falso si no hay año escolar activo. Sin descarga de SIGERD funciona con lo de Zero. */
   disponible: boolean;
   motivo?: string;
+  /** Hay descarga de SIGERD: sin ella solo salen los matriculados y los «sin curso» de Zero. */
+  sigerd: boolean;
+  /** Todas las secciones activas del año en Zero, en el orden del colegio. */
+  cursos: CursoZero[];
+  /** Alumnos de Zero sin matrícula este año que SIGERD no ubica. */
+  sinCurso: SinCursoZero[];
   /**
    * El año activo. `fechaInicio` es la inscripción por defecto: quien viene de
    * SIGERD está en el colegio desde que empezó el año, así que le tocan todas
@@ -96,8 +131,8 @@ export interface PendientesSigerd {
 }
 
 const vacio = (motivo: string): PendientesSigerd => ({
-  disponible: false, motivo, periodo: null, anoAcademico: null, descargadaEl: null,
-  grupos: [], porMatricular: 0, yaMatriculados: 0, sinEstudiante: [], sinSeccion: [],
+  disponible: false, motivo, sigerd: false, cursos: [], sinCurso: [], periodo: null, anoAcademico: null,
+  descargadaEl: null, grupos: [], porMatricular: 0, yaMatriculados: 0, sinEstudiante: [], sinSeccion: [],
 });
 
 /**
@@ -113,9 +148,10 @@ export async function pendientesDesdeSigerd(
   // Misma regla que «Revisar cambios» y el asistente (`ultimoDumpSigerd`): si
   // no, una pantalla diría «no hay descarga» mientras otra enseña datos.
   const imp = await ultimoDumpSigerd(teamId);
+  // Sin descarga se sigue: la estructura y los alumnos de Zero bastan para
+  // matricular eligiendo el curso a mano (colegio sin SIGERD, o antes de bajarlo).
   const dump = imp?.dump ?? null;
   const arbol = dump?.estructura as ArbolCentro | undefined;
-  if (!arbol) return vacio('No hay descarga de SIGERD todavía.');
 
   const [periodo] = await db.select({ id: adminEscolarPeriodos.id, nombre: adminEscolarPeriodos.nombre, fechaInicio: adminEscolarPeriodos.fechaInicio })
     .from(adminEscolarPeriodos)
@@ -191,7 +227,7 @@ export async function pendientesDesdeSigerd(
   // primera ponía al alumno en la que saliera antes en el árbol, que podía
   // ser la equivocada. Con dos sitios distintos no se adivina.
   const lugares = new Map<number, { est: Estudiante; sitios: Array<{ curso: Curso | undefined; ubicacion: string }> }>();
-  for (const sv of arbol.servicios) {
+  for (const sv of arbol?.servicios ?? []) {
     for (const g of sv.grados) {
       for (const s of g.secciones) {
         const curso = cursoPorSeccion.get(s.idSeccion);
@@ -229,18 +265,38 @@ export async function pendientesDesdeSigerd(
   };
   let yaMatriculados = 0;
   const sinSeccion: OmitidoSigerd[] = [];
+  /** Por alumno sin lugar claro en SIGERD, por qué: lo dice la lista «Sin curso». */
+  const motivoSinLugar = new Map<number, string>();
 
   for (const { est, sitios } of lugares.values()) {
     const nombre = `${est.nombres} ${est.apellidos}`.trim();
     if (conMatricula.has(est.id)) { yaMatriculados++; continue; }
     if (sitios.length > 1) {
-      sinSeccion.push({ nombre, ubicacion: `SIGERD lo tiene en ${sitios.length} secciones: ${sitios.map((x) => x.ubicacion).join(' y ')}` });
+      const ubicacion = `SIGERD lo tiene en ${sitios.length} secciones: ${sitios.map((x) => x.ubicacion).join(' y ')}`;
+      sinSeccion.push({ nombre, ubicacion });
+      motivoSinLugar.set(est.id, ubicacion);
       continue;
     }
     const { curso, ubicacion } = sitios[0];
-    if (!curso) { sinSeccion.push({ nombre, ubicacion }); continue; }
-    grupoDe(curso).estudiantes.push({ id: est.id, nombre, sinResponsable: est.facturarA == null });
+    if (!curso) {
+      sinSeccion.push({ nombre, ubicacion });
+      motivoSinLugar.set(est.id, `En SIGERD: ${ubicacion} (sin enlazar a una sección de Zero)`);
+      continue;
+    }
+    grupoDe(curso).estudiantes.push({ id: est.id, nombre, sinResponsable: est.facturarA == null, origen: 'sigerd' });
   }
+
+  // Lo que tiene Zero y SIGERD no ubica: activos sin matrícula este año. Se
+  // matriculan eligiéndoles el curso de Zero en la pantalla.
+  const sinCurso: SinCursoZero[] = estudiantes
+    .filter((e) => !conMatricula.has(e.id) && (!lugares.has(e.id) || motivoSinLugar.has(e.id)))
+    .map((e) => ({
+      id: e.id,
+      nombre: `${e.nombres} ${e.apellidos}`.trim(),
+      sinResponsable: e.facturarA == null,
+      motivo: motivoSinLugar.get(e.id) ?? (arbol ? 'No está en la descarga de SIGERD' : 'Sin datos de SIGERD'),
+    }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 
   // Los ya matriculados, en su sección y con lo que lleva su matrícula.
   let enMatricula = 0;
@@ -272,23 +328,41 @@ export async function pendientesDesdeSigerd(
         sinResponsable: m.facturarA == null,
         matriculaId: m.matriculaId,
         conceptos: (m.conceptosIds ?? []).map(Number),
+        origen: 'zero',
       });
       enMatricula++;
     }
   }
 
   const porOrden = (a: number[], b: number[]) => a.findIndex((x, i) => x !== b[i]);
-  const lista = [...grupos.values()]
-    .sort((a, b) => {
-      const i = porOrden(a.orden, b.orden);
-      return i >= 0 ? a.orden[i] - b.orden[i] : a.curso.localeCompare(b.curso, 'es');
+  const enOrden = (a: { orden: number[]; curso: string }, b: { orden: number[]; curso: string }) => {
+    const i = porOrden(a.orden, b.orden);
+    return i >= 0 ? a.orden[i] - b.orden[i] : a.curso.localeCompare(b.curso, 'es');
+  };
+  // Toda la estructura del año en Zero, para elegirle curso a quien no lo tiene.
+  const todosLosCursos: CursoZero[] = cursos
+    .map((c) => {
+      const partes = [c.grado, c.nombre].filter(Boolean).join(' — ');
+      return {
+        cursoId: c.id, curso: c.tanda ? `${partes} · ${c.tanda}` : partes,
+        servicio: c.servicio, grado: c.grado, seccion: c.nombre, tanda: c.tanda,
+        orden: [c.ordenServicio ?? 0, c.ordenGrado ?? 0, c.ordenCurso ?? 0],
+      };
     })
+    .sort(enOrden)
+    .map(({ orden: _orden, ...c }) => c);
+  const lista = [...grupos.values()]
+    .sort(enOrden)
     .map(({ orden: _orden, ...g }) => ({
       ...g,
       estudiantes: g.estudiantes.sort((x, y) => x.nombre.localeCompare(y.nombre, 'es')),
     }));
   return {
     disponible: true,
+    ...(arbol ? {} : { motivo: 'No hay descarga de SIGERD todavía: sale lo que tiene Zero.' }),
+    sigerd: !!arbol,
+    cursos: todosLosCursos,
+    sinCurso,
     periodo,
     anoAcademico: (dump?.anoAcademico as number | undefined) ?? imp?.anoAcademico ?? null,
     descargadaEl: imp?.bajadoEn ? imp.bajadoEn.toISOString() : null,
@@ -341,19 +415,25 @@ export async function matricularSeccionDesdeSigerd(teamId: number, entrada: {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) throw new LoteError('Fecha de inscripción inválida', 400);
 
   const p = await pendientesDesdeSigerd(teamId);
-  if (!p.disponible || !p.periodo) throw new LoteError(p.motivo ?? 'SIGERD no está disponible', 409);
+  if (!p.disponible || !p.periodo) throw new LoteError(p.motivo ?? 'No hay año escolar activo', 409);
+  const curso = p.cursos.find((c) => c.cursoId === cursoId);
+  if (!curso) throw new LoteError('Esa sección no está activa en el año escolar.', 409);
   const grupo = p.grupos.find((g) => g.cursoId === cursoId);
-  if (!grupo) throw new LoteError('Esa sección ya no tiene alumnos de SIGERD por matricular.', 409);
 
-  const enGrupo = new Map(grupo.estudiantes.map((e) => [e.id, e]));
+  // Entra quien SIGERD pone en esta sección y está pendiente, o quien Zero
+  // tiene sin curso y la pantalla ubicó aquí. Al que SIGERD pone en OTRA
+  // sección no se le cambia desde aquí: eso es un cambio de sección.
+  const pendientesAqui = new Set((grupo?.estudiantes ?? []).filter((e) => e.matriculaId == null).map((e) => e.id));
+  const sinCurso = new Set(p.sinCurso.map((e) => e.id));
+  const vale = (id: number) => pendientesAqui.has(id) || sinCurso.has(id);
   const fuera: ResultadoLote[] = entrada.alumnos
-    .filter((a) => !enGrupo.has(a.estudianteId))
+    .filter((a) => !vale(a.estudianteId))
     .map((a) => ({
       estudianteId: a.estudianteId, nombre: `Estudiante #${a.estudianteId}`, codigo: null,
-      resultado: 'invalido', motivo: 'Ya no está pendiente en esta sección de SIGERD',
+      resultado: 'invalido', motivo: 'Ya no está pendiente: tiene matrícula o SIGERD lo pone en otra sección',
     }));
-  const alumnos = entrada.alumnos.filter((a) => enGrupo.has(a.estudianteId));
-  const base = { curso: grupo.curso, esperadas: entrada.alumnos.length };
+  const alumnos = entrada.alumnos.filter((a) => vale(a.estudianteId));
+  const base = { curso: curso.curso, esperadas: entrada.alumnos.length };
   if (alumnos.length === 0) {
     return { ...base, creadas: 0, conflicto: 0, error: fuera.length, resultados: fuera };
   }

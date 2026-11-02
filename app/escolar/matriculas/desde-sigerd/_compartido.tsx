@@ -16,7 +16,21 @@ export interface Alumno {
   matriculaId?: number;
   /** Lo que su matrícula cobra hoy (solo si ya está matriculado). */
   conceptos?: number[];
+  /**
+   * De dónde sale su sección: `sigerd` (el portal lo pone ahí) o `zero` (su
+   * matrícula, o el curso que se le eligió aquí porque SIGERD no lo ubica).
+   */
+  origen?: 'sigerd' | 'zero';
+  /** Sin curso todavía: por qué SIGERD no lo ubica. */
+  motivoSinCurso?: string;
 }
+
+/**
+ * El «grupo» de los alumnos de Zero que SIGERD no ubica: no es una sección, es
+ * la lista de dónde se les elige una. No tiene plan ni se matricula tal cual.
+ */
+export const SIN_CURSO = -2;
+export const esSinCurso = (g: Pick<Grupo, 'cursoId'>) => g.cursoId === SIN_CURSO;
 
 /** Los pasos del alumno abierto. «Revisar» solo sale en la vista Formulario. Vive en la URL (`?paso=`). */
 export type PasoAlumno = 'familia' | 'conceptos' | 'pagos' | 'revisar';

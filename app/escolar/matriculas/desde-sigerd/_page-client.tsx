@@ -25,7 +25,7 @@ import {
   seccionConConcepto,
 } from '@/lib/administracion-escolar/matricular-sigerd-plan';
 import {
-  Chip, cobraEnSeccion, esMatriculado, iniciales, norm, rdCorto, titulo, tono,
+  Chip, SIN_CURSO, cobraEnSeccion, esMatriculado, esSinCurso, iniciales, norm, rdCorto, titulo, tono,
   type Ajuste, type Alumno, type Grupo, type PasoAlumno, type PlanSeccion,
 } from './_compartido';
 import { RevisarAlumno } from './_revisar-alumno';
@@ -59,9 +59,17 @@ import { VistaFormulario, type Completados } from './_vista-formulario';
  */
 
 interface Omitido { nombre: string; ubicacion: string }
+/** Una sección del año en Zero, enlazada o no a SIGERD. */
+interface CursoZero { cursoId: number; curso: string; servicio: string; grado: string; seccion: string; tanda: string | null }
 interface Pendientes {
   disponible: boolean;
   motivo?: string;
+  /** Hay descarga de SIGERD. Sin ella la pantalla trabaja con lo que tiene Zero. */
+  sigerd: boolean;
+  /** Toda la estructura del año en Zero, para elegirle curso a quien no lo tiene. */
+  cursos: CursoZero[];
+  /** Alumnos activos de Zero sin matrícula este año que SIGERD no ubica. */
+  sinCurso: Array<{ id: number; nombre: string; sinResponsable: boolean; motivo: string }>;
   periodo: { id: number; nombre: string; fechaInicio: string | null } | null;
   anoAcademico: number | null;
   descargadaEl: string | null;
@@ -99,7 +107,8 @@ interface CambioMatriculado { matriculaId: number; estudianteId: number; nombre:
 /** La fila del avance que no es una sección: los cambios a los ya matriculados. */
 const CAMBIOS = -1;
 
-type Filtro = 'todos' | 'por-matricular' | 'matriculados' | 'cambios' | 'fuera' | 'sin-responsable';
+type Filtro = 'todos' | 'por-matricular' | 'matriculados' | 'cambios' | 'fuera' | 'sin-responsable'
+  | 'sin-curso' | 'de-sigerd' | 'de-zero';
 type Vista = 'formulario' | 'seccion' | 'alumno' | 'concepto';
 
 const VISTAS: Array<{ id: Vista; etiqueta: string; icono: ReactNode; ayuda: string }> = [
@@ -159,7 +168,10 @@ export default function MatricularDesdeSigerd() {
   /** Por sección, los conceptos alternados a mano respecto de lo de por defecto (`cobraEnSeccion`). */
   const [cambiadosSeccion, setCambiadosSeccion] = useState<Map<number, Set<number>>>(new Map());
   const [ajustes, setAjustes] = useState<Map<number, Ajuste>>(new Map());
+  /** Alumno de Zero que SIGERD no ubica → la sección de Zero que se le eligió aquí. */
+  const [ubicados, setUbicados] = useState<Map<number, number>>(new Map());
 
+  const [vista, setVista] = useState<Vista>('formulario');
   const [busqueda, setBusqueda] = useState('');
   const [filtro, setFiltro] = useState<Filtro>('todos');
   /** El nivel, grado o sección elegido en la tabla de la izquierda. `null` = todo. */
@@ -187,6 +199,7 @@ export default function MatricularDesdeSigerd() {
       grupos: d.grupos.map((g) => (g.estudiantes.some((e) => e.id === id)
         ? { ...g, estudiantes: g.estudiantes.map((e) => (e.id === id ? { ...e, sinResponsable: !tiene } : e)) }
         : g)),
+      sinCurso: d.sinCurso.map((e) => (e.id === id ? { ...e, sinResponsable: !tiene } : e)),
     });
     setEditando((x) => (x && x.alumno.id === id ? { ...x, alumno: { ...x.alumno, sinResponsable: !tiene } } : x));
   }, []);
@@ -214,6 +227,62 @@ export default function MatricularDesdeSigerd() {
   }, []);
   useEffect(() => { void cargar(); }, [cargar]);
 
+  /**
+   * Las secciones como salen en pantalla. Del servidor: dónde pone SIGERD a
+   * los que faltan y las matrículas que ya tiene Zero. De aquí: los alumnos de
+   * Zero que SIGERD no ubica, en el curso de Zero que se les eligió, y los que
+   * todavía no tienen uno, juntos en «Sin curso» (al final).
+   */
+  const grupos = useMemo<Grupo[]>(() => {
+    if (!datos) return [];
+    const lista: Grupo[] = datos.grupos.map((g) => ({ ...g, estudiantes: [...g.estudiantes] }));
+    const porCurso = new Map(lista.map((g) => [g.cursoId, g]));
+    const cursos = new Map(datos.cursos.map((c) => [c.cursoId, c]));
+    const sinUbicar: Alumno[] = [];
+    for (const e of datos.sinCurso) {
+      const alumno: Alumno = { id: e.id, nombre: e.nombre, sinResponsable: e.sinResponsable, origen: 'zero', motivoSinCurso: e.motivo };
+      const c = cursos.get(ubicados.get(e.id) ?? SIN_CURSO);
+      if (!c) { sinUbicar.push(alumno); continue; }
+      let g = porCurso.get(c.cursoId);
+      if (!g) { g = { ...c, estudiantes: [] }; porCurso.set(c.cursoId, g); lista.push(g); }
+      g.estudiantes.push(alumno);
+    }
+    const orden = new Map(datos.cursos.map((c, i) => [c.cursoId, i]));
+    lista.sort((a, b) => (orden.get(a.cursoId) ?? 1e9) - (orden.get(b.cursoId) ?? 1e9));
+    for (const g of lista) g.estudiantes.sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'));
+    if (sinUbicar.length > 0) {
+      lista.push({
+        cursoId: SIN_CURSO, curso: 'Sin curso', servicio: 'Estudiantes de Zero sin curso', grado: 'Sin curso',
+        seccion: '', tanda: null, estudiantes: sinUbicar,
+      });
+    }
+    return lista;
+  }, [datos, ubicados]);
+  /** Las secciones de verdad: sin «Sin curso», que no tiene plan ni se matricula. */
+  const secciones = useMemo(() => grupos.filter((g) => !esSinCurso(g)), [grupos]);
+  // Al elegirle curso al alumno abierto, su panel pasa a ese curso (y a su plan).
+  useEffect(() => {
+    setEditando((x) => {
+      if (!x) return x;
+      const g = grupos.find((y) => y.estudiantes.some((e) => e.id === x.alumno.id));
+      return g && g.cursoId !== x.grupo.cursoId ? { ...x, grupo: g } : x;
+    });
+  }, [grupos]);
+
+  /**
+   * Elegirle (o quitarle) el curso de Zero a un alumno que SIGERD no ubica.
+   * Lo decidido para él en otro curso no vale en este: sus cargos se vuelven
+   * a armar con el plan del curso nuevo.
+   */
+  const ubicar = useCallback((alumnoId: number, cursoId: number | null) => {
+    setUbicados((m) => {
+      const n = new Map(m);
+      if (cursoId == null) n.delete(alumnoId); else n.set(alumnoId, cursoId);
+      return n;
+    });
+    setAjustes((m) => { if (!m.has(alumnoId)) return m; const n = new Map(m); n.delete(alumnoId); return n; });
+  }, []);
+
   /*
    * Autoguardado: lo decidido aquí (cambios por alumno, chips de sección,
    * quién no entra ahora, la fecha) se guarda solo en la base, uno por colegio
@@ -238,14 +307,15 @@ export default function MatricularDesdeSigerd() {
       .then((d) => {
         if (!vigente) return;
         const e = d.datos ? deBorrador(d.datos, {
-          alumnos: new Set(d0.grupos.flatMap((g) => g.estudiantes.map((x) => x.id))),
-          secciones: new Set(d0.grupos.map((g) => g.cursoId)),
+          alumnos: new Set([...d0.grupos.flatMap((g) => g.estudiantes.map((x) => x.id)), ...d0.sinCurso.map((x) => x.id)]),
+          secciones: new Set([...d0.grupos.map((g) => g.cursoId), ...d0.cursos.map((c) => c.cursoId)]),
         }) : null;
         borradorExiste.current = !!d.datos;
         if (e && !estaVacio(e)) {
           setAjustes(e.ajustes);
           setCambiadosSeccion(e.cambiadosSeccion);
           setFuera(e.fuera);
+          setUbicados(e.ubicados);
           if (e.fecha) setFecha(e.fecha);
           setBorrador({ estado: 'guardado', actualizado: d.actualizado, por: d.por, recuperado: true });
         } else {
@@ -256,7 +326,7 @@ export default function MatricularDesdeSigerd() {
     return () => { vigente = false; };
   }, [periodoBorrador]);
   const estadoLote = useMemo<EstadoLote>(
-    () => ({ fecha: fechaElegida, fuera, cambiadosSeccion, ajustes }), [fechaElegida, fuera, cambiadosSeccion, ajustes]);
+    () => ({ fecha: fechaElegida, fuera, cambiadosSeccion, ajustes, ubicados }), [fechaElegida, fuera, cambiadosSeccion, ajustes, ubicados]);
   const pendienteRef = useRef<EstadoLote | null>(null);
   const guardarBorrador = useCallback(async (e: EstadoLote, alSalir = false) => {
     if (!periodoBorrador) return;
@@ -299,7 +369,7 @@ export default function MatricularDesdeSigerd() {
   }, [guardarBorrador]);
   /** Empezar de cero: lo decidido se descarta, aquí y en el borrador. */
   const descartarBorrador = () => {
-    setAjustes(new Map()); setCambiadosSeccion(new Map()); setFuera(new Set()); setFecha(null);
+    setAjustes(new Map()); setCambiadosSeccion(new Map()); setFuera(new Set()); setFecha(null); setUbicados(new Map());
   };
 
   /**
@@ -328,13 +398,29 @@ export default function MatricularDesdeSigerd() {
 
 
   // El plan de cada sección, con la fecha elegida: la fecha decide qué cuotas
-  // ya tocan y cuáles espera el devengo.
+  // ya tocan y cuáles espera el devengo. Ubicar a un alumno de Zero en un curso
+  // que no salía pide solo el plan de ese curso; cambiar la fecha o cerrar
+  // «Conceptos y tarifas», todos otra vez.
+  const periodoPlanes = datos?.periodo?.id ?? null;
+  const cursosConPlan = secciones.map((g) => g.cursoId).join(',');
+  const pedidos = useRef<{ clave: string; cursos: Set<number> }>({ clave: '', cursos: new Set() });
   useEffect(() => {
-    if (!datos?.periodo || datos.grupos.length === 0) return;
+    if (!periodoPlanes || cursosConPlan === '') return;
     let vigente = true;
-    const periodoId = String(datos.periodo.id);
-    setPlanes(new Map(datos.grupos.map((g) => [g.cursoId, { estado: 'cargando' } as PlanSeccion])));
-    for (const g of datos.grupos) {
+    const periodoId = String(periodoPlanes);
+    const clave = `${periodoId}|${fecha}|${recargarPlanes}`;
+    const nueva = pedidos.current.clave !== clave;
+    if (nueva) pedidos.current = { clave, cursos: new Set() };
+    const faltan = cursosConPlan.split(',').map(Number).filter((id) => !pedidos.current.cursos.has(id));
+    if (faltan.length === 0) return;
+    const sinLlegar = new Set(faltan);
+    for (const id of faltan) pedidos.current.cursos.add(id);
+    setPlanes((m) => {
+      const n = nueva ? new Map<number, PlanSeccion>() : new Map(m);
+      for (const id of faltan) n.set(id, { estado: 'cargando' });
+      return n;
+    });
+    for (const g of faltan.map((cursoId) => ({ cursoId }))) {
       const params = new URLSearchParams({ periodoId, cursoId: String(g.cursoId), desde: fecha, otros: '1' });
       fetch(`/api/administracion-escolar/matriculas/plan-cobro?${params}`)
         .then(async (res) => {
@@ -347,10 +433,15 @@ export default function MatricularDesdeSigerd() {
           } as PlanSeccion;
         })
         .catch((e: unknown) => ({ estado: 'error', mensaje: e instanceof Error ? e.message : 'Error' } as PlanSeccion))
-        .then((p) => { if (vigente) setPlanes((m) => new Map(m).set(g.cursoId, p)); });
+        .then((p) => {
+          if (!vigente) return;
+          sinLlegar.delete(g.cursoId);
+          setPlanes((m) => new Map(m).set(g.cursoId, p));
+        });
     }
-    return () => { vigente = false; };
-  }, [datos, fecha, recargarPlanes]);
+    // Si el efecto se vuelve a correr antes de que lleguen, lo que no llegó se pide otra vez.
+    return () => { vigente = false; for (const id of sinLlegar) pedidos.current.cursos.delete(id); };
+  }, [periodoPlanes, fecha, recargarPlanes, cursosConPlan]);
 
   /** Lo que ya tiene guardado la matrícula de quien ya está matriculado. */
   const guardados = useMemo(() => {
@@ -381,7 +472,7 @@ export default function MatricularDesdeSigerd() {
   const cuentas = useMemo(() => {
     const m = new Map<number, { hoy: number; cargos: number; anio: number }>();
     if (!datos) return m;
-    for (const g of datos.grupos) {
+    for (const g of secciones) {
       const p = planes.get(g.cursoId);
       if (p?.estado !== 'listo') continue;
       for (const e of g.estudiantes) {
@@ -393,11 +484,11 @@ export default function MatricularDesdeSigerd() {
       }
     }
     return m;
-  }, [datos, planes, conceptosDe, ajustes, corte]);
+  }, [datos, secciones, planes, conceptosDe, ajustes, corte]);
 
   const resumen = useMemo(() => {
     const r = { alumnos: 0, secciones: 0, hoy: 0, anio: 0, cargos: 0, sinResponsable: 0, conCambios: ajustes.size };
-    for (const g of datos?.grupos ?? []) {
+    for (const g of secciones) {
       const dentro = g.estudiantes.filter((e) => !esMatriculado(e) && !fuera.has(e.id));
       if (dentro.length > 0) r.secciones++;
       for (const e of dentro) {
@@ -408,9 +499,9 @@ export default function MatricularDesdeSigerd() {
       }
     }
     return r;
-  }, [datos, fuera, cuentas, ajustes]);
+  }, [secciones, fuera, cuentas, ajustes]);
 
-  const planesListos = datos?.grupos.every((g) => planes.get(g.cursoId)?.estado === 'listo') ?? false;
+  const planesListos = secciones.every((g) => planes.get(g.cursoId)?.estado === 'listo');
 
   /**
    * Lo que cambia en las matrículas que ya existen, para guardarlo al final.
@@ -440,13 +531,17 @@ export default function MatricularDesdeSigerd() {
 
   // Lo que se ve con la búsqueda y el filtro. La sección se queda si le queda alguien.
   const q = norm(busqueda.trim());
-  const visibles = useMemo(() => (datos?.grupos ?? [])
-    .filter((g) => enAlcance(g, alcance))
+  const visibles = useMemo(() => grupos
+    // «Sin curso» es del formulario: es donde se elige el curso de Zero.
+    .filter((g) => (vista === 'formulario' || !esSinCurso(g)) && enAlcance(g, alcance))
     .map((g) => ({
       ...g,
       estudiantes: g.estudiantes.filter((e) => {
         if (q && !norm(e.nombre).includes(q)) return false;
-        if (filtro === 'por-matricular') return !esMatriculado(e);
+        if (filtro === 'por-matricular') return !esMatriculado(e) && !esSinCurso(g);
+        if (filtro === 'sin-curso') return esSinCurso(g);
+        if (filtro === 'de-zero') return e.origen === 'zero';
+        if (filtro === 'de-sigerd') return e.origen === 'sigerd';
         if (filtro === 'matriculados') return esMatriculado(e);
         if (filtro === 'cambios') return ajustes.has(e.id);
         if (filtro === 'fuera') return fuera.has(e.id);
@@ -454,7 +549,7 @@ export default function MatricularDesdeSigerd() {
         return true;
       }),
     }))
-    .filter((g) => g.estudiantes.length > 0), [datos, alcance, q, filtro, ajustes, fuera]);
+    .filter((g) => g.estudiantes.length > 0), [grupos, vista, alcance, q, filtro, ajustes, fuera]);
 
   function alternarFuera(ids: number[], sacar: boolean) {
     setFuera((s) => {
@@ -588,7 +683,6 @@ export default function MatricularDesdeSigerd() {
   }, [ponerAjustes, lineaDe, conceptosDe, ajustes]);
 
   // ── Vistas y alumnos marcados (vista por alumno) ─────────────────────
-  const [vista, setVista] = useState<Vista>('formulario');
   const [marcados, setMarcados] = useState<Set<number>>(new Set());
   const marcar = useCallback((ids: number[], si: boolean) => {
     setMarcados((s) => {
@@ -633,7 +727,7 @@ export default function MatricularDesdeSigerd() {
     if (alumnoDeLaUrl.current == null || (!datos && !errorCarga)) return;
     const id = alumnoDeLaUrl.current;
     alumnoDeLaUrl.current = null;
-    const grupo = datos?.grupos.find((g) => g.estudiantes.some((e) => e.id === id));
+    const grupo = grupos.find((g) => g.estudiantes.some((e) => e.id === id));
     const alumno = grupo?.estudiantes.find((e) => e.id === id);
     if (grupo && alumno) setEditando({ alumno, grupo });
     setUrlLista(true);
@@ -655,10 +749,10 @@ export default function MatricularDesdeSigerd() {
   /** Cada alumno con su sección entera, para encontrarlo por id. */
   const grupoDe = useMemo(() => {
     const m = new Map<number, Grupo>();
-    for (const g of datos?.grupos ?? []) for (const e of g.estudiantes) m.set(e.id, g);
+    for (const g of secciones) for (const e of g.estudiantes) m.set(e.id, g);
     return m;
   }, [datos]);
-  const completos = useMemo(() => new Map((datos?.grupos ?? []).map((g) => [g.cursoId, g])), [datos]);
+  const completos = useMemo(() => new Map(grupos.map((g) => [g.cursoId, g])), [grupos]);
   const marcadosDentro = useMemo(() => [...marcados]
     .filter((id) => !fuera.has(id) && grupoDe.has(id))
     .map((id) => ({ id, cursoId: grupoDe.get(id)!.cursoId })), [marcados, fuera, grupoDe]);
@@ -697,7 +791,7 @@ export default function MatricularDesdeSigerd() {
   async function matricular() {
     if (!datos) return;
     setConfirmar(false);
-    const porSeccion = datos.grupos
+    const porSeccion = secciones
       .map((g) => ({ g, alumnos: g.estudiantes.filter((e) => !esMatriculado(e) && !fuera.has(e.id)) }))
       .filter((x) => x.alumnos.length > 0);
     const cambios = cambiosMatriculados;
@@ -857,7 +951,7 @@ export default function MatricularDesdeSigerd() {
 
   if (avance) return <Progreso avance={avance} corriendo={corriendo} volver={volver} periodo={datos.periodo?.nombre ?? ''} />;
 
-  if (!datos.disponible || (datos.porMatricular === 0 && !datos.enMatricula)) {
+  if (!datos.disponible || (datos.porMatricular === 0 && !datos.enMatricula && datos.sinCurso.length === 0)) {
     return (
       <section className="space-y-5 p-4 sm:p-6">
         {volver}
@@ -866,12 +960,14 @@ export default function MatricularDesdeSigerd() {
             <CheckCircle2 className="h-7 w-7" />
           </div>
           <p className="mt-4 text-base font-semibold text-gray-900">
-            {datos.disponible ? 'No hay alumnos de SIGERD por matricular' : datos.motivo}
+            {datos.disponible ? 'No hay alumnos por matricular' : datos.motivo}
           </p>
           <p className="mt-1 max-w-md text-sm text-gray-500">
-            {datos.disponible
-              ? `Los ${datos.yaMatriculados} que SIGERD tiene en ${datos.periodo?.nombre} ya tienen su matrícula.`
-              : 'Descarga los datos del centro en Configuración › SIGERD y vuelve aquí.'}
+            {!datos.disponible
+              ? 'Crea o activa el año escolar en Configuración y vuelve aquí.'
+              : datos.sigerd
+                ? `Los ${datos.yaMatriculados} que SIGERD tiene en ${datos.periodo?.nombre} ya tienen su matrícula, y en Zero no queda ningún alumno activo sin ella.`
+                : `En Zero no queda ningún alumno activo sin matrícula en ${datos.periodo?.nombre}. Si el colegio usa SIGERD, descarga sus datos en Configuración › SIGERD.`}
           </p>
           {!datos.disponible && (
             <Link href="/escolar/configuracion/sigerd" className="mt-4 text-sm font-medium text-zero-700 hover:underline">
@@ -894,21 +990,31 @@ export default function MatricularDesdeSigerd() {
     );
   }
 
-  const omitidos = [...datos.sinSeccion, ...datos.sinEstudiante];
+  // Los de sección dudosa en SIGERD ya no quedan fuera: salen en «Sin curso»
+  // para elegirles el de Zero. Fuera solo queda quien no existe en Zero.
+  const omitidos = datos.sinEstudiante;
+  const nSinCurso = grupos.find(esSinCurso)?.estudiantes.length ?? 0;
   const descargada = datos.descargadaEl
     ? new Date(datos.descargadaEl).toLocaleString('es-DO', {
         dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Santo_Domingo',
       })
     : null;
   const filtros: Array<{ id: Filtro; etiqueta: string; n: number }> = [
-    { id: 'todos', etiqueta: 'Todos', n: datos.porMatricular + (datos.enMatricula ?? 0) },
+    { id: 'todos', etiqueta: 'Todos', n: grupos.reduce((n, g) => n + g.estudiantes.length, 0) },
     ...(datos.enMatricula ? [
-      { id: 'por-matricular' as const, etiqueta: 'Por matricular', n: datos.porMatricular },
+      { id: 'por-matricular' as const, etiqueta: 'Por matricular', n: secciones.reduce((n, g) => n + g.estudiantes.filter((e) => !esMatriculado(e)).length, 0) },
       { id: 'matriculados' as const, etiqueta: 'Matriculados', n: datos.enMatricula },
+    ] : []),
+    ...(datos.sinCurso.length > 0 ? [
+      { id: 'sin-curso' as const, etiqueta: 'Sin curso', n: grupos.find(esSinCurso)?.estudiantes.length ?? 0 },
+    ] : []),
+    ...(datos.sigerd ? [
+      { id: 'de-sigerd' as const, etiqueta: 'Ubicados por SIGERD', n: grupos.reduce((n, g) => n + g.estudiantes.filter((e) => e.origen === 'sigerd').length, 0) },
+      { id: 'de-zero' as const, etiqueta: 'Ubicados por Zero', n: grupos.reduce((n, g) => n + g.estudiantes.filter((e) => e.origen === 'zero').length, 0) },
     ] : []),
     { id: 'cambios', etiqueta: 'Con cambios', n: ajustes.size },
     { id: 'fuera', etiqueta: 'No se matriculan', n: fuera.size },
-    { id: 'sin-responsable', etiqueta: 'Sin responsable', n: datos.grupos.reduce((n, g) => n + g.estudiantes.filter((e) => e.sinResponsable).length, 0) },
+    { id: 'sin-responsable', etiqueta: 'Sin responsable', n: grupos.reduce((n, g) => n + g.estudiantes.filter((e) => e.sinResponsable).length, 0) },
   ];
 
   const textoGuardar = resumen.alumnos > 0 && cambiosMatriculados.length > 0
@@ -918,7 +1024,8 @@ export default function MatricularDesdeSigerd() {
   // El plan del alumno abierto: el mismo en el cajón y debajo de su fila.
   const editorDelAlumno = editando && datos.periodo ? (
     <EditorAlumno
-      key={editando.alumno.id}
+      // Otro curso es otro plan: el panel se arma de nuevo con el de ese curso.
+      key={`${editando.alumno.id}-${editando.grupo.cursoId}`}
       alumno={editando.alumno}
       grupo={editando.grupo}
       periodoId={datos.periodo.id}
@@ -940,6 +1047,12 @@ export default function MatricularDesdeSigerd() {
         guardarAjuste(editando.alumno.id, editando.grupo.cursoId, a);
         if (!seguir) setEditando(null);
       }}
+      ubicacion={editando.alumno.origen === 'zero' && !esMatriculado(editando.alumno) ? {
+        cursos: datos.cursos,
+        cursoId: esSinCurso(editando.grupo) ? null : editando.grupo.cursoId,
+        motivo: editando.alumno.motivoSinCurso,
+        onCambiar: (cursoId) => ubicar(editando.alumno.id, cursoId),
+      } : undefined}
       formulario={vista === 'formulario' ? {
         lineas: (() => {
           const p = planes.get(editando.grupo.cursoId);
@@ -1005,8 +1118,20 @@ export default function MatricularDesdeSigerd() {
       {puedeGestionar && <CompletarFamiliasSigerd />}
 
       {/* ── Avisos ─────────────────────────────────────────────────── */}
-      {(resumen.sinResponsable > 0 || omitidos.length > 0) && (
+      {(resumen.sinResponsable > 0 || omitidos.length > 0 || nSinCurso > 0) && (
         <div className="space-y-2">
+          {nSinCurso > 0 && (
+            <div className="flex items-start gap-3 rounded-xl border border-zero-200 bg-zero-50 px-4 py-3 text-sm text-zero-900">
+              <Layers className="mt-0.5 h-4 w-4 shrink-0 text-zero-600" />
+              <p>
+                <span className="font-medium">{nSinCurso} alumno(s) de Zero sin curso este año.</span>{' '}
+                {datos.sigerd ? 'SIGERD no los ubica en una sección de Zero' : 'Sin datos de SIGERD'}: ábrelos en
+                «Sin curso» y elígeles el curso de Zero para matricularlos.
+              </p>
+              <button type="button" onClick={() => { cambiarVista('formulario'); setFiltro('sin-curso'); }}
+                className="ml-auto shrink-0 text-xs font-medium text-zero-800 hover:underline">Ver</button>
+            </div>
+          )}
           {resumen.sinResponsable > 0 && (
             <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
@@ -1024,9 +1149,8 @@ export default function MatricularDesdeSigerd() {
                 className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm">
                 <UserX className="h-4 w-4 shrink-0 text-gray-400" />
                 <span className="flex-1 text-gray-700">
-                  <span className="font-medium text-gray-900">{omitidos.length} quedan fuera</span> — no se pueden
-                  matricular sin adivinar ({datos.sinEstudiante.length} sin cruzar con un estudiante,{' '}
-                  {datos.sinSeccion.length} sin sección clara)
+                  <span className="font-medium text-gray-900">{omitidos.length} quedan fuera</span> — SIGERD
+                  los tiene, pero no están como estudiantes en Zero (créalos o crúzalos en Configuración › SIGERD)
                 </span>
                 <ChevronRight className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${verOmitidos ? 'rotate-90' : ''}`} />
               </button>
@@ -1074,7 +1198,7 @@ export default function MatricularDesdeSigerd() {
         {vista === 'seccion' && (
           <aside className="hidden lg:block">
             <ArbolSecciones
-              grupos={datos.grupos} fuera={fuera} cuentas={cuentas}
+              grupos={secciones} fuera={fuera} cuentas={cuentas}
               alcance={alcance} onAlcance={setAlcance}
               onIncluir={alternarFuera} />
           </aside>
@@ -1101,7 +1225,7 @@ export default function MatricularDesdeSigerd() {
           </div>
 
           {alcance && (() => {
-            const g = datos.grupos.find((x) => enAlcance(x, alcance));
+            const g = grupos.find((x) => enAlcance(x, alcance));
             const que = !g ? '' : alcance.startsWith('n:') ? claveNivel(g).slice(2)
               : alcance.startsWith('g:') ? `${claveNivel(g).slice(2)} › ${g.grado}` : titulo(g);
             return (
@@ -1134,7 +1258,7 @@ export default function MatricularDesdeSigerd() {
 
           {vista === 'formulario' && (
             <VistaFormulario
-              grupos={visibles} todos={datos.grupos} editandoId={editando?.alumno.id ?? null}
+              grupos={visibles} todos={grupos} editandoId={editando?.alumno.id ?? null}
               fuera={fuera} completados={completados} editor={editorDelAlumno}
               busqueda={busqueda} onBusqueda={setBusqueda}
               filtros={filtros} filtro={filtro} onFiltro={(f) => setFiltro(f as Filtro)}
@@ -1181,7 +1305,7 @@ export default function MatricularDesdeSigerd() {
           )}
 
           {vista === 'seccion' && visibles.map((g) => {
-            const completo = datos.grupos.find((x) => x.cursoId === g.cursoId)!;
+            const completo = grupos.find((x) => x.cursoId === g.cursoId)!;
             const plan = planes.get(g.cursoId);
             const cambiados = cambiadosSeccion.get(g.cursoId);
             // La casilla y la cuenta son de los que faltan; los ya matriculados se editan.
@@ -1578,7 +1702,7 @@ function ArbolSecciones({ grupos, fuera, cuentas, alcance, onAlcance, onIncluir 
 /** El cajón de un alumno: sus conceptos y sus precios, con el selector de «Nueva matrícula». */
 function EditorAlumno({
   alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, recargar, onAbrirConceptos,
-  paso, onPaso, onResponsable, onGuardar, onRestablecer, onSacar, onCerrar, onSucio, formulario,
+  paso, onPaso, onResponsable, onGuardar, onRestablecer, onSacar, onCerrar, onSucio, formulario, ubicacion,
 }: {
   alumno: Alumno;
   grupo: Grupo;
@@ -1608,6 +1732,16 @@ function EditorAlumno({
    * En la vista Formulario: pasos con Atrás/Siguiente, un último paso
    * «Revisar» y el alumno se da por completado al terminar.
    */
+  /**
+   * Alumno de Zero que SIGERD no ubica: su curso se elige aquí, de la
+   * estructura del año en Zero. `cursoId` null = todavía sin curso.
+   */
+  ubicacion?: {
+    cursos: CursoZero[];
+    cursoId: number | null;
+    motivo?: string;
+    onCambiar: (cursoId: number | null) => void;
+  };
   formulario?: {
     /** Lo de su sección y lo de otros grados, para nombrar sus conceptos al revisar. */
     lineas: LineaPlan[] | null;
@@ -1700,6 +1834,32 @@ function EditorAlumno({
         </button>
       </div>
 
+      {ubicacion && (
+        <div className={`flex flex-col gap-2 border-b px-5 py-3 sm:flex-row sm:items-center ${
+          ubicacion.cursoId == null ? 'border-amber-100 bg-amber-50' : 'border-gray-100 bg-gray-50'}`}>
+          <div className="min-w-0 flex-1 text-xs">
+            <p className="font-medium text-gray-900">Curso en Zero</p>
+            <p className="text-gray-500">
+              {ubicacion.cursoId == null
+                ? `${ubicacion.motivo ?? 'SIGERD no lo ubica'}. Elige el curso de Zero en que se matricula.`
+                : 'Elegido aquí, de la estructura del año en Zero.'}
+            </p>
+          </div>
+          <select value={ubicacion.cursoId ?? ''} aria-label="Curso en Zero"
+            onChange={(e) => ubicacion.onCambiar(e.target.value ? Number(e.target.value) : null)}
+            className="h-9 w-full rounded-lg border border-gray-300 bg-white px-2 text-sm text-gray-900 focus:border-zero-500 focus:outline-none sm:w-72">
+            <option value="">— Sin curso —</option>
+            {[...new Set(ubicacion.cursos.map((c) => c.servicio + (c.tanda ? ` · ${c.tanda}` : '')))].map((nivel) => (
+              <optgroup key={nivel} label={nivel}>
+                {ubicacion.cursos.filter((c) => c.servicio + (c.tanda ? ` · ${c.tanda}` : '') === nivel).map((c) => (
+                  <option key={c.cursoId} value={c.cursoId}>{titulo(c)}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Primero quién es su familia y quién paga, después lo que se le cobra:
           el orden del formulario de migración. Los pasos quedan montados
           para no perder lo marcado al ir y volver. */}
@@ -1777,20 +1937,27 @@ function EditorAlumno({
             <button type="button" onClick={() => onPaso('familia')} className="font-medium underline">Familia</button>.
           </div>
         )}
-        <PlanCobroSelector
-          periodoId={String(periodoId)}
-          cursoId={String(grupo.cursoId)}
-          desde={fecha}
-          corte={corte}
-          estudianteId={alumno.id}
-          inicial={inicialFijo}
-          conOtros
-          preciosSoloOtros={esMatriculado(alumno)}
-          recargar={recargar}
-          onPlan={alLlegarPlan}
-          onCambio={alCambiar}
-          onPrecios={puedePrecios ? alCambiarPrecios : undefined}
-        />
+        {esSinCurso(grupo) ? (
+          // Sin curso no hay plan: lo que se cobra depende de la sección.
+          <p className="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500">
+            Elige arriba su curso en Zero para ver lo que se le cobra.
+          </p>
+        ) : (
+          <PlanCobroSelector
+            periodoId={String(periodoId)}
+            cursoId={String(grupo.cursoId)}
+            desde={fecha}
+            corte={corte}
+            estudianteId={alumno.id}
+            inicial={inicialFijo}
+            conOtros
+            preciosSoloOtros={esMatriculado(alumno)}
+            recargar={recargar}
+            onPlan={alLlegarPlan}
+            onCambio={alCambiar}
+            onPrecios={puedePrecios ? alCambiarPrecios : undefined}
+          />
+        )}
         {onAbrirConceptos && (
           <button type="button" onClick={onAbrirConceptos}
             className="inline-flex items-center gap-1.5 text-xs font-medium text-zero-700 hover:text-zero-800">
