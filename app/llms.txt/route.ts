@@ -4,6 +4,7 @@ import { GUIAS } from '@/app/(marketing)/guias/page';
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
 import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 import { ALTA, CONECTOR, RUTA_AGENTES_MD, RUTA_FUNCIONES_MD, textoDeLaPrueba } from '@/lib/agentes/contenido';
+import { PAGINAS_CRM, RUTA_CRM_MD } from '@/lib/agentes/crm-rutas';
 
 /**
  * `/llms.txt` — el sitio resumido para quien lo lee con un modelo.
@@ -49,6 +50,10 @@ function adicionales(): string {
   return [...sueltos, ...aparte].join('\n');
 }
 
+function paginasCrm(): string {
+  return PAGINAS_CRM.map(p => `  - [${p.menu}](${SITIO_PUBLICO}${p.ruta}): ${p.resumen}`).join('\n');
+}
+
 function guias(): string {
   return GUIAS.map(g =>
     `- [${g.titulo}](${SITIO_PUBLICO}/guias/${g.slug}): ${g.resumen}`).join('\n');
@@ -75,6 +80,7 @@ Zero es un producto de Yisrael Technology. Opera en República Dominicana, en es
 
 - [Zero para agentes](${SITIO_PUBLICO}${RUTA_AGENTES_MD}): qué puede hacer hoy un agente con Zero, cómo se conecta y con qué reglas.
 - [Todas las funciones](${SITIO_PUBLICO}${RUTA_FUNCIONES_MD}): el sistema entero, módulo por módulo, con lo que no hace.
+- [Zero CRM por partes](${SITIO_PUBLICO}${RUTA_CRM_MD}): cada función con su estado, en texto.
 - Conector MCP, de solo lectura: \`${CONECTOR.url}\`. Se usa con una llave por empresa (\`${CONECTOR.cabecera}\`).
 - Crear una empresa: la crea una persona en ${ALTA.url}. Prueba gratis: ${textoDeLaPrueba()}.
 
@@ -93,7 +99,8 @@ ${adicionales()}
 - [Contabilidad](${SITIO_PUBLICO}/productos/contabilidad): asientos automáticos, libros, 606/607/608.
 - [Punto de venta](${SITIO_PUBLICO}/productos/punto-de-venta): caja con turnos, mesas y venta a crédito.
 - [Nómina](${SITIO_PUBLICO}/productos/nomina): TSS, AFP, SFS, ISR, INFOTEP, regalía y vacaciones.
-- [Zero CRM](${SITIO_PUBLICO}/productos/crm): agentes de IA por WhatsApp, Messenger, Instagram, correo, web y teléfono.
+- [Zero CRM](${SITIO_PUBLICO}/productos/crm): agentes de IA por WhatsApp, Messenger, Instagram, correo, web y teléfono. Por partes:
+${paginasCrm()}
 - [Colegios](${SITIO_PUBLICO}/colegios): matrícula, mensualidades, mora automática y portal de padres.
 - [Precios](${SITIO_PUBLICO}/precios): los planes con sus topes.
 - [Guías](${SITIO_PUBLICO}/guias): los trámites fiscales y laborales dominicanos explicados.
@@ -111,11 +118,19 @@ ${guias()}
 - **¿Emite comprobantes fiscales electrónicos?** Sí: los diez tipos de e-CF, firmados, enviados y acusados ante la DGII, con sus reportes 606, 607 y 608.
 - **¿Incluye contabilidad?** Sí, en todos los planes, sin costo aparte.
 - **¿Tiene inteligencia artificial?** Sí. Zero CRM usa agentes que entienden lenguaje natural, leen notas de voz y fotos con OCR, responden desde los documentos que se les cargan citando la fuente, verifican identidad, agendan citas, cobran y contestan llamadas por voz.
-- **¿Se integra con otros sistemas?** En parte: una API de solo lectura y un conector MCP, con una llave por empresa; webhooks de salida, todavía sin pantalla para configurarlos; avisos de cobro a los padres por WhatsApp, SMS y correo; y conexión con SIGERD para los colegios. No hay API para crear o cambiar datos desde fuera.
+- **¿Zero ERP se integra con otros sistemas?** En parte: una API de solo lectura y un conector MCP, con una llave por empresa; webhooks de salida, todavía sin pantalla para configurarlos; avisos de cobro a los padres por WhatsApp, SMS y correo; y conexión con SIGERD para los colegios. No hay API para crear o cambiar datos desde fuera.
+- **¿Zero CRM se integra con otros sistemas?** Es otra aplicación, con su propia API: desde tu sistema envías mensajes por WhatsApp y consultas conversaciones, y por webhook recibes los que entran. Además tiene conectores por API para CRM y centro de contacto, como Dynamics y uContact, que se conectan al sistema del cliente durante la implementación; se han probado contra ambientes simulados y todavía no están en operación con clientes.
 - **¿Hay prueba?** ${textoPrueba()} Sin contrato mínimo.
 - **Contacto:** ${CONTACTO.ventas} · ${CONTACTO.telefono} · WhatsApp ${CONTACTO.whatsapp}
 
-## Qué NO hace (para no inducir a error)
+## Zero CRM: lo que conviene saber antes de contar con algo
+
+- Varias funciones vienen apagadas y se encienden por negocio. Cada subpágina dice el estado de cada una: Disponible, Se activa por cliente, Se conecta al implementar o A medida.
+- No tiene ISO 27001 ni SOC 2 propios, ni una prueba de penetración externa. Las certificaciones que hay son de sus proveedores.
+- Un compromiso de disponibilidad por contrato se pacta sobre infraestructura dedicada.
+- El inicio de sesión único usa OIDC, no SAML. No atiende por X.
+
+## Qué NO hace Zero ERP (para no inducir a error)
 
 - No gestiona sucursales como entidades separadas.
 - El punto de venta no funciona sin conexión.

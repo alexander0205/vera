@@ -12,6 +12,7 @@
  */
 
 import Link from 'next/link';
+import { PAGINAS_CRM, RUTA_CRM } from '@/lib/agentes/crm-rutas';
 import { CONTACTO, Contenedor } from './_piezas';
 
 /**
@@ -22,7 +23,7 @@ import { CONTACTO, Contenedor } from './_piezas';
  * por línea vive en `/precios`, que enseña una línea a la vez con su selector:
  * no hay ancla por producto a la que apuntar.
  */
-const COLUMNAS = [
+const COLUMNAS: readonly { titulo: string; enlaces: readonly { texto: string; href: string }[] }[] = [
   {
     titulo: 'Navegación',
     enlaces: [
@@ -46,13 +47,22 @@ const COLUMNAS = [
       { texto: 'Para agentes de IA', href: '/agentes' },
     ],
   },
-] as const;
+  {
+    // Aquí salen en el HTML de todas las páginas: es el enlace interno que un
+    // buscador sigue aunque el desplegable de la cabecera esté cerrado.
+    titulo: 'Zero CRM',
+    enlaces: [
+      { texto: 'Resumen', href: RUTA_CRM },
+      ...PAGINAS_CRM.map(p => ({ texto: p.menu, href: p.ruta })),
+    ],
+  },
+];
 
 export function PieMarketing() {
   return (
     <footer className="bg-[#0f1118] pt-12">
       <Contenedor>
-        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1.1fr]">
+        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1.1fr]">
           <div>
             {/* Las medidas van en el atributo, no solo en la clase: sin ellas
                 el navegador no conoce la proporción hasta que el SVG termina de

@@ -12,6 +12,7 @@
  * enseña a no usarlo.
  */
 
+import { PAGINAS_CRM, RUTA_CRM, type ClaveCrm } from '@/lib/agentes/crm-rutas';
 import { Iconos } from './_piezas';
 
 export type EntradaMenu = {
@@ -43,7 +44,27 @@ export const MODULOS: EntradaMenu[] = [
 /** El sistema completo, que es donde viven cuatro de esos seis módulos. */
 export const ENLACE_ERP = '/productos/erp';
 
-export const ENLACE_CRM = '/productos/crm';
+export const ENLACE_CRM = RUTA_CRM;
+
+const ICONO_CRM: Record<ClaveCrm, EntradaMenu['icono']> = {
+  'chatbot-whatsapp': Iconos.soporte,
+  'chat-web': Iconos.correo,
+  documentos: Iconos.papel,
+  bandeja: Iconos.usuarios,
+  supervision: Iconos.reportes,
+  integraciones: Iconos.engranaje,
+  seguridad: Iconos.escudo,
+  disponibilidad: Iconos.reloj,
+  preguntas: Iconos.hoja,
+};
+
+/** Las partes del CRM, cada una con su página. Salen de `lib/agentes/crm-rutas.ts`. */
+export const ENTRADAS_CRM: EntradaMenu[] = PAGINAS_CRM.map(p => ({
+  href: p.ruta,
+  titulo: p.menu,
+  detalle: p.resumen,
+  icono: ICONO_CRM[p.clave],
+}));
 
 /**
  * Las secciones de la portada a las que tiene sentido saltar desde el menú.
