@@ -20,6 +20,7 @@ import { logActivity } from '@/lib/db/actividad';
 import { ActivityType } from '@/lib/db/schema';
 import { origenPublico } from '@/lib/http/origen-publico';
 import { googleConfigurado, perfilDesdeCodigo, firmarPendiente, GoogleError } from '@/lib/auth/google';
+import { leerDestinoDeEntrada, rutaTrasEntrar } from '@/lib/auth/destino';
 
 function aError(req: NextRequest, motivo: string) {
   const url = new URL(`/sign-in?error=${motivo}`, origenPublico(req));
@@ -63,10 +64,8 @@ export async function GET(req: NextRequest) {
     return aError(req, e instanceof GoogleError ? 'google_perfil' : 'google');
   }
 
-  let destino: { redirect?: string; priceId?: string; inviteId?: string; inviteToken?: string } = {};
-  try {
-    destino = JSON.parse(req.cookies.get('g_destino')?.value || '{}');
-  } catch { /* si viene rota, se entra al panel y ya */ }
+  // Si viene rota, se entra al panel y ya.
+  const destino = leerDestinoDeEntrada(req.cookies.get('g_destino')?.value);
 
   // Por `google_id` primero y por correo después: si la persona ya entró
   // alguna vez con Google, ese id manda aunque después le cambiaran el correo.
@@ -114,7 +113,7 @@ export async function GET(req: NextRequest) {
 
   const destinoFinal = usuario.platformRole === 'admin'
     ? '/admin'
-    : (destino.redirect && destino.redirect !== 'checkout' ? destino.redirect : '/dashboard');
+    : rutaTrasEntrar(destino.redirect);
 
   return limpiar(NextResponse.redirect(new URL(destinoFinal, base)));
 }

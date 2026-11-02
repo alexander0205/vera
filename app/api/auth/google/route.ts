@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import { origenPublico } from '@/lib/http/origen-publico';
 import { googleConfigurado, urlDeConsentimiento } from '@/lib/auth/google';
+import { destinoValido } from '@/lib/auth/destino';
 
 /** Ida y vuelta por Google: diez minutos sobra y limita la ventana de reuso. */
 const VIDA_SEGUNDOS = 600;
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
 
   const entrada = req.nextUrl.searchParams;
   const destino = JSON.stringify({
-    redirect:    entrada.get('redirect')    || undefined,
+    redirect:    destinoValido(entrada.get('redirect')),
     priceId:     entrada.get('priceId')     || undefined,
     inviteId:    entrada.get('inviteId')    || undefined,
     inviteToken: entrada.get('inviteToken') || undefined,

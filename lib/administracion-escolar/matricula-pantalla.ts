@@ -17,21 +17,11 @@
  * `tests/unit/matricula-pantalla.test.ts` lo prueba entero sin montar nada.
  */
 
+import { rutaInterna } from '@/lib/auth/destino';
+
 /* ------------------------------------------------------------------ */
 /*  Lo que viene en la dirección                                       */
 /* ------------------------------------------------------------------ */
-
-/** Base de mentira para resolver rutas relativas: solo se le mira el origen. */
-const ORIGEN = 'http://interno.invalid';
-
-/**
- * Una ruta de ESTE módulo: empieza por `/escolar/`, sin `//` (que además
- * descarta cualquier `protocolo://`) y sin barras invertidas, que los
- * navegadores leen como `/`.
- */
-function esRutaDelModulo(ruta: string): boolean {
-  return ruta.startsWith('/escolar/') && !ruta.includes('//') && !ruta.includes('\\');
-}
 
 /**
  * El `?volver=` de la dirección, si es de fiar; si no, `null`.
@@ -41,22 +31,14 @@ function esRutaDelModulo(ruta: string): boolean {
  * guardar lo saque de la aplicación con la sesión abierta. Por eso solo vale
  * una ruta interna del módulo.
  *
- * Se mira dos veces: tal como llega y resuelta como la resolvería el
- * navegador. Así caen `/escolar/../dashboard`, que empieza bien y acaba fuera,
- * y el tabulador metido entre dos barras, que el navegador quita antes de
- * leerlas. Se devuelve la ruta ya resuelta, que es la que se validó.
+ * Se mira dos veces, tal como llega y resuelta: así cae `/escolar/../dashboard`,
+ * que empieza bien y acaba fuera. Lo de salir de la aplicación lo resuelve
+ * `rutaInterna`.
  */
 export function volverSeguro(crudo: unknown): string | null {
-  if (typeof crudo !== 'string' || !esRutaDelModulo(crudo)) return null;
-  let url: URL;
-  try {
-    url = new URL(crudo, ORIGEN);
-  } catch {
-    return null;
-  }
-  if (url.origin !== ORIGEN) return null;
-  const resuelta = `${url.pathname}${url.search}${url.hash}`;
-  return esRutaDelModulo(resuelta) ? resuelta : null;
+  if (typeof crudo !== 'string' || !crudo.startsWith('/escolar/')) return null;
+  const resuelta = rutaInterna(crudo);
+  return resuelta?.startsWith('/escolar/') ? resuelta : null;
 }
 
 /**
