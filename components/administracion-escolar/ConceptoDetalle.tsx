@@ -434,8 +434,11 @@ export function ConceptoDetalle({
         {/* ── 1. Qué es y cada cuánto ───────────────────────────────────── */}
         <div className="border-b border-gray-100 p-4">
           <Paso n={1} titulo="¿Qué es y cada cuánto se cobra?" />
-          <div className="flex items-start gap-3">
-            <div className="min-w-0 flex-1 space-y-1.5">
+          {/* En pantalla angosta el nombre va en su línea y el tipo con los
+              botones debajo. Sin `flex-wrap`, el tipo con su ancho completo
+              dejaba el campo del nombre en cero y las dos etiquetas se montaban. */}
+          <div className="flex flex-wrap items-start gap-3 sm:flex-nowrap">
+            <div className="w-full min-w-0 space-y-1.5 sm:w-auto sm:flex-1">
               <Label>Nombre</Label>
               <Input value={borrador.nombre} onChange={(e) => editar('nombre', e.target.value)} />
             </div>
@@ -446,7 +449,7 @@ export function ConceptoDetalle({
                 pantalla —lo escribía a escondidas el interruptor de abajo— y
                 todo lo que se repetía durante el año acababa contando como
                 colegiatura. */}
-            <div className="w-full min-w-0 space-y-1.5 sm:w-56">
+            <div className="min-w-0 flex-1 space-y-1.5 sm:w-56 sm:flex-none">
               <Label htmlFor="concepto-tipo">¿Qué es este cobro?</Label>
               {nuevaCategoria === null ? (
                 <NativeSelect id="concepto-tipo" value={borrador.categoria ? `cat:${borrador.categoria}` : tipoDelBorrador}
