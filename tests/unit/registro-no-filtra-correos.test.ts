@@ -11,8 +11,9 @@
  * sugiere entrar en vez de registrarse — que se puede decir sin afirmar nada,
  * porque se dice siempre.
  *
- * Y el nombre: el formulario lo repinta con `state.name`, pero `signUp` solo
- * devolvía `email` y `password`, así que en cada fallo había que reescribirlo.
+ * Y el nombre: el formulario lo repinta con `state.name`, así que `signUp` lo
+ * devuelve en cada fallo. Correo y contraseña los guarda la propia pantalla: el
+ * servidor no devuelve una contraseña solo para que no se borre.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -48,17 +49,17 @@ describe('el mensaje de alta fallida no revela nada', () => {
 });
 
 describe('un registro fallido no borra lo que ya escribiste', () => {
-  it('signUp devuelve el nombre junto al correo y la contraseña', () => {
+  it('signUp devuelve el nombre, y nunca la contraseña', () => {
     // Las dos salidas con error del registro.
     const salidas = actions.match(/return \{ error: [^}]*\}/g) ?? [];
-    const deRegistro = salidas.filter(s => s.includes('email') && s.includes('password'));
+    const deRegistro = salidas.filter(s => s.includes('name'));
     expect(deRegistro.length).toBeGreaterThanOrEqual(2);
-    for (const s of deRegistro) expect(s).toContain('name');
+    for (const s of deRegistro) expect(s).not.toContain('password');
   });
 
   it('la pantalla sigue repintando los tres campos', () => {
     expect(login).toContain('defaultValue={state.name');
-    expect(login).toContain('defaultValue={state.email');
-    expect(login).toContain('defaultValue={state.password');
+    expect(login).toContain('defaultValue={escrito.email');
+    expect(login).toContain('defaultValue={escrito.password');
   });
 });

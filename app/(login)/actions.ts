@@ -35,7 +35,7 @@ import { mandarVerificacion } from '@/lib/auth/verificacion';
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255).trim().toLowerCase(),
   password: z.string().min(8).max(100),
-  twoFactorCode: z.string().regex(/^\d{6}$/).optional(),
+  twoFactorCode: z.string().regex(/^\d{6}$/, 'El código tiene 6 dígitos.').optional(),
 });
 
 export const signIn = validatedAction(signInSchema, async (data, formData) => {
@@ -59,12 +59,10 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
     .where(eq(users.email, email))
     .limit(1);
 
+  // Ninguna respuesta devuelve la contraseña: lo escrito se queda en el navegador
+  // (ver `login.tsx`) y no tiene por qué dar otra vuelta por la red.
   if (userWithTeam.length === 0) {
-    return {
-      error: 'Correo o contraseña incorrectos. Intenta de nuevo.',
-      email,
-      password
-    };
+    return { error: 'Correo o contraseña incorrectos. Intenta de nuevo.' };
   }
 
   const { user: foundUser, team: foundTeam } = userWithTeam[0];
@@ -75,23 +73,15 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   );
 
   if (!isPasswordValid) {
-    return {
-      error: 'Correo o contraseña incorrectos. Intenta de nuevo.',
-      email,
-      password
-    };
+    return { error: 'Correo o contraseña incorrectos. Intenta de nuevo.' };
   }
 
   // 2FA gate — si está habilitado, exigir código TOTP válido antes de setear sesión
   if (foundUser.twoFactorEnabled && foundUser.twoFactorSecret) {
     const code = data.twoFactorCode;
     if (!code) {
-      return {
-        error: '2FA_REQUIRED',
-        twoFactorRequired: true,
-        email,
-        password,
-      };
+      // No es un error: es el segundo paso, y la pantalla pide el código.
+      return { twoFactorRequired: true };
     }
     const OTPAuth = await import('otpauth');
     const totp = new OTPAuth.TOTP({
@@ -105,10 +95,8 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
     const delta = totp.validate({ token: code, window: 1 });
     if (delta === null) {
       return {
-        error: 'Código 2FA inválido o expirado.',
+        error: 'Código inválido o expirado. Escribe el que muestra ahora tu app.',
         twoFactorRequired: true,
-        email,
-        password,
       };
     }
   }
@@ -150,7 +138,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const ipSignup = reqHeadersSignup.get('x-forwarded-for') ?? 'unknown';
   const rlSignup = rateLimit(`signup:${ipSignup}`, 5, 60_000);
   if (!rlSignup.allowed) {
-    return { error: 'Demasiados intentos de registro. Intenta en 1 minuto.', name, email, password };
+    return { error: 'Demasiados intentos de registro. Intenta en 1 minuto.', name };
   }
 
   // El alta es la MISMA que la de Google (lib/auth/alta.ts): crear usuario,
@@ -165,11 +153,11 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     inviteToken,
   });
 
-  // `name` también, no solo email y contraseña: la pantalla lo repinta con
-  // `state.name` y sin devolverlo el campo volvía vacío en cada fallo. Fallar
-  // el registro y encima tener que reescribir el nombre es el momento en que
-  // la gente se va.
-  if (!alta.ok) return { error: alta.error, name, email, password };
+  // `name` se devuelve: la pantalla lo repinta con `state.name` y sin él el campo
+  // volvía vacío en cada fallo. Fallar el registro y encima tener que reescribir
+  // el nombre es el momento en que la gente se va. Correo y contraseña los
+  // guarda la propia pantalla.
+  if (!alta.ok) return { error: alta.error, name };
 
   const { usuario: createdUser, equipo: createdTeam } = alta;
   await setSession(createdUser);
