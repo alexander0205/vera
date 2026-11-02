@@ -58,8 +58,8 @@ export interface CuotaDetallada {
  */
 const CANALES_POR_AVISO = {
   'al-emitir':  ['correo', 'whatsapp'],
-  'al-vencer':  ['correo', 'sms'],
-  'antes-mora': ['correo', 'sms'],
+  'al-vencer':  ['correo', 'whatsapp'],
+  'antes-mora': ['correo', 'whatsapp', 'sms'],
 } as const;
 
 const CANAL_META = {

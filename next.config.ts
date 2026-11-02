@@ -39,13 +39,17 @@ const appVersion = JSON.parse(readFileSync('./package.json', 'utf8')).version ??
  *
  * `stun: turn: turns:` en connect-src — los navegadores tratan las
  * conexiones ICE de WebRTC como sujetas a connect-src; sin estos esquemas
- * ahí, la conexión a los servidores STUN/TURN se bloquea.
+ * ahí, la conexión a los servidores STUN/TURN se bloquea. *
+ * `media-src` con S3 — los videos de las tareas por revisar se ven con una URL
+ * firmada de S3 (ver lib/storage/tareas.ts). Sin `media-src` caía en
+ * `default-src 'self'` y el navegador bloqueaba el `<video>`: el reproductor
+ * salía negro, en 0:00. Las fotos ya pasaban por `img-src https:`.
  */
 const securityHeaders = [
   {
     key: 'Content-Security-Policy',
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com https://www.clarity.ms https://*.clarity.ms; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.zero.com.do https://api.stripe.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.clarity.ms stun: turn: turns:; frame-src 'self' blob: https://js.stripe.com; object-src 'none'; base-uri 'self'",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com https://www.clarity.ms https://*.clarity.ms; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' blob: https://*.s3.us-east-1.amazonaws.com https://*.s3.amazonaws.com; connect-src 'self' https://*.zero.com.do https://api.stripe.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.clarity.ms stun: turn: turns:; frame-src 'self' blob: https://js.stripe.com; object-src 'none'; base-uri 'self'",
   },
   {
     key: 'Strict-Transport-Security',

@@ -115,7 +115,9 @@ export const terminar = validatedAction(esquemaFinal, async (data) => {
   if (!plan) return { error: 'No pudimos determinar tu plan. Vuelve atrás e inténtalo de nuevo.' };
 
   const usuario = await getUser();
-  if (usuario) {
+  // Un admin de Zero que llena la bienvenida de un cliente escribe el número del
+  // cliente: guardarlo en su cuenta le mandaría a ese cliente los avisos del admin.
+  if (usuario && usuario.platformRole !== 'admin') {
     await db.update(users)
       .set({ telefono: data.telefono, updatedAt: new Date() })
       .where(eq(users.id, usuario.id));

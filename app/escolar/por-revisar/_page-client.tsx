@@ -6,8 +6,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import { Check, Loader2, Plus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { PanelNuevaTarea, PanelTarea, Segmento, traer } from '@/components/administracion-escolar/TareasEstudiante';
-import { refrescarCampana } from '@/components/administracion-escolar/CampanaTareas';
+import { PanelNuevaTarea, PanelTarea, Segmento, traer, TurnoChip } from '@/components/administracion-escolar/TareasEstudiante';
+import { PedirWhatsApp } from '@/components/notificaciones/PedirWhatsApp';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { ZERO_AI_TAREAS } from '@/lib/administracion-escolar/tareas-reglas';
 import type { FamiliaConTareas, TareaDelColegio } from '@/lib/administracion-escolar/tareas';
@@ -25,12 +25,12 @@ import type { FamiliaConTareas, TareaDelColegio } from '@/lib/administracion-esc
  * un alumno que se busca en el formulario.
  */
 
-type Vista = 'mias' | 'todas' | 'hechas';
+type Vista = 'mias' | 'todas' | 'proceso' | 'revision' | 'hechas';
 type Origen = 'todas' | 'ia' | 'personas';
 
 interface Respuesta {
   familias: FamiliaConTareas[];
-  cuentas: { mias: number; todas: number; hechas: number };
+  cuentas: { mias: number; todas: number; proceso: number; revision: number; hechas: number };
   kpis: { abiertas: number; familias: number; colegio: number; mias: number; ia: number; viejas: number };
 }
 
@@ -52,7 +52,7 @@ function dondeEstan(familias: number, colegio: number) {
 }
 
 const inicialesDe = (asignada: string) => {
-  if (asignada.startsWith('Soporte IT')) return 'IT';
+  if (asignada.startsWith('Soporte IT') || asignada.startsWith('Departamento de IT')) return 'IT';
   const p = asignada.trim().split(/\s+/).filter((x) => !/\.$/.test(x));
   return `${p[0]?.[0] ?? ''}${p[1]?.[0] ?? ''}`.toUpperCase() || '·';
 };
@@ -67,6 +67,7 @@ export default function PorRevisarClient() {
   const [vista, setVista] = useState<Vista>('mias');
   const [origen, setOrigen] = useState<Origen>('todas');
   const [asignada, setAsignada] = useState('');
+  const [esperando, setEsperando] = useState('');
   const [cambiando, setCambiando] = useState<number | null>(null);
   const [revisando, setRevisando] = useState(false);
   const [creando, setCreando] = useState(false);
@@ -79,7 +80,7 @@ export default function PorRevisarClient() {
     router.replace(q.size ? `${pathname}?${q}` : pathname, { scroll: false });
   };
 
-  const clave = `/api/administracion-escolar/tareas/colegio?vista=${vista}&origen=${origen}&asignada=${asignada}`;
+  const clave = `/api/administracion-escolar/tareas/colegio?vista=${vista}&origen=${origen}&asignada=${asignada}&esperando=${esperando}`;
   const { data, error, isLoading, mutate } = useSWR<Respuesta>(clave, traer, { keepPreviousData: true });
 
   async function marcar(t: TareaDelColegio) {
@@ -87,13 +88,12 @@ export default function PorRevisarClient() {
     try {
       const res = await fetch(`/api/administracion-escolar/tareas/${t.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: t.estado === 'abierta' ? 'completar' : 'reabrir' }),
+        body: JSON.stringify({ accion: t.estado === 'completada' ? 'reabrir' : 'completar' }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error ?? 'No se pudo cambiar');
-      toast.success(t.estado === 'abierta' ? 'Tarea completada' : 'Tarea abierta de nuevo');
+      toast.success(t.estado === 'completada' ? 'Tarea abierta de nuevo' : 'Tarea completada');
       void mutate();
-      refrescarCampana();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo cambiar');
     } finally { setCambiando(null); }
@@ -110,7 +110,6 @@ export default function PorRevisarClient() {
       else toast.success('Zero AI no encontró nada por revisar');
       setOrigen('todas');
       void mutate();
-      refrescarCampana();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo revisar');
     } finally { setRevisando(false); }
@@ -124,7 +123,7 @@ export default function PorRevisarClient() {
     <section className="space-y-5 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Por revisar</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Tareas</h1>
           <p className="mt-1 text-sm text-gray-500">
             Lo que alguien tiene que decidir o arreglar en el colegio y en sus familias.
           </p>
@@ -149,8 +148,10 @@ export default function PorRevisarClient() {
         </div>
       </div>
 
+      <PedirWhatsApp />
+
       <div className={`grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-white ${ZERO_AI_TAREAS ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-        <Kpi titulo="Abiertas" valor={k?.abiertas} resalte={!!k?.abiertas} nota={k ? dondeEstan(k.familias, k.colegio) : ''} />
+        <Kpi titulo="Pendientes" valor={k?.abiertas} resalte={!!k?.abiertas} nota={k ? dondeEstan(k.familias, k.colegio) : ''} />
         <Kpi titulo="Asignadas a ti" valor={k?.mias} nota="con tu nombre" />
         {ZERO_AI_TAREAS && <Kpi titulo="Sugeridas por Zero AI" valor={k?.ia} nota="las encontró al revisar facturas" />}
         <Kpi titulo="Más de una semana" valor={k?.viejas} nota={k?.viejas ? 'conviene moverlas' : 'nada atrasado'} alerta={!!k?.viejas} />
@@ -160,6 +161,8 @@ export default function PorRevisarClient() {
         <Segmento etiqueta="Qué tareas" valor={vista} onCambio={setVista} opciones={[
           { id: 'mias', texto: `Asignadas a mí${cuentas ? ` · ${cuentas.mias}` : ''}` },
           { id: 'todas', texto: `Todo el colegio${cuentas ? ` · ${cuentas.todas}` : ''}` },
+          { id: 'proceso', texto: `En proceso${cuentas ? ` · ${cuentas.proceso}` : ''}` },
+          { id: 'revision', texto: `En revisión${cuentas ? ` · ${cuentas.revision}` : ''}` },
           { id: 'hechas', texto: `Completadas${cuentas ? ` · ${cuentas.hechas}` : ''}` },
         ]} />
         {ZERO_AI_TAREAS && (
@@ -167,12 +170,22 @@ export default function PorRevisarClient() {
             { id: 'todas', texto: 'Todas' }, { id: 'ia', texto: 'Zero AI' }, { id: 'personas', texto: 'Personas' },
           ]} />
         )}
+        {/* Quién tiene que contestar: lo que pide el equipo de Zero para ver primero lo que debe. */}
         <label className="ml-auto flex items-center gap-2 text-sm text-gray-600">
+          Le toca a
+          <select value={esperando} onChange={(e) => setEsperando(e.target.value)}
+            className="h-9 rounded-lg border border-gray-300 bg-white px-2.5 text-sm focus:border-zero-500 focus:outline-none">
+            <option value="">Cualquiera</option>
+            <option value="soporte">Departamento de IT · Zero</option>
+            <option value="colegio">El colegio</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-600">
           Asignada a
           <select value={asignada} onChange={(e) => setAsignada(e.target.value)}
             className="h-9 rounded-lg border border-gray-300 bg-white px-2.5 text-sm focus:border-zero-500 focus:outline-none">
             <option value="">Cualquiera</option>
-            <option value="soporte">Soporte IT · Zero</option>
+            <option value="soporte">Departamento de IT · Zero</option>
             <option value="persona">Personas del colegio</option>
           </select>
         </label>
@@ -182,7 +195,7 @@ export default function PorRevisarClient() {
       {error && <p className="text-sm text-red-600">No se pudieron leer las tareas.</p>}
       {data && familias.length === 0 && (
         <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-sm text-gray-500">
-          {vista === 'mias' ? 'No tienes nada pendiente.' : 'Nada con estos filtros.'}
+          {vista === 'mias' ? 'No tienes nada pendiente.' : vista === 'proceso' ? 'Nadie está trabajando una tarea ahora.' : vista === 'revision' ? 'No hay nada en revisión.' : 'Nada con estos filtros.'}
         </div>
       )}
 
@@ -193,7 +206,7 @@ export default function PorRevisarClient() {
               <p className="text-sm font-semibold text-gray-900">{f.nombre}</p>
               {f.alumnos && <p className="text-xs text-gray-500">{f.alumnos}</p>}
               <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${f.abiertas ? 'bg-amber-600 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-                {f.abiertas ? `${f.abiertas} ${f.abiertas === 1 ? 'abierta' : 'abiertas'}` : 'al día'}
+                {f.abiertas ? `${f.abiertas} ${f.abiertas === 1 ? 'pendiente' : 'pendientes'}` : 'al día'}
               </span>
               {f.estudianteId && (
                 <Link href={`/escolar/estudiantes/${f.estudianteId}`} className="ml-auto text-xs font-medium text-zero-700 hover:underline">
@@ -219,6 +232,9 @@ export default function PorRevisarClient() {
                       <span className={`block text-sm font-semibold ${hecha ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{t.titulo}</span>
                       {t.descripcion && <span className="line-clamp-1 block text-xs text-gray-600">{t.descripcion}</span>}
                       <span className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[11px] text-gray-600">
+                        {t.estado === 'en_proceso' && <span className="rounded bg-violet-50 px-1.5 py-0.5 font-semibold text-violet-800">En proceso</span>}
+                        {t.estado === 'en_revision' && <span className="rounded bg-sky-50 px-1.5 py-0.5 font-semibold text-sky-800">En revisión</span>}
+                        <TurnoChip turno={t.turno} />
                         <span className="rounded bg-gray-100 px-1.5 py-0.5">{t.de}</span>
                         <span className="inline-flex items-center gap-1">
                           <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold ${
@@ -250,7 +266,6 @@ export default function PorRevisarClient() {
           // Se ve en «Todo el colegio» aunque no sea de quien la crea.
           if (vista === 'hechas') setVista('todas');
           void mutate();
-          refrescarCampana();
           abrir(id);
         }} />
     </section>

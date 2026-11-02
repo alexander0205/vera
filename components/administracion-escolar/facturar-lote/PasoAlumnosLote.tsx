@@ -9,6 +9,7 @@ import {
   type AlumnoCatalogo, type FiltroAlumnos,
 } from '@/lib/administracion-escolar/facturar-lote';
 import { fmtDOP } from '@/lib/utils/format';
+import { textoDeCurso } from '@/lib/administracion-escolar/sin-grado';
 
 /**
  * Paso 1 de «Facturar por lote»: a quiénes.
@@ -38,7 +39,7 @@ const Fila = memo(function Fila({ a, marcado, onAlternar }: {
   marcado: boolean;
   onAlternar: (id: number) => void;
 }) {
-  const curso = [a.grado, a.seccion].filter(Boolean).join(' ');
+  const curso = textoDeCurso(a.grado, a.seccion);
   const segunda = [curso, a.codigo].filter(Boolean).join(' · ');
   return (
     <li>

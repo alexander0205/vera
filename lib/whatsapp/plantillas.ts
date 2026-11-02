@@ -195,6 +195,31 @@ export function plantillaParaEnviar(
 }
 
 /**
+ * Lo que recibe la familia: el cuerpo de la plantilla con sus variables. `null`
+ * si la plantilla no está guardada en Zero (se creó directo en el CRM).
+ */
+export function textoDePlantilla(
+  plantilla: { cuerpo: string; pie: string | null } | undefined,
+  parametros: readonly string[],
+  conBoton: boolean,
+): string | null {
+  if (!plantilla) return null;
+  const cuerpo = plantilla.cuerpo.replace(/\{\{(\d+)\}\}/g, (todo, n: string) => parametros[Number(n) - 1] ?? todo);
+  return [cuerpo, plantilla.pie, conBoton ? '[Botón con el enlace de pago]' : null].filter(Boolean).join('\n\n');
+}
+
+/** El cuerpo de las plantillas que este colegio puede usar; la suya gana sobre la general. */
+export async function cuerposDePlantillas(teamId: number): Promise<Map<string, { cuerpo: string; pie: string | null }>> {
+  const filas = await db
+    .select({ nombre: whatsappPlantillas.nombre, cuerpo: whatsappPlantillas.cuerpo, pie: whatsappPlantillas.pie, teamId: whatsappPlantillas.teamId })
+    .from(whatsappPlantillas)
+    .where(or(eq(whatsappPlantillas.teamId, teamId), isNull(whatsappPlantillas.teamId)));
+  const generales = filas.filter((f) => f.teamId == null);
+  const propias = filas.filter((f) => f.teamId != null);
+  return new Map([...generales, ...propias].map((f) => [f.nombre, { cuerpo: f.cuerpo, pie: f.pie }]));
+}
+
+/**
  * Guarda las asignaciones de un colegio (o los defaults, con teamId null).
  * Un nombre vacío BORRA la asignación: es como se vuelve al default.
  */

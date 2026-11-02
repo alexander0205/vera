@@ -853,10 +853,8 @@ export function ConceptoDetalle({
               </div>
 
               <p className="text-xs text-gray-500">
-                Por qué no se elige el canal de cada aviso: WhatsApp solo deja escribir dentro de las 24 horas
-                siguientes a la última respuesta del tutor, así que el aviso del que depende que no pague
-                recargo no puede salir por ahí. El SMS llega siempre pero se cobra por mensaje, y se reserva
-                justo para ese.
+                El SMS se cobra por mensaje: sale siempre antes del recargo y, en los demás avisos, solo si el
+                WhatsApp no se puede mandar.
               </p>
 
               {!algunCanal && (

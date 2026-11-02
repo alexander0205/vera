@@ -28,6 +28,7 @@ import { useUrlParams } from '@/lib/hooks/useUrlEstado';
 import {
   idDeRuta, rutaEditarMatricula, rutaNuevaMatricula,
 } from '@/lib/administracion-escolar/matricula-pantalla';
+import { textoDeCurso } from '@/lib/administracion-escolar/sin-grado';
 
 interface Matricula {
   id: number;
@@ -56,7 +57,7 @@ interface Periodo  { id: number; nombre: string; activo: boolean; }
  */
 function nombreCurso(m: { curso: string | null; grado: string | null; tanda: string | null }): string {
   if (!m.curso && !m.grado) return '—';
-  const partes = [m.grado, m.curso].filter(Boolean).join(' — ');
+  const partes = textoDeCurso(m.grado, m.curso, ' — ');
   return m.tanda ? `${partes} · ${m.tanda}` : partes;
 }
 
@@ -465,7 +466,7 @@ export default function MatriculasClient() {
                           líneas. El título completo queda al pasar el ratón. */}
                       <td className="max-w-[15rem] px-3 py-2.5 text-gray-600">
                         <span className="block truncate" title={nombreCurso(m)}>
-                          {[m.grado, m.curso].filter(Boolean).join(' — ') || '—'}
+                          {textoDeCurso(m.grado, m.curso, ' — ') || '—'}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-gray-600">{m.periodo ?? '—'}</td>

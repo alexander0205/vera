@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 interface Fila {
   id: number; teamId: number; cargoId: number; tipo: string; offsetDias: number;
   canal: string; destino: string | null; grupo: string | null;
-  mensajeId?: string | null; detalle?: string | null;
+  mensajeId?: string | null; detalle?: string | null; texto?: string | null; conEnlace?: boolean | null;
 }
 
 const almacen = vi.hoisted(() => ({ filas: [] as unknown[], seq: 0 }));
@@ -96,7 +96,9 @@ const FAMILIA_GOMEZ = [
   fila({ cargoId: 5, estudianteId: 21, estudiante: 'Teo Gómez', clientId: 2000, email: 'g@x.com', whatsapp: '8095550001', celular: '8095550002' }),
 ];
 
-const VENCER = '2026-10-03';
+// El aviso que sale por los tres canales: antes del recargo.
+const VENCER = '2026-10-06';
+const DIA_QUE_VENCE = '2026-10-03';
 const pendientesDe = (fs: FilaAviso[], hoy = VENCER): AvisoPendiente[] => fs.flatMap((f) => avisosDeHoy(f, hoy));
 
 interface Envio { canal: string; destino: string; texto: string; cobros: number[] }
@@ -113,7 +115,7 @@ function armar(over: Partial<OpcionesDespacho> = {}, fallar?: (canal: string) =>
       whatsapp: async (destino, texto, m) => {
         if (fallar?.('whatsapp')) throw new Error('Meta 131047');
         enviados.push({ canal: 'whatsapp', destino, texto, cobros: m.miembros.map((x) => x.fila.cargoId) });
-        return 'wamid.GRUPO';
+        return { mensajeId: 'wamid.GRUPO', texto: `Plantilla: ${texto}`, conEnlace: true };
       },
       sms: async (destino, texto) => {
         if (fallar?.('sms')) throw new Error('SNS caído');
@@ -172,8 +174,9 @@ describe('despachar: un mensaje por familia', () => {
     await despachar([p], opts);
 
     const correo = enviados.find((e) => e.canal === 'correo')!;
-    // El enlace lleva a SU factura (`?f=`), no a toda la deuda de la familia.
-    expect(correo.texto).toBe(`${redactar(p, 'Colegio X').largo}\n\nPaga o sube tu comprobante aquí: https://app.zero.com.do/pagar/tok123?f=${p.fila.ecfDocumentId}`);
+    // El enlace lleva a SU factura (`?f=`), no a toda la deuda de la familia, y
+    // dice de qué aviso viene (`a=`).
+    expect(correo.texto).toBe(`${redactar(p, 'Colegio X').largo}\n\nPaga o sube tu comprobante aquí: https://app.zero.com.do/pagar/tok123?f=${p.fila.ecfDocumentId}&a=${filas().find((f) => f.canal === 'correo')!.id}`);
     expect(filas().every((f) => f.grupo === null)).toBe(true);
     expect(filas().every((f) => f.detalle === undefined)).toBe(true);
     // El SMS de un cobro no lleva enlace.
@@ -312,3 +315,91 @@ describe('despachar: el simulacro', () => {
     expect(hechos).toHaveLength(0);
   });
 });
+
+describe('despachar: el día que vence, SMS solo si el WhatsApp no sale', () => {
+  const delDia = (fs: FilaAviso[]) => pendientesDe(fs, DIA_QUE_VENCE);
+
+  it('si el WhatsApp sale, no se paga el SMS', async () => {
+    const { opts, enviados } = armar();
+    await despachar(delDia(FAMILIA_PEREZ), opts);
+    expect(enviados.map((e) => e.canal)).toEqual(['correo', 'whatsapp']);
+    expect(filas().filter((f) => f.canal === 'sms')).toHaveLength(0);
+  });
+
+  it('si el envío se rechaza, la familia recibe UN SMS en la misma corrida', async () => {
+    const { opts, enviados } = armar({}, (c) => c === 'whatsapp');
+    const hechos = await despachar(delDia(FAMILIA_PEREZ), opts);
+    expect(enviados.map((e) => e.canal)).toEqual(['correo', 'sms']);
+    expect(filas().filter((f) => f.canal === 'whatsapp')).toHaveLength(0);
+    expect(filas().filter((f) => f.canal === 'sms')).toHaveLength(3);
+    expect(hechos.filter((h) => h.canal === 'whatsapp').every((h) => !h.ok)).toBe(true);
+  });
+
+  it('reintentar a los quince minutos no repite el SMS', async () => {
+    const { opts, enviados } = armar({}, (c) => c === 'whatsapp');
+    await despachar(delDia(FAMILIA_PEREZ), opts);
+    await despachar(delDia(FAMILIA_PEREZ), opts);
+    expect(enviados.filter((e) => e.canal === 'sms')).toHaveLength(1);
+  });
+
+  it('con la cuota de WhatsApp agotada también sale por SMS', async () => {
+    const { opts, enviados } = armar({ restantePorCanal: { whatsapp: 0 } });
+    await despachar(delDia(FAMILIA_PEREZ), opts);
+    expect(enviados.map((e) => e.canal)).toEqual(['correo', 'sms']);
+  });
+
+  it('con el SMS apagado en el concepto solo queda el fallo anotado', async () => {
+    const sinSms = FAMILIA_PEREZ.map((f) => ({ ...f, avisoSms: false }));
+    const { opts, enviados } = armar({}, (c) => c === 'whatsapp');
+    const hechos = await despachar(delDia(sinSms), opts);
+    expect(enviados.map((e) => e.canal)).toEqual(['correo']);
+    expect(hechos.filter((h) => !h.ok)).toHaveLength(3);
+  });
+
+  it('la familia no se parte: el SMS va antes de la siguiente', async () => {
+    const { opts, enviados } = armar({}, (c) => c === 'whatsapp');
+    await despachar(delDia([...FAMILIA_PEREZ, ...FAMILIA_GOMEZ]), opts);
+    expect(enviados.map((e) => e.canal)).toEqual(['correo', 'sms', 'correo', 'sms']);
+  });
+
+  it('el día de la factura un WhatsApp rechazado también pasa a SMS', async () => {
+    const { opts, enviados } = armar({}, (c) => c === 'whatsapp');
+    await despachar(pendientesDe(FAMILIA_PEREZ, '2026-09-28'), opts);
+    expect(enviados.map((e) => e.canal)).toEqual(['correo', 'sms']);
+  });
+
+  it('antes del recargo un WhatsApp rechazado no añade otro SMS', async () => {
+    const { opts, enviados } = armar({}, (c) => c === 'whatsapp');
+    await despachar(pendientesDe(FAMILIA_PEREZ), opts);
+    expect(enviados.filter((e) => e.canal === 'sms')).toHaveLength(1);
+  });
+});
+
+describe('despachar: lo que salió queda guardado', () => {
+  it('guarda el texto de cada canal en todas las filas del mensaje', async () => {
+    const { opts } = armar();
+    await despachar(pendientesDe(FAMILIA_PEREZ), opts);
+    const de = (c: string) => filas().filter((f) => f.canal === c);
+    expect(de('whatsapp')).toHaveLength(3);
+    expect(de('whatsapp').every((f) => f.texto?.startsWith('Plantilla: '))).toBe(true);
+    expect(new Set(de('correo').map((f) => f.texto)).size).toBe(1);
+    expect(de('sms').every((f) => (f.texto ?? '').length > 0)).toBe(true);
+  });
+
+  it('anota si llevaba enlace y le dice de qué aviso viene, menos en el SMS', async () => {
+    const { opts, enviados } = armar();
+    await despachar(pendientesDe([FAMILIA_PEREZ[0]]), opts);
+    const correo = filas().find((f) => f.canal === 'correo')!;
+    expect(correo.conEnlace).toBe(true);
+    expect(enviados.find((e) => e.canal === 'correo')!.texto).toContain(`a=${correo.id}`);
+    expect(enviados.find((e) => e.canal === 'sms')!.texto).not.toContain('a=');
+    expect(filas().find((f) => f.canal === 'sms')!.conEnlace).toBe(false);
+  });
+
+  it('un envío que falla no deja texto, porque suelta la fila', async () => {
+    const { opts } = armar({}, (c) => c === 'correo');
+    await despachar(pendientesDe(FAMILIA_PEREZ), opts);
+    expect(filas().filter((f) => f.canal === 'correo')).toHaveLength(0);
+  });
+});
+

@@ -384,6 +384,11 @@ export function enlaceDeFactura(enlaceFamilia: string, facturaId: number | null)
   return facturaId != null ? `${enlaceFamilia}?f=${facturaId}` : enlaceFamilia;
 }
 
+/** Le dice al enlace de qué aviso viene, para saber cuál abrieron. */
+export function enlaceDeAviso(enlace: string, avisoId: number): string {
+  return `${enlace}${enlace.includes('?') ? '&' : '?'}a=${avisoId}`;
+}
+
 /**
  * Lo que rellena la variable del botón «Ver y pagar» de WhatsApp.
  *

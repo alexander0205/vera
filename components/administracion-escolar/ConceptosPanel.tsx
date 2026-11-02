@@ -14,7 +14,7 @@ import {
 } from '@/lib/administracion-escolar/cargo-desde-tarifa';
 import {
   Loader2, Plus, X, Layers, Tag, Repeat, CalendarDays,
-  FileText, DoorOpen, AlertTriangle, Eye, User, UserRound, GraduationCap, Check, Users,
+  FileText, DoorOpen, AlertTriangle, Eye, User, UserRound, GraduationCap, Check, Users, School,
 } from 'lucide-react';
 import { Fila, Nombre, Plegador, Resumen, Tanda, plural, porOrden } from './arbol';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -74,7 +74,7 @@ interface Data {
   conceptos: Concepto[]; precios: Precio[]; productos: Producto[];
 }
 
-type ObjTipo = 'servicio' | 'grado' | 'seccion';
+type ObjTipo = 'colegio' | 'servicio' | 'grado' | 'seccion';
 
 /** Impacto de borrar un concepto (lo calcula el servidor con `?preview=1`). */
 interface ImpactoConcepto {
@@ -228,6 +228,8 @@ export function ConceptosPanel() {
       data?.precios.find((p) => p.conceptoId === conceptoSel && p.objetivoTipo === tipo && p.objetivoId === id) ?? null,
     [data, conceptoSel],
   );
+  // El de todo el colegio se busca sin id: es uno por concepto y año.
+  const pColegio = data?.precios.find((p) => p.conceptoId === conceptoSel && p.objetivoTipo === 'colegio') ?? null;
 
   const productoDe = useCallback(
     (precio: Precio | null) => (precio?.productId ? data?.productos.find((p) => p.id === precio.productId) ?? null : null),
@@ -357,20 +359,45 @@ export function ConceptosPanel() {
             <p className="text-sm font-medium text-gray-900">Precio de {concepto.nombre}</p>
             <p className="mb-3 text-xs text-gray-500">
               {`Se cobra ${ETIQUETA_FRECUENCIA[concepto.frecuencia].toLowerCase()}. `}
-              El precio va en el servicio; los grados lo heredan.
+              El precio va en el servicio y los grados lo heredan. Si no depende del grado, ponlo en Todo el colegio.
             </p>
 
             {data.servicios.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">Este año escolar no tiene servicios. Créalos en la pestaña Estructura.</p>
             ) : (
               <div className="overflow-hidden rounded-lg border border-gray-200">
+                {/* Arriba de todo: lo que cuesta igual para cualquier alumno. No
+                    le cobra a nadie por sí solo; solo deja el concepto disponible. */}
+                <Fila sangria={0} tono="cabecera">
+                  <span className="w-[18px] shrink-0" aria-hidden />
+                  <School className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  <Nombre className="text-sm font-medium text-gray-900">Todo el colegio</Nombre>
+                  <Resumen partes={['cualquier alumno, sea del grado que sea']} />
+                  {pColegio ? (
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      <span className="rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pColegio.montoCentavos)}</span>
+                      {extrasPrecio(pColegio)}
+                      {botonCargar({ tipo: 'colegio', id: pColegio.objetivoId }, 'todo el colegio', pColegio)}
+                      <button onClick={() => void pedirQuitarPrecio(pColegio)} className="text-gray-300 hover:text-red-500" title="Quitar precio"><X className="h-3.5 w-3.5" /></button>
+                    </span>
+                  ) : (
+                    <button onClick={() => setModal({ tipo: 'colegio', id: 0, servicio: 'Todo el colegio', tanda: null })}
+                      className="shrink-0 rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-500 hover:border-zero-400 hover:text-zero-600">
+                      Precio
+                    </button>
+                  )}
+                </Fila>
+                {productoDe(pColegio) && <FilaProducto sangria={1} producto={productoDe(pColegio)!} />}
+
                 {data.servicios.slice().sort(porOrden).map((sv) => {
                   const pSv = precioDe('servicio', sv.id);
+                  // Lo que le toca a este servicio si no tiene precio propio.
+                  const heredaSv = pSv ?? pColegio;
                   const prodSv = productoDe(pSv);
                   const grados = data.grados.filter((g) => g.servicioId === sv.id).slice().sort(porOrden);
                   const nSecciones = data.secciones.filter((s) => grados.some((g) => g.id === s.gradoId)).length;
                   const abierto = esta(`s:${sv.id}`);
-                  const falta = !pSv;
+                  const falta = !heredaSv;
 
                   return (
                     <div key={sv.id}>
@@ -390,6 +417,15 @@ export function ConceptosPanel() {
                             {botonCargar({ tipo: 'servicio', id: sv.id }, sv.tanda ? `${sv.nombre} - ${sv.tanda}` : sv.nombre, pSv)}
                             <button onClick={() => void pedirQuitarPrecio(pSv)} className="text-gray-300 hover:text-red-500" title="Quitar precio"><X className="h-3.5 w-3.5" /></button>
                           </span>
+                        ) : pColegio ? (
+                          <>
+                            <span className="shrink-0 text-sm text-gray-400">hereda {fmtDOP(pColegio.montoCentavos)}</span>
+                            {botonCargar({ tipo: 'servicio', id: sv.id }, sv.tanda ? `${sv.nombre} - ${sv.tanda}` : sv.nombre, pColegio)}
+                            <button onClick={() => setModal({ tipo: 'servicio', id: sv.id, servicio: sv.nombre, tanda: sv.tanda })}
+                              className="shrink-0 rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-500 hover:border-zero-400 hover:text-zero-600">
+                              Excepción
+                            </button>
+                          </>
                         ) : (
                           <button onClick={() => setModal({ tipo: 'servicio', id: sv.id, servicio: sv.nombre, tanda: sv.tanda })}
                             className="shrink-0 rounded-md border border-dashed border-amber-400 px-2 py-0.5 text-xs text-amber-700 hover:bg-amber-100">
@@ -410,7 +446,7 @@ export function ConceptosPanel() {
                             const pG = precioDe('grado', g.id);
                             const prodG = productoDe(pG);
                             // Lo que le toca al grado si no tiene precio propio.
-                            const heredaG = pG ?? pSv;
+                            const heredaG = pG ?? heredaSv;
                             // Mismo criterio que el resto del árbol: el orden que puso el
                             // colegio en Estructura, y el nombre solo desempata.
                             const secciones = data.secciones.filter((s) => s.gradoId === g.id).slice().sort(porOrden);
@@ -434,11 +470,11 @@ export function ConceptosPanel() {
                                     </>
                                   ) : (
                                     <>
-                                      {pSv && <span className="shrink-0 text-sm text-gray-400">hereda {fmtDOP(pSv.montoCentavos)}</span>}
-                                      {pSv && botonCargar({ tipo: 'grado', id: g.id }, `${g.nombre} de ${sv.nombre}`, pSv)}
+                                      {heredaSv && <span className="shrink-0 text-sm text-gray-400">hereda {fmtDOP(heredaSv.montoCentavos)}</span>}
+                                      {heredaSv && botonCargar({ tipo: 'grado', id: g.id }, `${g.nombre} de ${sv.nombre}`, heredaSv)}
                                       <button onClick={() => setModal({ tipo: 'grado', id: g.id, grado: g.nombre, servicio: sv.nombre, tanda: sv.tanda })}
                                         className="shrink-0 rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-500 hover:border-zero-400 hover:text-zero-600">
-                                        {pSv ? 'Excepción' : 'Precio'}
+                                        {heredaSv ? 'Excepción' : 'Precio'}
                                       </button>
                                     </>
                                   )}
@@ -745,6 +781,12 @@ function ModalTarifa({
         </div>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-7 py-6">
+          {objetivo.tipo === 'colegio' && (
+            <p className="rounded-lg border border-zero-100 bg-zero-50/60 px-3 py-2 text-sm text-gray-700">
+              Cualquier alumno podrá tomar este concepto, sea del grado que sea. Ponerle precio no le cobra a nadie:
+              se cobra a quien lo tenga marcado en su matrícula. Un precio de su servicio, grado o propio gana sobre este.
+            </p>
+          )}
           {!creando ? (
             <div className="space-y-3">
               <div>

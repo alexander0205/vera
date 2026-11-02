@@ -2,7 +2,7 @@
  * Los alumnos que ya se revisaron en el formulario de «Matricular desde
  * SIGERD» (familia, cargos y pagos): el «X de N completados» de la migración.
  * Uno por colegio y año, compartido entre quienes migran. Vive en la tabla de
- * borradores (migración 0211) con su propia clave, así que matricular o
+ * borradores (migración 0216) con su propia clave, así que matricular o
  * «Empezar de cero» no lo borra.
  *
  *   GET  ?periodoId=                          → { alumnos: { [id]: { en, por } } }

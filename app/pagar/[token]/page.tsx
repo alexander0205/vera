@@ -76,10 +76,11 @@ export default async function PagarPage({ params, searchParams }: {
   // importe, no todo lo que debe la familia. Sin él, el enlace agregado de
   // siempre. El token sigue siendo la única credencial; `f` solo estrecha lo que
   // ya autoriza, y el servidor comprueba que la factura sea del responsable.
-  searchParams: Promise<{ f?: string }>;
+  // `?a=<aviso>` dice de qué aviso viene, para saber cuál abrió la familia.
+  searchParams: Promise<{ f?: string; a?: string }>;
 }) {
   const { token } = await params;
-  const { f } = await searchParams;
+  const { f, a } = await searchParams;
   const facturaId = f != null && /^\d+$/.test(f) ? Number(f) : undefined;
 
   const link = await resolverLink(token, facturaId);
@@ -91,6 +92,7 @@ export default async function PagarPage({ params, searchParams }: {
     <PagarClient
       token={token}
       facturaId={facturaId ?? null}
+      avisoId={a != null && /^\d+$/.test(a) ? Number(a) : null}
       vista={link.vista}
       tarjetaHabilitada={PAGOS_ONLINE_ENABLED}
     />

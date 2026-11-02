@@ -22,7 +22,7 @@ import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
 import {
-  calcularMora, fechaPeriodo,
+  calcularMora, fechaPeriodo, tipoEcfCobraMora,
   type ConfigMora, type ModoMora,
 } from '@/lib/cobranza/mora-calculo';
 import { graciaParaMora } from '@/lib/cobranza/elegibilidad-mora-escolar';
@@ -121,6 +121,7 @@ export async function previsualizarMoraDeFactura(ecfDocumentId: number): Promise
       estado:          ecfDocuments.estado,
       moraOrigenId:    ecfDocuments.moraOrigenId,
       tipoPago:        ecfDocuments.tipoPago,
+      tipoEcf:         ecfDocuments.tipoEcf,
       fechaLimitePago: ecfDocuments.fechaLimitePago,
     })
     .from(ecfDocuments)
@@ -129,8 +130,10 @@ export async function previsualizarMoraDeFactura(ecfDocumentId: number): Promise
 
   if (!padre) return { estado: 'no_aplica', razon: 'not_found' };
   // La mora automática solo aplica a facturas a crédito con vencimiento; una
-  // ND de mora nunca genera mora sobre sí misma; anulada no cobra.
+  // ND de mora nunca genera mora sobre sí misma; anulada no cobra; una NC o un
+  // gasto no se deben.
   if (padre.moraOrigenId != null) return { estado: 'no_aplica', razon: 'es_nota_mora' };
+  if (!tipoEcfCobraMora(padre.tipoEcf)) return { estado: 'no_aplica', razon: 'tipo_sin_mora' };
   if (padre.estado === 'ANULADO') return { estado: 'no_aplica', razon: 'anulada' };
   if (padre.tipoPago !== 2 || !padre.fechaLimitePago) return { estado: 'no_aplica', razon: 'sin_vencimiento' };
 
@@ -250,7 +253,7 @@ export async function previsualizarMoraDeFactura(ecfDocumentId: number): Promise
 export type GenerarNotaDebitoMoraResult =
   | { ok: true; notaDebitoId: number; montoCentavos: number }
   | { ok: false; reason:
-      | 'not_found' | 'es_nota_mora' | 'anulada' | 'sin_saldo' | 'ya_existe'
+      | 'not_found' | 'es_nota_mora' | 'tipo_sin_mora' | 'anulada' | 'sin_saldo' | 'ya_existe'
       | 'mora_cero' | 'no_vencida' | 'max_periodos' | 'tope_alcanzado' };
 
 export async function generarNotaDebitoMora(
@@ -281,6 +284,10 @@ export async function generarNotaDebitoMora(
 
   // No mora sobre mora: si el padre YA es una ND de mora, abortar.
   if (padre.moraOrigenId != null) return { ok: false, reason: 'es_nota_mora' };
+
+  // Una NC (34) o una compra/gasto (41/43/47) no se deben: nunca llevan mora,
+  // ni por el cron ni a mano.
+  if (!tipoEcfCobraMora(padre.tipoEcf)) return { ok: false, reason: 'tipo_sin_mora' };
 
   if (padre.estado === 'ANULADO') return { ok: false, reason: 'anulada' };
 

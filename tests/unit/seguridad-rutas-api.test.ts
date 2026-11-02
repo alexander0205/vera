@@ -151,7 +151,7 @@ describe('inventario de rutas que modifican datos', () => {
     '/dgii/v1/[token]/fe/recepcion/api/ecf', '/dgii/[rnc]/aprobacioncomercial', '/dgii/[rnc]/recepcion',
     '/documentos-familia/[token]', '/firma/[token]', '/formularios-publicos/[slug]', '/formularios-publicos/[slug]/borrador',
     '/formularios-publicos/[slug]/borrador/[token]', '/formularios-publicos/[slug]/borrador/[token]/archivo', '/fotos/captura/[token]',
-    '/habilitacion/set-pruebas/runs/[runId]', '/horas/[token]', '/pagar/[token]/comprobante', '/pagos/link/[token]/iniciar',
+    '/habilitacion/set-pruebas/runs/[runId]', '/horas/[token]', '/pagar/[token]/abierto', '/pagar/[token]/comprobante', '/pagos/link/[token]/iniciar',
     '/pagos/link/[token]/simular', '/stripe/webhook', '/subir-factura/[token]', '/user', '/whatsapp/webhook/[teamId]',
     '/zero-tickets/agent/canned-responses', '/zero-tickets/agent/canned-responses/[id]', '/zero-tickets/agent/presence',
     '/zero-tickets/agent/tickets/[id]/claim', '/zero-tickets/agent/tickets/[id]/hold', '/zero-tickets/agent/tickets/[id]/reply',
@@ -162,6 +162,8 @@ describe('inventario de rutas que modifican datos', () => {
   const REVISADAS_SOLO_SESION = new Set([
     '/admin/empresas/[id]/set-pruebas/aprobaciones', '/admin/empresas/[id]/set-pruebas/runs', '/admin/empresas/[id]/simulacion/restart',
     '/admin/empresas/[id]/simulacion/start', '/auth/2fa/disable', '/auth/2fa/setup', '/auth/send-verification', '/ecf/preview',
+    // El WhatsApp de la propia persona, para avisarle de sus tareas (29-10-2026).
+    '/cuenta/whatsapp',
     '/empresa', '/empresa/switch', '/equipo/miembros/[id]', '/metricas/factura-tiempo', '/notes', '/novedades/vistas',
     '/pdf/factura/preview', '/rnc/sync', '/user', '/zero-tickets/tickets/rating', '/zero-tickets/tickets', '/zero-tickets/tickets/typing',
   ]);

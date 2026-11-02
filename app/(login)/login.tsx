@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Loader2, Eye, EyeOff, Mail, Lock, ArrowRight } from 'lucide-react';
 import { LogoZero, IsotipoZero } from '@/components/marca-zero';
@@ -67,11 +67,33 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
   // escrito y no tenía forma de saber por qué.
   const fallo     = MOTIVOS[searchParams.get('error') ?? ''] ?? null;
   const aviso     = AVISOS[searchParams.get('aviso') ?? ''] ?? null;
+  // React vacía el formulario al terminar cada envío, así que hay que volver a
+  // pintar lo escrito. Se guarda aquí, en el navegador, y no en la respuesta: el
+  // servidor no tiene por qué devolver una contraseña para que no se borre.
+  const [escrito, setEscrito] = useState({ email: '', password: '' });
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
-    mode === 'signin' ? signIn : signUp,
+    async (previo, datos) => {
+      setEscrito({
+        email: String(datos.get('email') ?? ''),
+        password: String(datos.get('password') ?? ''),
+      });
+      return (mode === 'signin' ? signIn : signUp)(previo, datos);
+    },
     { error: '' }
   );
   const [showPwd, setShowPwd] = useState(false);
+
+  // Segundo paso de quien tiene 2FA. Va en un estado propio porque no todas las
+  // respuestas traen la marca: «Demasiados intentos» o un código mal formado no
+  // pueden devolver a nadie a la contraseña.
+  const [pideCodigo, setPideCodigo] = useState(false);
+  const refCodigo = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!state.twoFactorRequired) return;
+    setPideCodigo(true);
+    // Tras un código malo el campo vuelve vacío: se deja listo para reescribir.
+    refCodigo.current?.focus();
+  }, [state]);
 
   const campo =
     'h-12 w-full rounded-xl border border-gray-200 bg-gray-50/60 pl-11 pr-4 text-[15px] ' +
@@ -135,23 +157,25 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
             <IsotipoZero lado={56} />
 
             <h2 className="mt-6 font-[family-name:var(--font-display)] text-[28px] font-semibold tracking-[-0.02em] text-gray-950">
-              {mode === 'signin' ? 'Inicia sesión' : 'Crea tu cuenta'}
+              {pideCodigo ? 'Verificación en dos pasos' : mode === 'signin' ? 'Inicia sesión' : 'Crea tu cuenta'}
             </h2>
             <p className="mt-1.5 text-[15px] text-gray-500">
-              {mode === 'signin'
-                ? 'Accede con la cuenta de tu empresa.'
-                : 'Empieza a emitir comprobantes en minutos.'}
+              {pideCodigo
+                ? `Escribe el código de 6 dígitos de tu app de autenticación para entrar con ${escrito.email}.`
+                : mode === 'signin'
+                  ? 'Accede con la cuenta de tu empresa.'
+                  : 'Empieza a emitir comprobantes en minutos.'}
             </p>
 
             {/* Arriba del todo: es la explicación de por qué acabas de volver
                 a esta pantalla, y abajo del formulario no se vería. */}
-            {fallo && (
+            {fallo && !pideCodigo && (
               <p role="alert" className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 {fallo}
               </p>
             )}
 
-            {aviso && (
+            {aviso && !pideCodigo && (
               <p role="status" className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                 {aviso}
               </p>
@@ -176,45 +200,67 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
                 </div>
               )}
 
-              <div>
-                <label htmlFor="email" className="mb-2 block text-sm font-medium text-gray-700">Email</label>
-                <div className="relative">
-                  <Mail aria-hidden className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-400" />
-                  <input
-                    id="email" name="email" type="email" autoComplete="email"
-                    defaultValue={state.email ?? ''} required maxLength={50}
-                    placeholder="tu@empresa.com" className={campo}
-                  />
+              {/* En el segundo paso se ocultan pero siguen en el formulario: el
+                  código se envía junto con el correo y la contraseña. */}
+              <div className={pideCodigo ? 'hidden' : 'space-y-5'}>
+                <div>
+                  <label htmlFor="email" className="mb-2 block text-sm font-medium text-gray-700">Email</label>
+                  <div className="relative">
+                    <Mail aria-hidden className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-400" />
+                    <input
+                      id="email" name="email" type="email" autoComplete="email"
+                      defaultValue={escrito.email} required maxLength={50}
+                      placeholder="tu@empresa.com" className={campo}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label htmlFor="password" className="text-sm font-medium text-gray-700">Contraseña</label>
+                    {mode === 'signin' && (
+                      <Link href="/forgot-password" className="text-sm font-medium text-zero-600 transition hover:text-zero-700">
+                        ¿Olvidaste tu contraseña?
+                      </Link>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <Lock aria-hidden className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-400" />
+                    <input
+                      id="password" name="password"
+                      type={showPwd ? 'text' : 'password'}
+                      autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                      defaultValue={escrito.password} required minLength={8} maxLength={100}
+                      placeholder="••••••••" className={`${campo} pr-12`}
+                    />
+                    <button
+                      type="button" tabIndex={-1} onClick={() => setShowPwd((v) => !v)}
+                      aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                    >
+                      {showPwd ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label htmlFor="password" className="text-sm font-medium text-gray-700">Contraseña</label>
-                  {mode === 'signin' && (
-                    <Link href="/forgot-password" className="text-sm font-medium text-zero-600 transition hover:text-zero-700">
-                      ¿Olvidaste tu contraseña?
-                    </Link>
-                  )}
-                </div>
-                <div className="relative">
-                  <Lock aria-hidden className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-400" />
+              {pideCodigo && (
+                <div>
+                  <label htmlFor="twoFactorCode" className="mb-2 block text-sm font-medium text-gray-700">Código de verificación</label>
+                  {/* Sin `maxLength`: las apps lo enseñan como «123 456» y al
+                      pegarlo el navegador cortaría el último dígito antes de que
+                      se le pudiera quitar el espacio. */}
                   <input
-                    id="password" name="password"
-                    type={showPwd ? 'text' : 'password'}
-                    autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                    defaultValue={state.password ?? ''} required minLength={8} maxLength={100}
-                    placeholder="••••••••" className={`${campo} pr-12`}
+                    ref={refCodigo}
+                    id="twoFactorCode" name="twoFactorCode" type="text"
+                    inputMode="numeric" autoComplete="one-time-code" autoFocus
+                    required pattern="\d{6}" title="Escribe los 6 dígitos del código."
+                    placeholder="000000"
+                    onChange={(e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); }}
+                    className={campo.replace('pl-11 pr-4 text-[15px]', 'px-4 text-center text-xl font-semibold tracking-[0.35em]')}
                   />
-                  <button
-                    type="button" tabIndex={-1} onClick={() => setShowPwd((v) => !v)}
-                    aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
-                  >
-                    {showPwd ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
-                  </button>
                 </div>
-              </div>
+              )}
 
               {mode === 'signup' && (
                 <label className="flex cursor-pointer items-start gap-3 text-sm text-gray-600">
@@ -239,7 +285,9 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
                 </label>
               )}
 
-              {state?.error && (
+              {/* Una respuesta de la que ya se volvió atrás no se sigue enseñando:
+                  «código inválido» no pinta nada junto a la contraseña. */}
+              {state?.error && (pideCodigo || !state.twoFactorRequired) && (
                 <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {state.error}
                 </p>
@@ -252,52 +300,67 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
                 {pending ? (
                   <><Loader2 className="h-4 w-4 animate-spin" /> Verificando…</>
                 ) : (
-                  <>{mode === 'signin' ? 'Ingresar' : 'Crear cuenta'} <ArrowRight className="h-4 w-4" /></>
+                  <>{pideCodigo ? 'Verificar' : mode === 'signin' ? 'Ingresar' : 'Crear cuenta'} <ArrowRight className="h-4 w-4" /></>
                 )}
               </button>
+
+              {pideCodigo && (
+                <button
+                  type="button" onClick={() => setPideCodigo(false)}
+                  className="w-full text-center text-sm font-medium text-gray-500 transition hover:text-gray-700"
+                >
+                  Volver
+                </button>
+              )}
             </form>
 
-            {/* Google va DESPUÉS del formulario. Arriba competía con el campo
-                de correo por la misma atención, y quien ya tiene su contraseña
-                —que es casi todo el que llega aquí— tenía que saltárselo para
-                empezar. Entra por una redirección normal (GET) y no por el
-                formAction: no hay credenciales que validar, solo se manda a
-                /api/auth/google con lo que hace falta recordar cuando vuelva
-                (invitación, plan, a dónde regresar).
+            {/* Quien va por el segundo paso ya eligió cómo entrar, y por Google
+                su cuenta lo rechazaría (`google_2fa`). */}
+            {!pideCodigo && (
+              <>
+                {/* Google va DESPUÉS del formulario. Arriba competía con el campo
+                    de correo por la misma atención, y quien ya tiene su contraseña
+                    —que es casi todo el que llega aquí— tenía que saltárselo para
+                    empezar. Entra por una redirección normal (GET) y no por el
+                    formAction: no hay credenciales que validar, solo se manda a
+                    /api/auth/google con lo que hace falta recordar cuando vuelva
+                    (invitación, plan, a dónde regresar).
 
-                En el registro, además, el consentimiento de Google sustituye a
-                este formulario, así que el checkbox de Términos se vuelve a
-                pedir al volver, en la pantalla de completar registro. */}
-            <div className="my-6 flex items-center gap-3">
-              <div className="h-px flex-1 bg-gray-200" />
-              <span className="text-xs font-medium uppercase tracking-wide text-gray-400">o</span>
-              <div className="h-px flex-1 bg-gray-200" />
-            </div>
+                    En el registro, además, el consentimiento de Google sustituye a
+                    este formulario, así que el checkbox de Términos se vuelve a
+                    pedir al volver, en la pantalla de completar registro. */}
+                <div className="my-6 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-gray-200" />
+                  <span className="text-xs font-medium uppercase tracking-wide text-gray-400">o</span>
+                  <div className="h-px flex-1 bg-gray-200" />
+                </div>
 
-            <a
-              href={`/api/auth/google${(() => {
-                const qs = new URLSearchParams();
-                if (redirect)  qs.set('redirect', redirect);
-                if (priceId)   qs.set('priceId', priceId);
-                if (inviteId)  qs.set('inviteId', inviteId);
-                const s = qs.toString();
-                return s ? `?${s}` : '';
-              })()}`}
-              className="flex h-12 w-full items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white text-[15px] font-semibold text-gray-700 transition hover:bg-gray-50"
-            >
-              <IconoGoogle />
-              Continuar con Google
-            </a>
+                <a
+                  href={`/api/auth/google${(() => {
+                    const qs = new URLSearchParams();
+                    if (redirect)  qs.set('redirect', redirect);
+                    if (priceId)   qs.set('priceId', priceId);
+                    if (inviteId)  qs.set('inviteId', inviteId);
+                    const s = qs.toString();
+                    return s ? `?${s}` : '';
+                  })()}`}
+                  className="flex h-12 w-full items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white text-[15px] font-semibold text-gray-700 transition hover:bg-gray-50"
+                >
+                  <IconoGoogle />
+                  Continuar con Google
+                </a>
 
-            <p className="mt-8 border-t border-gray-100 pt-6 text-center text-sm text-gray-500">
-              {mode === 'signin' ? '¿Tu empresa todavía no usa Zero?' : '¿Ya tienes cuenta?'}{' '}
-              <Link
-                href={mode === 'signin' ? '/sign-up' : '/sign-in'}
-                className="font-semibold text-zero-600 transition hover:text-zero-700"
-              >
-                {mode === 'signin' ? 'Regístrate gratis' : 'Inicia sesión'}
-              </Link>
-            </p>
+                <p className="mt-8 border-t border-gray-100 pt-6 text-center text-sm text-gray-500">
+                  {mode === 'signin' ? '¿Tu empresa todavía no usa Zero?' : '¿Ya tienes cuenta?'}{' '}
+                  <Link
+                    href={mode === 'signin' ? '/sign-up' : '/sign-in'}
+                    className="font-semibold text-zero-600 transition hover:text-zero-700"
+                  >
+                    {mode === 'signin' ? 'Regístrate gratis' : 'Inicia sesión'}
+                  </Link>
+                </p>
+              </>
+            )}
           </div>
 
           <p className="mt-8 text-center text-[13px] text-gray-400 lg:hidden">

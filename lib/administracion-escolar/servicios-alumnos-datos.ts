@@ -96,6 +96,10 @@ export async function leerServiciosAlumnos(teamId: number, pedido: number) {
       grado: m.grado,
       seccion: m.seccion,
       cursoId: m.cursoId,
+      // Para filtrar por id: dos tandas tienen grados que se llaman igual, y la
+      // letra de la sección se repite en todos los grados.
+      gradoId: m.gradoId,
+      servicioId: m.servicioId,
       conceptosIds: (m.conceptosIds ?? []).map(Number),
       conTarifa: ids.filter((id) => tarifas.has(id)),
       beca: m.becaTipo ? { tipo: m.becaTipo, valor: m.becaValor } : null,

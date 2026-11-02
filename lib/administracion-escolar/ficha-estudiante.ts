@@ -20,7 +20,7 @@ import {
   adminEscolarCargos,
   adminEscolarConceptoCuotas,
   adminEscolarConceptosPago,
-  adminEscolarCursos,
+  adminEscolarCursos, adminEscolarGrados,
   adminEscolarEstudianteTutores,
   adminEscolarEstudiantes,
   adminEscolarMatriculas,
@@ -35,12 +35,12 @@ import {
 } from '@/lib/db/schema';
 import { canalesDelColegio } from '@/lib/administracion-escolar/canales';
 import {
-  canalesVivosDe, fechasDeAviso, type FilaAviso,
+  canalesDeAviso, canalesVivosDe, fechasDeAviso, type FilaAviso,
 } from '@/lib/administracion-escolar/avisos';
-import { CANALES_DEL_AVISO } from '@/lib/administracion-escolar/ciclo-cobro';
 import { deudaEstudiante, sincronizarSaldosDesdeFacturas } from '@/lib/administracion-escolar/queries';
 import { cargarPlan, type PlanCargado } from '@/lib/administracion-escolar/plan-matricula';
 import { esVentaSql, moraFacturaSql, saldoFacturaSql } from '@/lib/administracion-escolar/saldo-factura';
+import { NOMBRE_SIN_GRADO } from './sin-grado';
 
 /** Ficha del alumno + deuda + el contacto de Contactos al que está enlazado. */
 export async function estudianteConDependiente(teamId: number, estudianteId: number) {
@@ -116,7 +116,8 @@ export function matriculasDeEstudiante(teamId: number, estudianteId: number) {
       // defecto: es donde está lo que el usuario viene a mirar.
       periodoActivo: adminEscolarPeriodos.activo,
       cursoId: adminEscolarMatriculas.cursoId,
-      curso: adminEscolarCursos.nombre,
+      // Quien no tiene grado no enseña el nombre de su sección automática.
+      curso: sql<string | null>`CASE WHEN lower(${adminEscolarGrados.nombre}) = ${NOMBRE_SIN_GRADO.toLowerCase()} THEN ${adminEscolarGrados.nombre} ELSE ${adminEscolarCursos.nombre} END`,
       codigoMatricula: adminEscolarMatriculas.codigoMatricula,
       fechaInscripcion: adminEscolarMatriculas.fechaInscripcion,
       estado: adminEscolarMatriculas.estado,
@@ -148,6 +149,7 @@ export function matriculasDeEstudiante(teamId: number, estudianteId: number) {
       eq(adminEscolarMatriculas.cursoId, adminEscolarCursos.id),
       eq(adminEscolarCursos.teamId, teamId),
     ))
+    .leftJoin(adminEscolarGrados, eq(adminEscolarGrados.id, adminEscolarCursos.gradoId))
     .leftJoin(facturasRecurrentes, and(
       eq(adminEscolarMatriculas.facturaRecurrenteId, facturasRecurrentes.id),
       eq(facturasRecurrentes.teamId, teamId),
@@ -617,7 +619,7 @@ export async function avisosProgramadosDeEstudiante(teamId: number, estudianteId
     if (vivos.length === 0) continue;
 
     for (const s of fechasDeAviso(comoFila)) {
-      const porDonde = CANALES_DEL_AVISO[s.aviso].filter((c) => vivos.includes(c));
+      const porDonde = canalesDeAviso(s.aviso, vivos);
       if (porDonde.length === 0) continue;
       salida.push({
         cargoId: f.cargoId,

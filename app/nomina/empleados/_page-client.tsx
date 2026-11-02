@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useRutaNomina } from '@/lib/nomina/rutas';
 import useSWR from 'swr';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -47,6 +48,7 @@ const EXPORTAR: ExportTabla<Empleado> = {
 
 export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar?: boolean }) {
   const router = useRouter();
+  const ruta = useRutaNomina();
   const { can } = usePermissions();
   const puedeGestionar = can('empleados:gestionar');
   const { data, isLoading, mutate } = useSWR<{ empleados: Empleado[] }>('/api/nomina/empleados', fetcher);
@@ -79,10 +81,10 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
 
   // Alta, edición y contrato viven en su propia página (no modal): cerrar por
   // accidente no borra lo tecleado (pedido de Alex).
-  const irNuevo = () => router.push('/nomina/empleados/nuevo');
-  const irEditar = (id: number) => router.push(`/nomina/empleados/${id}/editar`);
-  const irContrato = (id: number) => router.push(`/nomina/empleados/${id}/contrato`);
-  const irDependientes = (id: number) => router.push(`/nomina/empleados/${id}/dependientes`);
+  const irNuevo = () => router.push(ruta('/empleados/nuevo'));
+  const irEditar = (id: number) => router.push(ruta(`/empleados/${id}/editar`));
+  const irContrato = (id: number) => router.push(ruta(`/empleados/${id}/contrato`));
+  const irDependientes = (id: number) => router.push(ruta(`/empleados/${id}/dependientes`));
 
   function pedirEnlace(e: Empleado) {
     setEnlaceUrl(null);

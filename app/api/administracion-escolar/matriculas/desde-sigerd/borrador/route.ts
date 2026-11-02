@@ -1,7 +1,7 @@
 /**
  * El borrador de «Matricular desde SIGERD»: lo que se va decidiendo antes de
  * matricular, guardado solo para no perderlo al recargar ni al abrirlo en otra
- * computadora. Uno por colegio y año escolar, compartido. Migración 0211.
+ * computadora. Uno por colegio y año escolar, compartido. Migración 0216.
  *
  *   GET    ?periodoId=     → { datos, actualizado, por } (o datos null)
  *   PUT    { periodoId, datos }

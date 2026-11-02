@@ -19,48 +19,13 @@
  */
 
 import { NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
-import { db } from '@/lib/db/drizzle';
-import { adminEscolarCuentasBanco } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { cuentasBancoActivas } from '@/lib/pagos/cuentas-banco';
+import type { CuentaBancoOpcion } from '@/lib/pagos/bancos';
 
-export interface CuentaBancoOpcion {
-  id: number;
-  banco: string;
-  tipoCuenta: string | null;
-  /** Últimos 4 del número, para distinguir dos cuentas del mismo banco. */
-  ultimos4: string | null;
-  titular: string | null;
-  /** Ya armada para pintar: «Banco Popular · Ahorros ····4821». */
-  etiqueta: string;
-}
-
-/** Los últimos 4 dígitos, ignorando guiones y espacios. */
-function ultimos4(numero: string): string | null {
-  const digitos = numero.replace(/\D/g, '');
-  return digitos.length >= 4 ? digitos.slice(-4) : null;
-}
-
-/**
- * La etiqueta se GUARDA en `pagos_recibidos.cuenta`, que es `varchar(100)`,
- * mientras que `banco` es `varchar(120)`. Un nombre de banco largo desbordaría
- * la columna al registrar el cobro, así que se acota aquí —en el único sitio
- * donde se arma— y no en cada pantalla que la pinte.
- */
-const MAX_ETIQUETA = 100;
-
-function etiquetaDe(banco: string, tipo: string | null, fin: string | null): string {
-  const cola = [tipo?.trim(), fin ? `····${fin}` : null].filter(Boolean).join(' ');
-  const completa = cola ? `${banco.trim()} · ${cola}` : banco.trim();
-  if (completa.length <= MAX_ETIQUETA) return completa;
-
-  // Se recorta el NOMBRE, nunca la cola: los últimos cuatro dígitos son lo que
-  // distingue dos cuentas del mismo banco, y sin ellos la etiqueta no sirve.
-  const sitio = MAX_ETIQUETA - (cola ? cola.length + 3 : 0) - 1;
-  return cola
-    ? `${banco.trim().slice(0, Math.max(1, sitio))}… · ${cola}`
-    : banco.trim().slice(0, MAX_ETIQUETA);
-}
+// El tipo vive en lib/pagos/bancos.ts (lo comparte la aprobación de
+// comprobantes); se reexporta aquí porque `useCuentasBanco` lo importa de esta ruta.
+export type { CuentaBancoOpcion };
 
 export async function GET() {
   // Quien registra un cobro necesita decir a qué cuenta entró. Es el mismo
@@ -69,32 +34,5 @@ export async function GET() {
   const auth = await requirePermission('pagos:ver');
   if (!auth.ok) return auth.response;
 
-  const filas = await db
-    .select({
-      id: adminEscolarCuentasBanco.id,
-      banco: adminEscolarCuentasBanco.banco,
-      tipoCuenta: adminEscolarCuentasBanco.tipoCuenta,
-      numeroCuenta: adminEscolarCuentasBanco.numeroCuenta,
-      titular: adminEscolarCuentasBanco.titular,
-    })
-    .from(adminEscolarCuentasBanco)
-    .where(and(
-      eq(adminEscolarCuentasBanco.teamId, auth.teamId),
-      eq(adminEscolarCuentasBanco.activa, true),
-    ))
-    .orderBy(adminEscolarCuentasBanco.orden, adminEscolarCuentasBanco.id);
-
-  const cuentas: CuentaBancoOpcion[] = filas.map((f) => {
-    const fin = ultimos4(f.numeroCuenta);
-    return {
-      id: f.id,
-      banco: f.banco,
-      tipoCuenta: f.tipoCuenta,
-      ultimos4: fin,
-      titular: f.titular,
-      etiqueta: etiquetaDe(f.banco, f.tipoCuenta, fin),
-    };
-  });
-
-  return NextResponse.json({ cuentas });
+  return NextResponse.json({ cuentas: await cuentasBancoActivas(auth.teamId) });
 }

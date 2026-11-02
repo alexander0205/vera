@@ -11,18 +11,35 @@
  * factura no se puede cobrar, y eso se dice DESPUÉS de aprobar, con el detalle
  * de qué quedó fuera: esconderlo haría creer que la deuda bajó cuando no bajó.
  *
- * El botón de aprobar no cobra: abre el diálogo donde se ve el reparto y se
- * corrige el monto. Rechazar sí decide en el sitio — no mueve dinero, solo
- * necesita el motivo que el padre va a leer.
+ * El botón de aprobar no cobra: abre el diálogo donde se ve el reparto, se
+ * corrige el monto y se elige el banco donde entró el dinero. Rechazar sí
+ * decide en el sitio — no mueve dinero, solo necesita el motivo que el padre va
+ * a leer.
+ *
+ * El comprobante abierto vive en la URL (`?comprobante=12`), igual que la tarea
+ * abierta en «Tareas»: cada uno tiene su dirección, y la campana, el celular y
+ * el correo abren directo su ventana — la de aprobar si está pendiente, la del
+ * papel si ya se decidió.
+ *
+ * Cada tarjeta muestra lo que la IA leyó del papel (rotulado «Leído por IA —
+ * revísalo»: propone, no decide) y, si el comprobante se parece a otro de la
+ * misma familia, un aviso de posible duplicado con un enlace al original.
  */
+import { montoConfirmado } from '@/lib/administracion-escolar/comprobante-confirmado';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { AprobarComprobanteDialog } from '@/components/administracion-escolar/AprobarComprobanteDialog';
-import { fmtDOP } from '@/lib/utils/format';
+import { AvisoDuplicadoComprobante } from '@/components/administracion-escolar/AvisoDuplicadoComprobante';
+import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import type { CuentaBancoOpcion } from '@/lib/pagos/bancos';
+import type { Duplicado, LecturaComprobanteIa } from '@/lib/administracion-escolar/comprobante-lectura';
+import { nombreDelDocumento } from '@/lib/administracion-escolar/factura-sin-cargos';
+import type { MoraDelComprobante } from '@/lib/db/schema';
 import {
-  CheckCircle2, Clock, FileText, Loader2, Paperclip, XCircle, AlertTriangle, ExternalLink, Search,
+  CheckCircle2, Clock, FileText, Landmark, Loader2, Paperclip, Sparkles, XCircle, AlertTriangle, ExternalLink, Search,
 } from 'lucide-react';
 
 interface CargoSnapshot {
@@ -34,6 +51,7 @@ interface CargoSnapshot {
 }
 
 interface Comprobante {
+  montoAprobadoCentavos: number | null;
   id: number;
   estado: string;
   montoCentavos: number;
@@ -46,10 +64,20 @@ interface Comprobante {
   archivoMime: string;
   archivoBytes: number;
   cargos: CargoSnapshot[];
+  moras: MoraDelComprobante[];
   motivoRechazo: string | null;
   creadoEn: string;
   revisadoEn: string | null;
+  lectura: LecturaComprobanteIa | null;
+  cuentaBanco: { id: number; etiqueta: string } | null;
+  duplicado: Duplicado | null;
 }
+
+/** Mientras sea más reciente que esto, un comprobante sin lectura es «la IA aún lo está leyendo». */
+const VENTANA_LECTURA_MS = 3 * 60 * 1000;
+/** Cada cuánto se vuelve a pedir la lista mientras se espera una lectura, y cuántas veces como máximo. */
+const ESPERA_LECTURA_MS = 6_000;
+const MAX_REINTENTOS_LECTURA = 8;
 
 /**
  * El estado va en un `<span>` y no en `<Badge>` a propósito.
@@ -83,34 +111,141 @@ function cuando(iso: string): string {
   });
 }
 
+/**
+ * Lo que la IA leyó del papel, en una línea, para decidir de un vistazo si vale
+ * la pena abrir el diálogo. Siempre rotulado: es una propuesta, no un dato.
+ */
+function ResumenLectura({ c }: { c: Comprobante }) {
+  const l = c.lectura;
+  if (!l) {
+    const reciente = Date.now() - new Date(c.creadoEn).getTime() < VENTANA_LECTURA_MS;
+    return reciente ? (
+      <p className="flex items-center gap-1.5 text-xs text-sky-700">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> La IA está leyendo el comprobante…
+      </p>
+    ) : null;
+  }
+  if (!l.esComprobante) {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-amber-800">
+        <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+        La IA no reconoce esta imagen como un comprobante de pago. Revísala.
+      </p>
+    );
+  }
+
+  const datos = [
+    l.bancoDestino && `Banco: ${l.bancoDestino}`,
+    l.montoCentavos != null && fmtDOP(l.montoCentavos),
+    l.fecha && fmtFechaCorta(l.fecha),
+    l.referencia && `ref. ${l.referencia}`,
+  ].filter(Boolean);
+  // El papel dice una cosa y la familia declaró otra: eso es lo que más importa.
+  const difiere = l.montoCentavos != null && l.montoCentavos !== c.montoCentavos;
+
+  return (
+    <div className="space-y-1.5">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-600">
+        <span className="inline-flex items-center gap-1 font-semibold text-sky-700">
+          <Sparkles className="h-3.5 w-3.5" /> Leído por IA — revísalo
+        </span>
+        <span>{datos.length ? datos.join(' · ') : 'No se pudo leer nada con seguridad'}</span>
+      </p>
+      {difiere && (
+        <p className="flex items-start gap-1.5 text-xs text-amber-800">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+          El papel dice {fmtDOP(l.montoCentavos!)} y la familia declaró {fmtDOP(c.montoCentavos)}.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function ComprobantesClient() {
   const [filas, setFilas] = useState<Comprobante[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<number | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
-  const [viendo, setViendo] = useState<Comprobante | null>(null);
-  const [aprobando, setAprobando] = useState<Comprobante | null>(null);
+  const [cuentasBanco, setCuentasBanco] = useState<CuentaBancoOpcion[]>([]);
   const [rechazando, setRechazando] = useState<number | null>(null);
   const [motivo, setMotivo] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<'todos' | 'pendiente' | 'aprobado' | 'rechazado'>('todos');
   const [busca, setBusca] = useState('');
 
-  const cargar = useCallback(async () => {
-    setCargando(true); setError(null);
+  // El abierto es un id de la URL y no una copia de la fila: la lista se recarga
+  // sola (para traer la lectura de la IA) y la ventana tiene que ver la fila
+  // nueva. Al cerrar se queda resaltado en la lista, para no perderle el rastro.
+  const router = useRouter();
+  const pathname = usePathname();
+  const sp = useSearchParams();
+  const abiertoId = Number(sp.get('comprobante')) || null;
+  const [resaltado, setResaltado] = useState<number | null>(abiertoId);
+  useEffect(() => { if (abiertoId) setResaltado(abiertoId); }, [abiertoId]);
+  const abrir = useCallback((id: number | null) => {
+    const q = new URLSearchParams(sp.toString());
+    if (id) q.set('comprobante', String(id)); else q.delete('comprobante');
+    router.replace(q.size ? `${pathname}?${q}` : pathname, { scroll: false });
+  }, [sp, pathname, router]);
+
+  /**
+   * `silenciosa` recarga sin el spinner de pantalla completa: se usa para traer
+   * la lectura de la IA, y un spinner desmontaría el diálogo que el revisor
+   * tiene abierto.
+   */
+  const cargar = useCallback(async (silenciosa = false) => {
+    if (!silenciosa) { setCargando(true); setError(null); }
     try {
       const r = await fetch('/api/administracion-escolar/comprobantes');
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? 'Error cargando comprobantes');
       setFilas(d.comprobantes ?? []);
+      setCuentasBanco(d.cuentasBanco ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error cargando comprobantes');
+      if (!silenciosa) setError(e instanceof Error ? e.message : 'Error cargando comprobantes');
     } finally {
-      setCargando(false);
+      if (!silenciosa) setCargando(false);
     }
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  // Llegar desde la campana: bajar hasta el comprobante que avisó. Solo cuando
+  // la lista ya pintó, y una vez — después de aprobar se recarga y no debe
+  // volver a saltar.
+  const yaBajo = useRef(false);
+  useEffect(() => {
+    if (cargando || resaltado == null || yaBajo.current) return;
+    yaBajo.current = true;
+    document.getElementById(`comprobante-${resaltado}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [cargando, resaltado]);
+
+  // La IA lee el papel unos segundos DESPUÉS de que la familia lo sube. Si hay
+  // pendientes recién llegados sin lectura, se vuelve a pedir la lista cada pocos
+  // segundos (pocas veces): quien abrió la pantalla al instante, por la campana,
+  // ve aparecer la lectura sin recargar. Sin llave de IA no hay lectura nunca, y
+  // por eso el tope de reintentos: pasada la ventana, se deja de preguntar.
+  const reintentos = useRef(0);
+  useEffect(() => {
+    const esperando = filas.some((f) =>
+      f.estado === 'pendiente' && !f.lectura && Date.now() - new Date(f.creadoEn).getTime() < VENTANA_LECTURA_MS);
+    if (!esperando || reintentos.current >= MAX_REINTENTOS_LECTURA) return;
+    const t = setTimeout(() => { reintentos.current += 1; void cargar(true); }, ESPERA_LECTURA_MS);
+    return () => clearTimeout(t);
+  }, [filas, cargar]);
+
+  /**
+   * Ir al comprobante del que este es posible duplicado: se abre el suyo y se
+   * quitan los filtros (el original puede estar aprobado y escondido), para que
+   * al cerrarlo quede resaltado a la vista.
+   */
+  const irA = useCallback((id: number) => {
+    setFiltroEstado('todos'); setBusca('');
+    abrir(id);
+    setTimeout(() => {
+      document.getElementById(`comprobante-${id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 60);
+  }, [abrir]);
 
   async function rechazar(id: number, motivoTexto: string) {
     setOcupado(id); setAviso(null); setError(null);
@@ -154,6 +289,10 @@ export function ComprobantesClient() {
     await cargar();
   }, [cargar]);
 
+  // Pendiente → la ventana de aprobar (que ya enseña el papel); decidido → solo el papel.
+  const abierto = abiertoId == null ? null : filas.find((f) => f.id === abiertoId) ?? null;
+  const aprobando = abierto?.estado === 'pendiente' ? abierto : null;
+  const viendo = abierto && abierto.estado !== 'pendiente' ? abierto : null;
   const pendientes = filas.filter((f) => f.estado === 'pendiente');
   const montoPendiente = pendientes.reduce((s, f) => s + f.montoCentavos, 0);
 
@@ -175,6 +314,7 @@ export function ComprobantesClient() {
     return [
       f.responsable, f.referencia, f.bancoOrigen,
       ...f.cargos.map((c) => c.estudiante),
+      ...f.moras.map((m) => m.detalle),
     ].some((t) => (t ?? '').toLowerCase().includes(q));
   });
 
@@ -203,6 +343,17 @@ export function ComprobantesClient() {
         <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
           <p className="text-sm text-emerald-900">{aviso}</p>
+        </div>
+      )}
+      {/* Un enlace viejo, o de un comprobante que ya no entra en la lista: se
+          dice, en vez de abrir la pantalla como si no hubiera pasado nada. */}
+      {abiertoId != null && !abierto && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <p className="text-sm text-amber-900">
+            No encontramos el comprobante #{abiertoId} en la lista.{' '}
+            <button type="button" onClick={() => abrir(null)} className="font-medium underline">Cerrar</button>
+          </p>
         </div>
       )}
       {error && (
@@ -283,7 +434,8 @@ export function ComprobantesClient() {
           const Icono = e.icono;
           const esImagen = c.archivoMime.startsWith('image/');
           return (
-            <Card key={c.id} className={`border-l-4 ${e.borde}`}>
+            <Card key={c.id} id={`comprobante-${c.id}`} className={`border-l-4 ${e.borde}`}
+              style={c.id === resaltado ? { outline: '2px solid #3658e1', outlineOffset: 2 } : undefined}>
               <CardContent className="space-y-3 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -299,10 +451,10 @@ export function ComprobantesClient() {
                       {c.bancoOrigen && <> · {c.bancoOrigen}</>}
                     </p>
                   </div>
-                  <p className="text-xl font-bold text-gray-900">{fmtDOP(c.montoCentavos)}</p>
+                  <p className="text-xl font-bold text-gray-900">{fmtDOP(c.estado === 'aprobado' ? montoConfirmado(c) : c.montoCentavos)}</p>
                 </div>
 
-                {c.cargos.length > 0 && (
+                {(c.cargos.length > 0 || c.moras.length > 0) && (
                   <div className="rounded-lg bg-gray-50 p-3">
                     <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Lo que debía al subirlo
@@ -324,8 +476,26 @@ export function ComprobantesClient() {
                           </ul>
                         </div>
                       ))}
+                      {c.moras.map((m) => (
+                        <div key={m.facturaId} className="flex items-baseline justify-between gap-3">
+                          <span className="truncate text-sm font-semibold text-gray-900">{nombreDelDocumento(m)}</span>
+                          <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">{fmtDOP(m.montoCentavos)}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
+                )}
+
+                {/* Lo primero que hay que ver si este pago ya se registró antes. */}
+                {c.duplicado && <AvisoDuplicadoComprobante duplicado={c.duplicado} onVer={irA} />}
+
+                {c.estado === 'pendiente' && <ResumenLectura c={c} />}
+
+                {c.estado === 'aprobado' && c.cuentaBanco && (
+                  <p className="flex items-center gap-1.5 text-sm text-gray-700">
+                    <Landmark className="h-4 w-4 text-gray-400" />
+                    Entró en <span className="font-medium text-gray-900">{c.cuentaBanco.etiqueta}</span>
+                  </p>
                 )}
 
                 {c.nota && <p className="text-sm italic text-gray-600">«{c.nota}»</p>}
@@ -334,7 +504,7 @@ export function ComprobantesClient() {
                 )}
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setViendo(c)}>
+                  <Button variant="outline" size="sm" onClick={() => abrir(c.id)}>
                     <FileText className="mr-1.5 h-4 w-4" /> Ver comprobante
                   </Button>
                   <a href={`/api/administracion-escolar/comprobantes/${c.id}/archivo`}
@@ -352,7 +522,7 @@ export function ComprobantesClient() {
                         Rechazar
                       </Button>
                       <Button size="sm" disabled={ocupado === c.id}
-                        onClick={() => setAprobando(c)}>
+                        onClick={() => abrir(c.id)}>
                         {ocupado === c.id
                           ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                           : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
@@ -388,15 +558,17 @@ export function ComprobantesClient() {
 
       <AprobarComprobanteDialog
         comprobante={aprobando}
+        cuentas={cuentasBanco}
         abierto={aprobando !== null}
-        onCerrar={() => setAprobando(null)}
+        onCerrar={() => abrir(null)}
+        onVerDuplicado={irA}
         onAprobado={trasAprobar}
       />
 
       {/* Ver el archivo sin salir de la cola. */}
       {viendo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setViendo(null)}>
+          onClick={() => abrir(null)}>
           <div className="max-h-full w-full max-w-3xl overflow-auto rounded-lg bg-white p-4"
             onClick={(ev) => ev.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -406,7 +578,7 @@ export function ComprobantesClient() {
                   {fmtDOP(viendo.montoCentavos)} · {viendo.archivoNombre}
                 </p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setViendo(null)}>Cerrar</Button>
+              <Button variant="outline" size="sm" onClick={() => abrir(null)}>Cerrar</Button>
             </div>
             {viendo.archivoMime.startsWith('image/') ? (
               // eslint-disable-next-line @next/next/no-img-element

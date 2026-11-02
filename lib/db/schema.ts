@@ -2664,6 +2664,13 @@ export const adminEscolarAvisosEnviados = pgTable('admin_escolar_avisos_enviados
   /** El motivo real de Meta cuando falla. */
   errorEntrega: text('error_entrega'),
   revisadoAt: timestamp('revisado_at'),
+  /** Lo que salió, tal cual (0214). NULL = aviso anterior, su texto no se guardó. */
+  texto: text('texto'),
+  /** Si llevaba enlace de pago. NULL = no se sabe. */
+  conEnlace: boolean('con_enlace'),
+  /** La primera vez que se abrió ese enlace, y cuántas veces van. */
+  abiertoAt: timestamp('abierto_at'),
+  aperturas: integer('aperturas').notNull().default(0),
   enviadoAt: timestamp('enviado_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('admin_escolar_avisos_unico').on(t.cargoId, t.tipo, t.offsetDias, t.canal),
@@ -2756,7 +2763,7 @@ export const adminEscolarTareas = pgTable('admin_escolar_tareas', {
   ecfDocumentId:       integer('ecf_document_id').references(() => ecfDocuments.id, { onDelete: 'set null' }),
   cargoId:             integer('cargo_id').references(() => adminEscolarCargos.id, { onDelete: 'set null' }),
   venceEl:             date('vence_el'),
-  /** abierta | completada */
+  /** abierta | en_proceso | en_revision | completada (0210, 0215) */
   estado:              varchar('estado', { length: 12 }).notNull().default('abierta'),
   creadaPorUserId:     integer('creada_por_user_id').references(() => users.id, { onDelete: 'set null' }),
   creadaPorIa:         boolean('creada_por_ia').notNull().default(false),
@@ -2764,6 +2771,10 @@ export const adminEscolarTareas = pgTable('admin_escolar_tareas', {
   origenClave:         varchar('origen_clave', { length: 120 }),
   completadaPorUserId: integer('completada_por_user_id').references(() => users.id, { onDelete: 'set null' }),
   completadaEn:        timestamp('completada_en'),
+  /** Se cierra sola a esta hora si sigue en revisión sin respuesta (0212; la pone la plantilla de Soporte). */
+  revisionVenceEn:     timestamp('revision_vence_en'),
+  /** Último correo URGENTE por 24 horas sin movimiento (0212). */
+  urgenteEnviadoEn:    timestamp('urgente_enviado_en'),
   creadoEn:            timestamp('creado_en').notNull().defaultNow(),
   actualizadoEn:       timestamp('actualizado_en').notNull().defaultNow(),
 }, (t) => [
@@ -2777,15 +2788,42 @@ export const adminEscolarTareaMensajes = pgTable('admin_escolar_tarea_mensajes',
   id:        serial('id').primaryKey(),
   teamId:    integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
   tareaId:   integer('tarea_id').notNull().references(() => adminEscolarTareas.id, { onDelete: 'cascade' }),
-  /** mensaje | evento | ia */
+  /** mensaje | evento | ia | adjunto (0210: un archivo; `texto` es su nombre) */
   tipo:      varchar('tipo', { length: 10 }).notNull(),
   userId:    integer('user_id').references(() => users.id, { onDelete: 'set null' }),
   /** Quién lo dijo, como se enseña: el nombre de la persona, «Soporte IT · Zero» o «Zero AI». */
   autor:     varchar('autor', { length: 100 }).notNull(),
   texto:     text('texto').notNull(),
+  adjuntoId: integer('adjunto_id').references(() => adminEscolarTareaAdjuntos.id, { onDelete: 'set null' }),
   creadoEn:  timestamp('creado_en').notNull().defaultNow(),
 }, (t) => [
   index('admin_escolar_tarea_mensajes_tarea_idx').on(t.tareaId, t.creadoEn),
+]);
+
+/**
+ * Una foto, un video o un documento de la conversación de una tarea (0210).
+ * El archivo está en S3; llega por trozos (ver lib/storage/tareas.ts) y solo
+ * se enseña cuando `subido`.
+ */
+export const adminEscolarTareaAdjuntos = pgTable('admin_escolar_tarea_adjuntos', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  tareaId:   integer('tarea_id').notNull().references(() => adminEscolarTareas.id, { onDelete: 'cascade' }),
+  userId:    integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+  nombre:    varchar('nombre', { length: 200 }).notNull(),
+  mime:      varchar('mime', { length: 120 }).notNull(),
+  bytes:     integer('bytes').notNull(),
+  s3Key:     varchar('s3_key', { length: 300 }).notNull(),
+  /** El multipart de S3, si el archivo pasa de un trozo. */
+  uploadId:  varchar('upload_id', { length: 300 }),
+  partes:    jsonb('partes').$type<{ PartNumber: number; ETag: string }[]>().notNull().default([]),
+  trozos:    integer('trozos').notNull().default(0),
+  /** Hay un trozo guardado aparte esperando a su pareja (S3 pide partes de 5 MB). */
+  pendiente: boolean('pendiente').notNull().default(false),
+  subido:    boolean('subido').notNull().default(false),
+  creadoEn:  timestamp('creado_en').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_tarea_adjuntos_tarea_idx').on(t.tareaId),
 ]);
 
 /** Pago escolar aplicado a un cargo. Enlace OPCIONAL a factura/pago_recibido,
@@ -2930,14 +2968,47 @@ export interface CargoDelComprobante {
  * factura donde se cobra, y una mora YA es esa factura (una ND tipo 33). Sin
  * esto, el dinero de un padre que transfería la mora a propósito no tenía a
  * dónde ir — la aprobación solo sabía repartir contra facturas de cargos.
+ *
+ * Por la misma razón entra aquí la factura sin cargos del enlace `?f=` (ver
+ * `factura-sin-cargos.ts`): también es ya el documento donde se cobra.
  */
 export interface MoraDelComprobante {
-  /** El id de la nota de débito. Es contra esto que se registra el cobro. */
+  /** El id del documento. Es contra esto que se registra el cobro. */
   facturaId: number;
   codigo: string | null;
   /** La factura que se venció y la causó, para reconocerla en la pantalla. */
   origenCodigo: string | null;
   montoCentavos: number;
+  /** De qué es, cuando no es una mora sino una factura sin cargos. */
+  detalle?: string;
+}
+
+/**
+ * Lo que la IA leyó en la foto o el PDF del comprobante, ya saneado (ver
+ * `limpiarLectura`). Es una PROPUESTA: la persona que revisa decide, y nada de
+ * esto mueve dinero. Los montos van en centavos y la fecha como YYYY-MM-DD.
+ */
+export interface LecturaComprobanteIa {
+  /** false = la imagen no parece un comprobante de pago; el resto va vacío. */
+  esComprobante: boolean;
+  /** El banco al que ENTRÓ el dinero (el de la cuenta del colegio). */
+  bancoDestino: string | null;
+  /** El banco desde el que SALIÓ (el de la familia). */
+  bancoOrigen: string | null;
+  /** Últimos 4 dígitos de la cuenta destino, si el papel los muestra. */
+  cuentaDestinoUltimos4: string | null;
+  montoCentavos: number | null;
+  fecha: string | null;
+  /** Número de confirmación / referencia de la operación. */
+  referencia: string | null;
+  /** Quien envió el dinero. */
+  ordenante: string | null;
+  /** Quien lo recibió. */
+  beneficiario: string | null;
+  /** 0 a 1: qué tan segura está la lectura de sí misma. */
+  confianza: number;
+  /** El modelo que la hizo, para saber de dónde salió. */
+  modelo: string;
 }
 
 /**
@@ -2954,6 +3025,8 @@ export const adminEscolarComprobantes = pgTable('admin_escolar_comprobantes', {
   clientId:      integer('client_id').references(() => clients.id, { onDelete: 'set null' }),
 
   montoCentavos: integer('monto_centavos').notNull(),
+  /** Lo que confirmó quien aprobó, que puede no ser lo declarado (0215). Ver `montoConfirmado`. */
+  montoAprobadoCentavos: integer('monto_aprobado_centavos'),
   referencia:    varchar('referencia', { length: 120 }),
   bancoOrigen:   varchar('banco_origen', { length: 120 }),
   nota:          text('nota'),
@@ -2975,6 +3048,24 @@ export const adminEscolarComprobantes = pgTable('admin_escolar_comprobantes', {
 
   /** Las notas de mora que también estaba pagando. Ver `MoraDelComprobante`. */
   moras:         jsonb('moras').$type<MoraDelComprobante[]>().notNull().default([]),
+
+  /**
+   * sha256 del archivo tal como se subió. Dos comprobantes con el mismo hash son
+   * la misma foto subida dos veces. Null en los anteriores a la migración 0213.
+   */
+  archivoHash:   varchar('archivo_hash', { length: 64 }),
+
+  /** Lo que leyó la IA al subirse. Null = no se leyó (sin llave, falló o es anterior). */
+  lecturaIa:     jsonb('lectura_ia').$type<LecturaComprobanteIa>(),
+  lecturaIaEn:   timestamp('lectura_ia_en'),
+
+  /**
+   * El banco de la empresa al que entró el dinero, elegido al aprobar. El mismo
+   * dato viaja a `pagos_recibidos.cuenta_banco_id`; aquí queda para poder
+   * decirlo en la lista sin ir a buscar el cobro. Null en los rechazados, en los
+   * pendientes y en los aprobados antes de la migración 0213.
+   */
+  cuentaBancoId: integer('cuenta_banco_id').references(() => adminEscolarCuentasBanco.id, { onDelete: 'set null' }),
 
   /** pendiente | aprobado | rechazado */
   estado:        varchar('estado', { length: 20 }).notNull().default('pendiente'),
@@ -4568,7 +4659,7 @@ export type CapturaFactura = typeof capturaFacturas.$inferSelect;
 /**
  * Lo decidido en una pantalla larga antes de guardarlo de verdad («Matricular
  * desde SIGERD»), para que recargar o abrirla en otra computadora vuelva al
- * mismo punto. Uno por colegio, año y pantalla (`clave`). Migración 0211.
+ * mismo punto. Uno por colegio, año y pantalla (`clave`). Migración 0216.
  */
 export const adminEscolarBorradores = pgTable('admin_escolar_borradores', {
   id:        serial('id').primaryKey(),
@@ -4586,7 +4677,7 @@ export const adminEscolarBorradores = pgTable('admin_escolar_borradores', {
 /**
  * Un trabajo largo que sigue aunque se cierre la pantalla (hoy: completar las
  * familias desde SIGERD alumno por alumno). Lo avanza el servidor al empezar y
- * el cron después, desde `cursorId`. Migración 0211.
+ * el cron después, desde `cursorId`. Migración 0216.
  */
 export const adminEscolarTrabajos = pgTable('admin_escolar_trabajos', {
   id:           serial('id').primaryKey(),
@@ -4604,3 +4695,59 @@ export const adminEscolarTrabajos = pgTable('admin_escolar_trabajos', {
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
   terminadoAt:  timestamp('terminado_at'),
 });
+
+// ─── Notificaciones de pagos + push (0211) ───────────────────────────────────
+
+/**
+ * Lo que le pasó a una empresa y conviene que alguien vea: hoy, un comprobante
+ * que subió una familia o un pago con tarjeta. La campana de arriba lista estas
+ * filas; el índice único evita que un reintento del callback avise dos veces.
+ * Ver lib/notificaciones/pagos.ts.
+ */
+export const notificaciones = pgTable('notificaciones', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  /** Para quién es, si es personal (tipo `tarea`). NULL = de la empresa, por permiso. */
+  userId:        integer('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  /** comprobante | pago_en_linea | tarea */
+  tipo:          varchar('tipo', { length: 30 }).notNull(),
+  titulo:        varchar('titulo', { length: 160 }).notNull(),
+  detalle:       text('detalle'),
+  /** Ruta relativa de la pantalla donde se encuentra ese pago. */
+  enlace:        varchar('enlace', { length: 300 }).notNull(),
+  /** El comprobante o el enlace de pago de origen. */
+  refId:         integer('ref_id'),
+  montoCentavos: integer('monto_centavos'),
+  creadoEn:      timestamp('creado_en').notNull().defaultNow(),
+}, (t) => [
+  index('notificaciones_team_creado_idx').on(t.teamId, t.creadoEn.desc()),
+  index('notificaciones_user_creado_idx').on(t.userId, t.creadoEn.desc()).where(sql`${t.userId} IS NOT NULL`),
+  uniqueIndex('notificaciones_ref_uq').on(t.teamId, t.tipo, t.refId).where(sql`${t.refId} IS NOT NULL`),
+]);
+
+/** Hasta cuándo ha visto cada persona las notificaciones de una empresa. */
+export const notificacionesLeidas = pgTable('notificaciones_leidas', {
+  userId:     integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  teamId:     integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  leidoHasta: timestamp('leido_hasta').notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.userId, t.teamId] }),
+]);
+
+/** Dispositivos que activaron los avisos push. El `endpoint` identifica al dispositivo. */
+export const pushSuscripciones = pgTable('push_suscripciones', {
+  id:        serial('id').primaryKey(),
+  userId:    integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  teamId:    integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  endpoint:  text('endpoint').notNull().unique(),
+  p256dh:    text('p256dh').notNull(),
+  auth:      text('auth').notNull(),
+  userAgent: varchar('user_agent', { length: 300 }),
+  creadoEn:  timestamp('creado_en').notNull().defaultNow(),
+}, (t) => [
+  index('push_suscripciones_user_idx').on(t.userId),
+  index('push_suscripciones_team_idx').on(t.teamId),
+]);
+
+export type Notificacion = typeof notificaciones.$inferSelect;
+export type PushSuscripcion = typeof pushSuscripciones.$inferSelect;

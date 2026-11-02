@@ -6,6 +6,7 @@ import { respuestaError } from '@/lib/sigerd/api-errores';
 import { borrarSesion, guardarSesion, leerSesion } from '@/lib/sigerd/sesion-cookie';
 import { SigerdError } from '@/lib/sigerd/types';
 import { sincronizarArbol } from '@/lib/administracion-escolar/sync-sigerd';
+import { invalidarEstructura } from '@/lib/cache/escolar';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -64,6 +65,8 @@ export async function POST(req: NextRequest) {
 
     // dryRun = !aplicar → calcula el resumen sin tocar la base.
     const resumen = await sincronizarArbol({ teamId, arbol, dryRun: !aplicar });
+    // Mismo motivo que importar-estructura: el catálogo de cursos está en caché.
+    if (aplicar) invalidarEstructura(teamId);
 
     return NextResponse.json({
       aplicado: aplicar,

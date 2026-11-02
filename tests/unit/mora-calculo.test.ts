@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  calcularMora, periodosDevengados, fechaPeriodo, describirMora,
+  calcularMora, periodosDevengados, fechaPeriodo, describirMora, tipoEcfCobraMora,
   type ConfigMora, type EntradaMora,
 } from '@/lib/cobranza/mora-calculo';
 
@@ -244,5 +244,15 @@ describe('regresión: comportamiento histórico intacto', () => {
     // Un año después, con la nota ya emitida, no vuelve a cobrar.
     const despues = calcularMora(entrada({ diasVencido: 365, periodosCobrados: 1 }));
     expect(despues).toMatchObject({ aplica: false, razon: 'periodo_ya_cobrado' });
+  });
+});
+
+describe('tipoEcfCobraMora', () => {
+  it('las facturas de venta cobran mora, también la sin-ncf', () => {
+    for (const t of ['31', '32', '33', '44', '45', 'sin-ncf']) expect(tipoEcfCobraMora(t)).toBe(true);
+  });
+
+  it('una nota de crédito o una compra/gasto nunca cobran mora', () => {
+    for (const t of ['34', '41', '43', '47']) expect(tipoEcfCobraMora(t)).toBe(false);
   });
 });

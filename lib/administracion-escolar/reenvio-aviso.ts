@@ -42,6 +42,8 @@ export async function registrarReenvioAviso(opts: {
   cargoId: number;
   destino: string;
   mensajeId: string | null;
+  texto?: string | null;
+  conEnlace?: boolean;
 }): Promise<boolean> {
   try {
     for (let intento = 0; intento < INTENTOS; intento++) {
@@ -63,6 +65,8 @@ export async function registrarReenvioAviso(opts: {
         canal: 'whatsapp',
         destino: opts.destino,
         mensajeId: opts.mensajeId,
+        texto: opts.texto ?? null,
+        conEnlace: opts.conEnlace ?? null,
       }).onConflictDoNothing().returning({ id: adminEscolarAvisosEnviados.id });
 
       // Si chocó, otro reenvío tomó ese número justo ahora: se vuelve a mirar.

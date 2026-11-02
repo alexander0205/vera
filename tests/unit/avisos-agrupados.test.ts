@@ -53,7 +53,7 @@ const pendientesDe = (filas: FilaAviso[], hoy: string) => filas.flatMap((f) => a
 describe('agruparPendientes', () => {
   it('tres hermanos el mismo día son UN mensaje por canal', () => {
     const grupos = agruparPendientes(pendientesDe(HERMANOS, VENCER));
-    expect(grupos.map((g) => g.canal)).toEqual(['correo', 'whatsapp', 'sms']);
+    expect(grupos.map((g) => g.canal)).toEqual(['correo', 'whatsapp']);
     for (const g of grupos) {
       // Ana (1), Luis (3), Pedro (2): por nombre.
       expect(g.miembros.map((m) => m.fila.cargoId)).toEqual([1, 3, 2]);
@@ -76,9 +76,9 @@ describe('agruparPendientes', () => {
   it('dos familias no se mezclan', () => {
     const otra = fila({ cargoId: 4, estudianteId: 20, estudiante: 'Zoe Gómez', clientId: 2000 });
     const grupos = agruparPendientes(pendientesDe([...HERMANOS, otra], VENCER));
-    expect(grupos).toHaveLength(6);
+    expect(grupos).toHaveLength(4);
     const deZoe = grupos.filter((g) => g.clientId === 2000);
-    expect(deZoe).toHaveLength(3);
+    expect(deZoe).toHaveLength(2);
     expect(deZoe.every((g) => g.miembros.length === 1)).toBe(true);
   });
 
@@ -109,7 +109,7 @@ describe('agruparPendientes', () => {
     const hoy = pendientesDe(HERMANOS, VENCER);
     const ayer = pendientesDe(HERMANOS, VENCER).map((p) => ({ ...p, fecha: '2026-10-02' }));
     const grupos = agruparPendientes([...hoy, ...ayer]);
-    expect(grupos).toHaveLength(6);
+    expect(grupos).toHaveLength(4);
     expect(grupos.every((g) => g.miembros.length === 3)).toBe(true);
   });
 
@@ -122,19 +122,19 @@ describe('agruparPendientes', () => {
     const grupos = agruparPendientes(pendientesDe([colegiatura, libros], VENCER));
     expect(grupos.filter((g) => g.canal === 'correo').map((g) => g.hueco).sort())
       .toEqual(['al-vencer-con-gracia', 'al-vencer-sin-mora']);
-    expect(grupos).toHaveLength(6);
+    expect(grupos).toHaveLength(4);
   });
 
   it('con gracia, los días de gracia distintos tampoco se funden', () => {
     const cinco = fila({ cargoId: 1, moraDiasGracia: 5 });
     const tres = fila({ cargoId: 2, moraDiasGracia: 3 });
-    const grupos = agruparPendientes(pendientesDe([cinco, tres], VENCER)).filter((g) => g.canal === 'sms');
+    const grupos = agruparPendientes(pendientesDe([cinco, tres], VENCER)).filter((g) => g.canal === 'correo');
     expect(grupos).toHaveLength(2);
   });
 
   it('el canal apagado en un concepto deja a ese cobro fuera de ese mensaje', () => {
     const sinSms = fila({ cargoId: 2, estudianteId: 11, estudiante: 'Pedro Pérez', avisoSms: false });
-    const grupos = agruparPendientes(pendientesDe([HERMANOS[0], sinSms, HERMANOS[2]], VENCER));
+    const grupos = agruparPendientes(pendientesDe([HERMANOS[0], sinSms, HERMANOS[2]], ANTES_MORA));
     const porCanal = (c: string) => grupos.find((g) => g.canal === c)!.miembros.map((m) => m.fila.cargoId);
     expect(porCanal('correo')).toEqual([1, 3, 2]);
     expect(porCanal('sms')).toEqual([1, 3]);
@@ -146,7 +146,7 @@ describe('agruparPendientes', () => {
       fila({ cargoId: 8, estudianteId: 11, clientId: null, email: null, whatsapp: null, celular: null }),
     ];
     const grupos = agruparPendientes(pendientesDe(huerfanos, VENCER));
-    expect(grupos).toHaveLength(6);
+    expect(grupos).toHaveLength(4);
     expect(grupos.every((g) => g.miembros.length === 1)).toBe(true);
   });
 
@@ -159,8 +159,8 @@ describe('agruparPendientes', () => {
   it('colegios distintos no se mezclan aunque el responsable tenga el mismo id', () => {
     const otroColegio = fila({ cargoId: 50, teamId: 12, estudianteId: 90, estudiante: 'Otro' });
     const grupos = agruparPendientes(pendientesDe([HERMANOS[0], otroColegio], VENCER));
-    expect(grupos).toHaveLength(6);
-    expect(grupos.map((g) => g.teamId)).toEqual([9, 9, 9, 12, 12, 12]);
+    expect(grupos).toHaveLength(4);
+    expect(grupos.map((g) => g.teamId)).toEqual([9, 9, 12, 12]);
   });
 });
 

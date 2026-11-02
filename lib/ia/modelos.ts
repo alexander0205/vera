@@ -43,7 +43,7 @@ export const MODELOS_IA: readonly ModeloIa[] = [
   { id: 'google/gemini-3-flash', nombre: 'Gemini 3 Flash', proveedor: 'Google', nota: 'Más nuevo; razona antes de contestar', entradaUsd: 0.5, salidaUsd: 3 },
 ];
 
-export type UsoIa = 'asistente' | 'analisis' | 'plantillas' | 'captura';
+export type UsoIa = 'asistente' | 'analisis' | 'plantillas' | 'captura' | 'redaccion';
 
 export interface UsoIaInfo {
   uso: UsoIa;
@@ -90,10 +90,17 @@ export function usosIa(env: Record<string, string | undefined> = {}): UsoIaInfo[
       principal: env.CAPTURA_IA_MODELO || 'google/gemini-2.5-flash-lite',
       respaldo: env.CAPTURA_IA_MODELO_RESPALDO || 'google/gemini-2.5-flash',
     },
+    {
+      uso: 'redaccion',
+      nombre: 'Corrector de tareas',
+      descripcion: 'Corrige y mejora lo que el equipo de Zero le responde a los colegios en las tareas.',
+      principal: env.REDACCION_IA_MODELO || 'anthropic/claude-haiku-5.5',
+      respaldo: env.REDACCION_IA_MODELO_RESPALDO || 'google/gemini-2.5-flash',
+    },
   ];
 }
 
-export const USOS_IA: readonly UsoIa[] = ['asistente', 'analisis', 'plantillas', 'captura'];
+export const USOS_IA: readonly UsoIa[] = ['asistente', 'analisis', 'plantillas', 'captura', 'redaccion'];
 
 export interface ModelosDeUso { principal: string; respaldo: string }
 

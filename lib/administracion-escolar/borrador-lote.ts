@@ -1,6 +1,6 @@
 /**
  * Lo que «Matricular desde SIGERD» guarda solo mientras se trabaja (tabla
- * `admin_escolar_borradores`, migración 0211) y cómo se vuelve a poner.
+ * `admin_escolar_borradores`, migración 0216) y cómo se vuelve a poner.
  *
  * Solo lo que la pantalla decide y no está guardado en otra parte: los
  * cambios de cada alumno, los conceptos alternados en cada sección, quién no

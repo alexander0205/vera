@@ -307,8 +307,11 @@ async function armarPlan(
       nombre: concepto.nombre,
       tipo: concepto.tipo,
       admiteBeca: concepto.admiteBeca,
-      // Lo de otros grados llega siempre sin marcar, como un opcional.
-      opcional: destino === otros || concepto.opcional,
+      // Lo de otros grados llega siempre sin marcar, como un opcional. Y un
+      // precio de todo el colegio dice que CUALQUIERA puede tomarlo, no que
+      // todos lo paguen: si llegara marcado, a cada alumno nuevo se le cargaría
+      // la terapia o el almuerzo sin que nadie lo pidiera.
+      opcional: destino === otros || concepto.opcional || tarifa.deTodoElColegio === true,
       ...(destino === otros ? { fueraDeSeccion: true } : {}),
       precioPorCuota: porCuota,
       montoCentavos: tarifa.montoCentavos,

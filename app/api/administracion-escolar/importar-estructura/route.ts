@@ -4,6 +4,7 @@ import { db } from '@/lib/db/drizzle';
 import { adminEscolarPeriodos } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { importarEstructuraSigerd } from '@/lib/administracion-escolar/importar-estructura-sigerd';
+import { invalidarEstructura } from '@/lib/cache/escolar';
 
 /**
  * Trae al año escolar la estructura descargada de Sigerd: servicios, grados y
@@ -33,5 +34,8 @@ export async function POST(req: NextRequest) {
   }
 
   const resumen = await importarEstructuraSigerd(teamId, destino);
+  // Los desplegables de curso leen el catálogo cacheado (1 h): sin esto, las
+  // secciones recién traídas no salían en ningún filtro hasta una hora después.
+  invalidarEstructura(teamId);
   return NextResponse.json({ periodoId: destino, ...resumen });
 }

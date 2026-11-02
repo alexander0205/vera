@@ -1,8 +1,8 @@
 /**
  * Reglas de «Asignar a estudiantes» en Configuración escolar > Tarifas.
  *
- * Cada fila de Tarifas dice lo que cuesta un concepto en un servicio, grado o
- * sección. La acción de la fila añade ESE concepto al plan de los alumnos de
+ * Cada fila de Tarifas dice lo que cuesta un concepto en todo el colegio o en
+ * un servicio, grado o sección. La acción de la fila añade ESE concepto al plan de los alumnos de
  * ESA fila (`conceptos_ids` de la matrícula): el concepto y el curso no se
  * eligen, y el monto no se teclea. Sus cuotas se vuelven cargo en la fecha de
  * su calendario, igual que una colegiatura, y las que ya pasaron se crean al
@@ -12,9 +12,9 @@
  * `tests/unit/cargo-desde-tarifa.test.ts`.
  */
 
-/** La fila de la que salió la acción: un servicio, un grado o una sección. */
+/** La fila de la que salió la acción: el colegio, un servicio, un grado o una sección. */
 export interface ObjetivoDeTarifa {
-  tipo: 'servicio' | 'grado' | 'seccion';
+  tipo: 'colegio' | 'servicio' | 'grado' | 'seccion';
   id: number;
 }
 
@@ -22,8 +22,8 @@ interface GradoDeEstructura { id: number; servicioId: number }
 interface SeccionDeEstructura { id: number; gradoId: number }
 
 /**
- * Las secciones que entran en la fila (`cursoIds`): un servicio son todas las
- * secciones de todos sus grados, un grado las suyas y una sección ella misma.
+ * Las secciones que entran en la fila (`cursoIds`): el colegio son todas, un
+ * servicio todas las de sus grados, un grado las suyas y una sección ella misma.
  *
  * Una lista VACÍA no se puede mandar: quien llama tiene que tratarla como
  * «esta fila no tiene a nadie» y no preguntar (ver `motivoParaNoCargar`).
@@ -33,6 +33,7 @@ export function seccionesDelObjetivo(
   grados: GradoDeEstructura[],
   secciones: SeccionDeEstructura[],
 ): number[] {
+  if (objetivo.tipo === 'colegio') return secciones.map((s) => s.id);
   if (objetivo.tipo === 'seccion') {
     return secciones.some((s) => s.id === objetivo.id) ? [objetivo.id] : [];
   }

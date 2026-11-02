@@ -94,5 +94,6 @@ export function deDondeSaleElPrecio(origen: OrigenTarifa): string {
     case 'seccion':    return 'su sección';
     case 'grado':      return 'su grado';
     case 'servicio':   return 'su servicio';
+    case 'colegio':    return 'todo el colegio';
   }
 }

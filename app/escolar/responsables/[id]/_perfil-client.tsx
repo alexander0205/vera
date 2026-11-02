@@ -5,7 +5,7 @@ import Link from 'next/link';
 import useSWR, { mutate as revalidar } from 'swr';
 import {
   AlertTriangle, ArrowLeft, CalendarClock, CalendarDays, CalendarRange, Check, Download,
-  HandCoins, Loader2, Mail, MessageCircle, Pencil, Receipt, Smartphone,
+  HandCoins, Loader2, Mail, MessageCircle, Pencil, Receipt, Smartphone, TrendingUp,
 } from 'lucide-react';
 import Box from '@mui/material/Box';
 import { alpha } from '@mui/material/styles';
@@ -259,19 +259,6 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
   const totalPagado = data.pagos.reduce((s, p) => s + p.montoCentavos, 0);
 
   /*
-    Lo pendiente, partido en lo que ya se puede cobrar y lo que falta por emitir.
-
-    El rojo de «Pendiente»/«Debe» es de lo primero: una factura emitida (suelta o
-    de un cargo) con el saldo abierto. Un cargo aún sin facturar se debe, pero lo
-    que toca con él es emitirlo; pintarlo en rojo lo hacía leer como una cuota
-    vencida y perseguir un pago que todavía no se puede cobrar.
-  */
-  const pendientePorFacturar = data.cargos
-    .filter((g) => g.ecfDocumentId == null)
-    .reduce((s, g) => s + Math.max(0, g.saldoCentavos), 0);
-  const pendientePorCobrar = Math.max(0, pendiente - pendientePorFacturar);
-
-  /*
     Lo que se puede meter en una factura nueva.
 
     No basta con «no tiene factura»: el prefill exige que el cargo esté
@@ -367,17 +354,15 @@ export default function FamiliaPerfilClient({ clientId, perfilEmpresa }: {
               {matriculados} {matriculados === 1 ? 'hijo matriculado' : 'hijos matriculados'}
             </Typography>
             <Separador />
-            {pendiente <= 0 ? (
+            {pendiente <= 0 && (
               <Pastilla tono="verde" icono={<Check className="h-3 w-3" />}>Al día</Pastilla>
-            ) : pendientePorCobrar > 0 ? (
-              <Pastilla tono="rojo" icono={<AlertTriangle className="h-3 w-3" />}>
-                Debe {fmtDOP(pendiente)}
-              </Pastilla>
-            ) : (
-              // Todo lo que se debe está aún sin facturar: no se alarma, se
-              // emite. Lo dice en vez de pintarlo en rojo.
-              <Pastilla tono="gris" icono={<Receipt className="h-3 w-3" />}>
-                Por facturar {fmtDOP(pendiente)}
+            )}
+            {/* «Debe» sumaba los meses que aún no vencen y se leía como deuda.
+                Lo que ya se debe está abajo, en «Vencido»; aquí va lo que se
+                espera cobrarle en el año: lo pagado más todo lo que falta. */}
+            {resumen.totalCentavos > 0 && (
+              <Pastilla tono="gris" icono={<TrendingUp className="h-3 w-3" />}>
+                Proyección del año {fmtDOP(resumen.totalCentavos)}
               </Pastilla>
             )}
             <Pastilla tono="gris">
@@ -867,11 +852,10 @@ function Separador() {
 
 const PASTILLA = {
   verde: { bg: '#E8F6EF', fg: '#0F7A4A' },
-  rojo:  { bg: '#FDECEC', fg: '#B4231F' },
   gris:  { bg: '#F2F4FA', fg: '#4A5164' },
 } as const;
 
-/** Etiqueta de estado: «Al día», «Debe RD$…», «Cuenta activa». */
+/** Etiqueta de estado: «Al día», «Proyección del año RD$…», «Cuenta activa». */
 function Pastilla({ tono, icono, children }: {
   tono: keyof typeof PASTILLA; icono?: React.ReactNode; children: React.ReactNode;
 }) {

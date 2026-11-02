@@ -21,8 +21,8 @@ describe('quién firma en la conversación', () => {
 });
 
 describe('a quién le toca', () => {
-  it('Soporte IT se lee como el equipo de Zero y la persona con su nombre', () => {
-    expect(etiquetaAsignada('soporte')).toBe('Soporte IT · Zero');
+  it('el equipo de Zero se lee como Departamento de IT y la persona con su nombre', () => {
+    expect(etiquetaAsignada('soporte')).toBe('Departamento de IT · Zero');
     expect(etiquetaAsignada('persona', 'Lizandro')).toBe('Lizandro');
     expect(etiquetaAsignada('persona', null)).toBe('Una persona');
   });

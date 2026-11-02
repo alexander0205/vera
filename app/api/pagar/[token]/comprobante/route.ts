@@ -10,15 +10,18 @@
  * colegio. El dinero se registra cuando alguien del colegio aprueba.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarComprobantes, teams, teamMembers, users } from '@/lib/db/schema';
 import { resolverLink, marcarAcceso } from '@/lib/administracion-escolar/link-pago';
+import { documentosDelComprobante } from '@/lib/administracion-escolar/factura-sin-cargos';
 import { origenPublico } from '@/lib/http/origen-publico';
 import { detectarTipo, ArchivoInvalidoError } from '@/lib/pagos/adjuntos';
 import { s3Disponible, subirComprobante, construirKey } from '@/lib/storage/comprobantes';
 import { enviarComprobanteRecibidoEmail } from '@/lib/email/escolar-avisos';
+import { avisarComprobante } from '@/lib/notificaciones/pagos';
+import { hashArchivo, leerYGuardarComprobante } from '@/lib/administracion-escolar/comprobantes-ia';
 
 /** Lo que promete la pantalla: 5 MB. */
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -170,6 +173,10 @@ export async function POST(
     archivoMime: tipo.mime,
     archivoNombre: (archivo.name || `comprobante.${tipo.ext}`).slice(0, 200),
     archivoBytes: buffer.length,
+    // La huella del archivo: con ella el colegio ve si esta misma foto ya se
+    // subió antes (ver detectarDuplicado). Se calcula aquí, con los bytes que
+    // acaban de pasar la validación, y no al revisar.
+    archivoHash: hashArchivo(buffer),
     cargos: link.vista.cargos.map((c) => ({
       cargoId: c.cargoId,
       estudiante: c.estudiante,
@@ -179,16 +186,32 @@ export async function POST(
     })),
     // La mora entra en el total que la página le pidió al padre, así que tiene
     // que entrar también en lo que la aprobación puede cobrar. Sin esto el
-    // dinero de la mora se quedaría sin destino y saldría como «sin aplicar».
-    moras: link.vista.moras.map((m) => ({
-      facturaId: m.facturaId,
-      codigo: m.codigo,
-      origenCodigo: m.origenCodigo,
-      montoCentavos: m.montoCentavos,
-    })),
+    // dinero de la mora se quedaría sin destino y saldría como «sin aplicar». Lo
+    // mismo la factura sin cargos.
+    moras: documentosDelComprobante(link.vista),
   }).returning({ id: adminEscolarComprobantes.id });
 
   await marcarAcceso(link.linkId);
+
+  // La IA lee el papel —banco, monto, fecha, referencia— para que quien revise
+  // lo encuentre ya extraído. Va en `after()` y no lanza: la respuesta del padre
+  // no espera a que el modelo conteste, y sin llave de IA, sin red o con una
+  // imagen ilegible el comprobante queda como siempre, sin lectura. La IA solo
+  // propone; no aprueba nada. Ver lib/administracion-escolar/comprobantes-ia.ts.
+  after(() => leerYGuardarComprobante({
+    teamId: link.teamId, id: fila.id, buffer, mime: tipo.mime,
+  }));
+
+  // La campana de arriba y el push al celular de quien revisa los pagos. Va en
+  // `after()` y no lanza: el comprobante ya está guardado y el padre no tiene
+  // que esperar —ni enterarse— de si el aviso salió. Ver lib/notificaciones/pagos.ts.
+  avisarComprobante(link.teamId, {
+    id: fila.id,
+    montoCentavos,
+    responsable: link.vista.responsable.nombre,
+    estudiantes: link.vista.estudiantes,
+    referencia: texto('referencia', 120) ?? link.referencia,
+  });
 
   // El correo es el único empujón del flujo: sin él, el comprobante espera en
   // una pestaña que nadie abre mientras al padre le siguen saliendo avisos. Aun

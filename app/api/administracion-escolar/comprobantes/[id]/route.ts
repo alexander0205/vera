@@ -112,6 +112,19 @@ export async function POST(
       if (body?.referencia != null) ajustes.referencia = String(body.referencia).trim().slice(0, 120);
 
       /**
+       * El banco donde entró el dinero. Aquí solo se mira que sea un id; que sea
+       * de ESTE colegio lo decide `aprobarComprobante` contra la base, porque el
+       * número viaja desde el navegador y cualquiera puede mandar el de otro.
+       */
+      if (body?.cuentaBancoId != null) {
+        const n = Number(body.cuentaBancoId);
+        if (!Number.isInteger(n) || n <= 0) {
+          return NextResponse.json({ error: 'La cuenta bancaria no es válida' }, { status: 400 });
+        }
+        ajustes.cuentaBancoId = n;
+      }
+
+      /**
        * Aprobar es cobrar, así que pasa por el mismo candado que cobrar.
        *
        * Faltaba: este era el único camino de Gobernanza por el que entraba
@@ -140,7 +153,7 @@ export async function POST(
     return NextResponse.json({ error: 'Acción no válida' }, { status: 400 });
   } catch (e) {
     if (e instanceof ComprobanteError) {
-      return NextResponse.json({ error: e.message }, { status: 409 });
+      return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error('[comprobantes]', e);
     return NextResponse.json(

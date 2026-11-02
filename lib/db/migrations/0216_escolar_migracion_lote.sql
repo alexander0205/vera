@@ -1,4 +1,4 @@
--- 0211 · Migración de un colegio en «Matricular desde SIGERD»: el borrador que
+-- 0216 · Migración de un colegio en «Matricular desde SIGERD»: el borrador que
 -- se guarda solo y el trabajo que completa las familias desde SIGERD.
 --
 -- 1 · Lo que se va decidiendo en la pantalla, guardado solo.

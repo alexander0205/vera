@@ -65,10 +65,12 @@ function invalidar(tag: string, perfil: string | { expire: number } = 'max'): vo
  * caché cobra de menos.
  */
 export function invalidarEstructura(teamId: number): void {
-  invalidar(tagEstructura(teamId));
+  // Sin esperar: con 'max' la primera lectura después de guardar todavía traía
+  // lo viejo, y un precio recién puesto parecía no haberse guardado al recargar.
+  invalidar(tagEstructura(teamId), { expire: 0 });
   // Las tarifas cuelgan de la estructura: si desaparece un grado, sus precios
   // dejan de tener sentido.
-  invalidar(tagTarifas(teamId));
+  invalidar(tagTarifas(teamId), { expire: 0 });
 }
 
 export function invalidarTarifas(teamId: number): void {

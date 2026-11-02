@@ -8,11 +8,11 @@ import {
 } from '@/lib/db/schema';
 import { aGsm7 } from '@/lib/sms/mensaje';
 import {
-  agruparPendientes, redactarGrupo, enlaceDeFactura, facturaDelMensaje, type GrupoAviso, type MensajeAviso,
+  agruparPendientes, redactarGrupo, enlaceDeAviso, enlaceDeFactura, facturaDelMensaje, type GrupoAviso, type MensajeAviso,
 } from './agrupar-avisos';
 import { sumarDias } from './calendario';
 import { CANALES_TODOS_ACTIVOS, type CanalesActivos } from './canales';
-import { CANALES_DEL_AVISO, type Aviso, type Canal } from './ciclo-cobro';
+import { AVISOS_CON_SMS_DE_RESPALDO, CANALES_DEL_AVISO, type Aviso, type Canal } from './ciclo-cobro';
 import { destinoDeContacto } from './destino-canal';
 
 // El texto de un aviso suelto vive en `avisos-texto.ts` para que el de varios
@@ -125,6 +125,8 @@ export interface AvisoPendiente {
    */
   fecha: string;
   canales: Canal[];
+  /** Si el WhatsApp no sale, este cobro se avisa por SMS. Lo decide `avisosDeHoy`. */
+  smsDeRespaldo?: boolean;
 }
 
 /**
@@ -190,6 +192,24 @@ export function canalesVivosDe(
 }
 
 /**
+ * Por qué canales sale este aviso, de los que están encendidos.
+ *
+ * Donde el SMS es de respaldo (`AVISOS_CON_SMS_DE_RESPALDO`) ocupa el lugar del
+ * WhatsApp cuando ya se sabe de antemano que no se puede mandar: apagado, o la
+ * familia sin número. Lo que falla al enviar se resuelve en `despachar`.
+ */
+export function canalesDeAviso(
+  aviso: Aviso,
+  vivos: readonly Canal[],
+  tieneWhatsApp = true,
+): Canal[] {
+  const canales = CANALES_DEL_AVISO[aviso].filter((c) => vivos.includes(c));
+  if (!AVISOS_CON_SMS_DE_RESPALDO.includes(aviso) || !vivos.includes('sms')) return canales;
+  if (canales.includes('whatsapp') && tieneWhatsApp) return canales;
+  return [...canales.filter((c) => c !== 'whatsapp'), 'sms'];
+}
+
+/**
  * Los canales de un aviso cuyo WhatsApp no se puede mandar (no hay plantilla
  * aprobada y asignada): se le quita el WhatsApp y, si el colegio y el concepto
  * tienen el SMS encendido, sale por SMS en su lugar.
@@ -231,7 +251,8 @@ export function avisosDeHoy(
       fecha: s.fecha,
       // El ruteo es fijo; lo que el colegio enciende es el canal. La
       // intersección es lo que de verdad sale.
-      canales: CANALES_DEL_AVISO[s.aviso].filter((c) => canalesVivos.includes(c)),
+      canales: canalesDeAviso(s.aviso, canalesVivos, destinoDelCanal(fila, 'whatsapp') != null),
+      smsDeRespaldo: AVISOS_CON_SMS_DE_RESPALDO.includes(s.aviso) && canalesVivos.includes('sms'),
     }))
     .filter((p) => p.canales.length > 0);
 }
@@ -423,7 +444,11 @@ export interface OpcionesDespacho {
     // Fuera de la ventana de 24 h WhatsApp solo admite plantillas, y para elegir
     // la plantilla y rellenar sus variables hace falta saber de qué aviso se
     // trata y qué cobros lleva.
-    whatsapp: (destino: string, texto: string, m: MensajeAviso, enlace: string | null) => Promise<string | null>;
+    // Devuelve lo que de verdad salió: en WhatsApp es la plantilla ya rellena,
+    // no el texto que se le pasa, y puede que esa plantilla no lleve enlace.
+    whatsapp: (destino: string, texto: string, m: MensajeAviso, enlace: string | null) => Promise<{
+      mensajeId: string | null; texto: string; conEnlace: boolean;
+    }>;
     sms: (destino: string, texto: string) => Promise<void>;
   };
 }
@@ -475,8 +500,12 @@ export async function despachar(
   /** clientId → URL de su enlace de pago, dentro de esta tanda. */
   const enlaces = new Map<number, string>();
 
+  // Una lista y no un recorrido directo: un WhatsApp que no sale puede añadir
+  // aquí mismo el SMS de esa familia, justo detrás, para no partirla.
+  const cola = agruparPendientes(pendientes);
   let familiaActual: string | null = null;
-  for (const g of agruparPendientes(pendientes)) {
+  for (let i = 0; i < cola.length; i++) {
+    const g = cola[i];
     // Se corta la tanda, no se marca nada: lo que queda sigue pendiente para
     // la corrida siguiente. Se corta ENTRE familias y no entre sus canales ni
     // entre sus hijos: a un mismo responsable no se le parte el recado en dos
@@ -493,6 +522,12 @@ export async function despachar(
       cargoId: m.fila.cargoId, aviso: g.aviso, canal, destino: destino ?? null,
       ok, ...(error ? { error } : {}), grupo: g.clave,
     });
+    /** El WhatsApp no salió: quien tiene SMS de respaldo se avisa por ahí. */
+    const pasarASms = (miembros: AvisoPendiente[]) => {
+      if (canal !== 'whatsapp') return;
+      const conRespaldo = miembros.filter((m) => m.smsDeRespaldo);
+      cola.splice(i + 1, 0, ...agruparPendientes(conRespaldo.map((m) => ({ ...m, canales: ['sms'] as Canal[] }))));
+    };
 
     // Cuota del mes agotada en este canal: se salta el canal, NO el aviso.
     // El mismo recordatorio sigue saliendo por los canales que le queden —
@@ -503,6 +538,7 @@ export async function despachar(
     const quedan = restante[canal];
     if (quedan !== undefined && quedan <= 0) {
       for (const m of g.miembros) hechos.push(hecho(m, false, `Cuota mensual de ${canal} agotada`));
+      pasarASms(g.miembros);
       continue;
     }
 
@@ -536,6 +572,8 @@ export async function despachar(
     salidos++;
 
     let mensajeId: string | null = null;
+    let textoSalido = '';
+    let llevaEnlace = false;
     try {
       // El enlace de pago va pegado al aviso: sin él el padre sabe que debe pero
       // no tiene a dónde ir, y termina llamando al colegio. En el texto largo
@@ -562,6 +600,9 @@ export async function despachar(
           // El de la familia se memoriza; lo que cambia por mensaje es la
           // factura: el aviso lleva a ESA factura, no a toda la deuda.
           enlace = enlaceDeFactura(link, facturaDelMensaje(miembros));
+          // En el SMS no: cada carácter se cobra. Quien lo abra desde ahí se
+          // anota en el último aviso de su familia (`registrarApertura`).
+          if (canal !== 'sms') enlace = enlaceDeAviso(enlace, ids[0]);
         } catch (err) {
           // Que no se pueda crear el enlace no puede impedir el aviso: el padre
           // prefiere enterarse de que debe, aunque sea sin botón.
@@ -573,19 +614,28 @@ export async function despachar(
       const conEnlace = enlace ? `${largo}\n\nPaga o sube tu comprobante aquí: ${enlace}` : largo;
       const mensaje: MensajeAviso = { aviso: g.aviso, hueco: g.hueco, canal, miembros };
 
-      if (canal === 'correo') await opts.enviar.correo(destino, conEnlace, mensaje);
-      else if (canal === 'whatsapp') {
+      if (canal === 'correo') {
+        await opts.enviar.correo(destino, conEnlace, mensaje);
+        textoSalido = conEnlace;
+        llevaEnlace = enlace != null;
+      } else if (canal === 'whatsapp') {
         // Se guarda el id que devuelve el CRM. El 201 solo dice que Meta
         // aceptó la petición; con este id se puede volver a preguntar más
         // tarde si el mensaje LLEGÓ, y soltar la reserva si no.
-        mensajeId = await opts.enviar.whatsapp(destino, conEnlace, mensaje, enlace);
+        const r = await opts.enviar.whatsapp(destino, conEnlace, mensaje, enlace);
+        mensajeId = r.mensajeId;
+        textoSalido = r.texto;
+        llevaEnlace = r.conEnlace;
+      } else {
+        // Al SMS se le quitan los acentos que GSM-7 no tiene. No es cosmética:
+        // una sola `í` o `ó` —"Matrícula", "Psicopedagógico"— tumba el límite
+        // de 160 a 70 caracteres y el mismo aviso pasa a cobrarse como tres.
+        // Solo aquí: el correo y WhatsApp no cobran por carácter y ahí el
+        // texto va con su ortografía.
+        textoSalido = aGsm7(corto);
+        await opts.enviar.sms(destino, textoSalido);
+        llevaEnlace = textoSalido.includes('/pagar/');
       }
-      // Al SMS se le quitan los acentos que GSM-7 no tiene. No es cosmética:
-      // una sola `í` o `ó` —"Matrícula", "Psicopedagógico"— tumba el límite
-      // de 160 a 70 caracteres y el mismo aviso pasa a cobrarse como tres.
-      // Solo aquí: el correo y WhatsApp no cobran por carácter y ahí el
-      // texto va con su ortografía.
-      else await opts.enviar.sms(destino, aGsm7(corto));
     } catch (err) {
       // Se suelta la reserva de TODO el mensaje para que se pueda reintentar.
       // El fallo más común es un teléfono que no normaliza, y ese no se
@@ -593,6 +643,7 @@ export async function despachar(
       await liberarReservas(ids);
       const error = err instanceof Error ? err.message : String(err);
       for (const m of miembros) hechos.push(hecho(m, false, error));
+      pasarASms(miembros);
       continue;
     }
 
@@ -603,17 +654,17 @@ export async function despachar(
     const conjunto = miembros.length > 1
       ? `Enviado en un solo mensaje con ${miembros.length - 1} cobro(s) más`
       : null;
-    if (mensajeId || conjunto) {
-      try {
-        await db.update(adminEscolarAvisosEnviados)
-          .set({
-            ...(mensajeId ? { mensajeId } : {}),
-            ...(conjunto ? { detalle: conjunto } : {}),
-          })
-          .where(inArray(adminEscolarAvisosEnviados.id, ids));
-      } catch (err) {
-        console.error('[avisos] el mensaje salió pero no se pudo anotar su id:', err);
-      }
+    try {
+      await db.update(adminEscolarAvisosEnviados)
+        .set({
+          texto: textoSalido,
+          conEnlace: llevaEnlace,
+          ...(mensajeId ? { mensajeId } : {}),
+          ...(conjunto ? { detalle: conjunto } : {}),
+        })
+        .where(inArray(adminEscolarAvisosEnviados.id, ids));
+    } catch (err) {
+      console.error('[avisos] el mensaje salió pero no se pudo anotar:', err);
     }
 
     // Solo se descuenta lo que de verdad salió: un envío que reventó se
