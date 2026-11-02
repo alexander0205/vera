@@ -31,7 +31,22 @@ const rncSchema = z.preprocess(
   ),
 );
 
-export const clienteSchema = z.object({
+/**
+ * Quita los caracteres de formato invisibles (Unicode `Cf`: U+200E, U+200B,
+ * U+FEFF…) de cada texto antes de validar.
+ *
+ * Llegan al copiar y pegar de WhatsApp, PDFs o el portal: un tutor con un
+ * U+200E delante de la cédula y del nombre no se podía hacer responsable de
+ * pago, y como esa marca no se ve, «40212926592» fallaba como documento inválido sin que nadie pudiera
+ * ver por qué.
+ */
+const sinInvisibles = (v: unknown) =>
+  v && typeof v === 'object' && !Array.isArray(v)
+    ? Object.fromEntries(Object.entries(v).map(([k, x]) =>
+        [k, typeof x === 'string' ? x.replace(/\p{Cf}/gu, '') : x]))
+    : v;
+
+export const clienteSchema = z.preprocess(sinInvisibles, z.object({
   razonSocial: z.string().min(1, 'El nombre es obligatorio').max(255).transform(v => v.trim()),
   rnc:         rncSchema,
   // email: vacío o null → null; con valor debe ser email válido. Se recorta
@@ -47,6 +62,6 @@ export const clienteSchema = z.object({
   whatsapp:    optStr(30),
   direccion:   optStr(500),
   descripcion: optStr(2000),
-});
+}));
 
 export type ClienteInput = z.infer<typeof clienteSchema>;
