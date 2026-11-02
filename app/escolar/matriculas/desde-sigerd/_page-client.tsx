@@ -5,7 +5,7 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import Drawer from '@mui/material/Drawer';
 import {
-  AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, DownloadCloud, GitCompareArrows, GraduationCap,
+  AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, ClipboardList, DownloadCloud, GitCompareArrows, GraduationCap,
   Layers, Loader2, Pencil, RotateCcw, Search, Tag, UserCheck, UserMinus, UserX, Users, X, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -26,11 +26,13 @@ import {
 } from '@/lib/administracion-escolar/matricular-sigerd-plan';
 import {
   Chip, cobraEnSeccion, esMatriculado, iniciales, norm, rdCorto, titulo, tono,
-  type Ajuste, type Alumno, type Grupo, type PlanSeccion,
+  type Ajuste, type Alumno, type Grupo, type PasoAlumno, type PlanSeccion,
 } from './_compartido';
+import { RevisarAlumno } from './_revisar-alumno';
 import { BarraLote, type ConceptoDelLote } from './_barra-lote';
 import { VistaAlumnos } from './_vista-alumnos';
 import { VistaConceptos } from './_vista-conceptos';
+import { VistaFormulario, type Completados } from './_vista-formulario';
 
 /**
  * Matricular de una vez a los alumnos que SIGERD ya tiene en su grado y
@@ -98,19 +100,23 @@ interface CambioMatriculado { matriculaId: number; estudianteId: number; nombre:
 const CAMBIOS = -1;
 
 type Filtro = 'todos' | 'por-matricular' | 'matriculados' | 'cambios' | 'fuera' | 'sin-responsable';
-type Vista = 'seccion' | 'alumno' | 'concepto';
+type Vista = 'formulario' | 'seccion' | 'alumno' | 'concepto';
 
 const VISTAS: Array<{ id: Vista; etiqueta: string; icono: ReactNode; ayuda: string }> = [
+  { id: 'formulario', etiqueta: 'Formulario', icono: <ClipboardList className="h-4 w-4" />, ayuda: 'Cada estudiante con su formulario, junto a la lista del colegio' },
   { id: 'seccion', etiqueta: 'Por sección', icono: <Layers className="h-4 w-4" />, ayuda: 'Cada sección con lo que cobra y sus alumnos' },
   { id: 'alumno', etiqueta: 'Por alumno', icono: <Users className="h-4 w-4" />, ayuda: 'Todos en una tabla: marca varios para cambiarlos juntos' },
   { id: 'concepto', etiqueta: 'Por concepto', icono: <Tag className="h-4 w-4" />, ayuda: 'Elige un concepto y marca quién lo lleva' },
 ];
 
-export type PasoAlumno = 'familia' | 'conceptos' | 'pagos';
 const PASOS_ALUMNO: Array<{ id: PasoAlumno; etiqueta: string }> = [
   { id: 'familia', etiqueta: 'Familia y quién paga' },
   { id: 'conceptos', etiqueta: 'Cargos del año' },
   { id: 'pagos', etiqueta: 'Pagos' },
+];
+/** En la vista Formulario, como el formulario de migración: se termina revisando. */
+const PASOS_FORMULARIO: Array<{ id: PasoAlumno; etiqueta: string }> = [
+  ...PASOS_ALUMNO, { id: 'revisar', etiqueta: 'Revisar' },
 ];
 
 // Las tres alturas del árbol: nivel → grado → sección. La clave de cada nodo
@@ -165,11 +171,15 @@ export default function MatricularDesdeSigerd() {
   // Cambios en el panel sin «Guardar»: cerrar pregunta antes de perderlos.
   const [editorSucio, setEditorSucio] = useState(false);
   const [avisoSalir, setAvisoSalir] = useState(false);
+  const accionTrasSalir = useRef<(() => void) | null>(null);
   useEffect(() => { if (!editando) setEditorSucio(false); }, [editando]);
-  const cerrarEditor = useCallback(() => {
-    if (editorSucio) setAvisoSalir(true);
-    else setEditando(null);
+  const salirDelEditor = useCallback((accion: () => void) => {
+    if (editorSucio) { accionTrasSalir.current = accion; setAvisoSalir(true); }
+    else accion();
   }, [editorSucio]);
+  const cerrarEditor = useCallback(() => {
+    salirDelEditor(() => setEditando(null));
+  }, [salirDelEditor]);
   /** Lo que se guardó en «Familia» se ve ya en la lista, sin volver a leer SIGERD. */
   const marcarResponsable = useCallback((id: number, tiene: boolean) => {
     setDatos((d) => d && {
@@ -291,6 +301,30 @@ export default function MatricularDesdeSigerd() {
   const descartarBorrador = () => {
     setAjustes(new Map()); setCambiadosSeccion(new Map()); setFuera(new Set()); setFecha(null);
   };
+
+  /**
+   * Los alumnos ya revisados en el formulario («X de N completados»). Se
+   * guardan aparte del borrador: matricular o empezar de cero no los borra.
+   */
+  const [completados, setCompletados] = useState<Completados>(new Map());
+  useEffect(() => {
+    if (!periodoBorrador) return;
+    let vigente = true;
+    fetch(`/api/administracion-escolar/matriculas/desde-sigerd/completados?periodoId=${periodoBorrador}`)
+      .then((r) => (r.ok ? r.json() : { alumnos: {} }))
+      .then((d) => { if (vigente) setCompletados(new Map(Object.entries(d.alumnos ?? {}).map(([k, v]) => [Number(k), v as { en: string; por: string | null }]))); })
+      .catch(() => { /* sin la lista, todos salen pendientes */ });
+    return () => { vigente = false; };
+  }, [periodoBorrador]);
+  const marcarCompletado = useCallback(async (estudianteId: number, completado: boolean) => {
+    const r = await fetch('/api/administracion-escolar/matriculas/desde-sigerd/completados', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ periodoId: periodoBorrador, estudianteId, completado }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error ?? 'No se pudo guardar');
+    setCompletados(new Map(Object.entries(d.alumnos ?? {}).map(([k, v]) => [Number(k), v as { en: string; por: string | null }])));
+  }, [periodoBorrador]);
 
 
   // El plan de cada sección, con la fecha elegida: la fecha decide qué cuotas
@@ -554,7 +588,7 @@ export default function MatricularDesdeSigerd() {
   }, [ponerAjustes, lineaDe, conceptosDe, ajustes]);
 
   // ── Vistas y alumnos marcados (vista por alumno) ─────────────────────
-  const [vista, setVista] = useState<Vista>('seccion');
+  const [vista, setVista] = useState<Vista>('formulario');
   const [marcados, setMarcados] = useState<Set<number>>(new Set());
   const marcar = useCallback((ids: number[], si: boolean) => {
     setMarcados((s) => {
@@ -565,12 +599,13 @@ export default function MatricularDesdeSigerd() {
   }, []);
   const cambiarVista = (v: Vista) => {
     if (v === vista) return;
-    if (editando) {
-      // Cambiar de vista cierra el plan abierto: si tiene cambios, primero se pregunta.
-      if (editorSucio) { setAvisoSalir(true); return; }
-      setEditando(null);
-    }
-    setVista(v);
+    const cambiar = () => {
+      setEditando(null); setVista(v);
+      // «Revisar» es del formulario: en las otras vistas se vuelve a los cargos.
+      if (paso === 'revisar') setPaso('conceptos');
+    };
+    if (editando) salirDelEditor(cambiar);
+    else cambiar();
   };
 
   /*
@@ -589,7 +624,7 @@ export default function MatricularDesdeSigerd() {
     const en = q.get('en');
     if (en) setAlcance(en);
     const pasoUrl = q.get('paso');
-    if (pasoUrl === 'familia' || pasoUrl === 'pagos') setPaso(pasoUrl);
+    if (pasoUrl === 'familia' || pasoUrl === 'pagos' || pasoUrl === 'revisar') setPaso(pasoUrl);
     const alumno = Number(q.get('alumno'));
     if (Number.isInteger(alumno) && alumno > 0) alumnoDeLaUrl.current = alumno;
     else setUrlLista(true);
@@ -607,7 +642,7 @@ export default function MatricularDesdeSigerd() {
     if (!urlLista) return;
     const q = new URLSearchParams(window.location.search);
     const poner = (k: string, v: string | null) => { if (v) q.set(k, v); else q.delete(k); };
-    poner('vista', vista === 'seccion' ? null : vista);
+    poner('vista', vista === 'formulario' ? null : vista);
     poner('en', alcance);
     poner('alumno', editando ? String(editando.alumno.id) : null);
     poner('paso', editando && paso !== 'conceptos' ? paso : null);
@@ -901,7 +936,21 @@ export default function MatricularDesdeSigerd() {
       paso={paso}
       onPaso={setPaso}
       onResponsable={(tiene) => marcarResponsable(editando.alumno.id, tiene)}
-      onGuardar={(a) => { guardarAjuste(editando.alumno.id, editando.grupo.cursoId, a); setEditando(null); }}
+      onGuardar={(a, seguir) => {
+        guardarAjuste(editando.alumno.id, editando.grupo.cursoId, a);
+        if (!seguir) setEditando(null);
+      }}
+      formulario={vista === 'formulario' ? {
+        lineas: (() => {
+          const p = planes.get(editando.grupo.cursoId);
+          return p?.estado === 'listo' ? [...p.lineas, ...p.otros] : null;
+        })(),
+        completado: completados.has(editando.alumno.id),
+        onCompletar: async (si) => {
+          await marcarCompletado(editando.alumno.id, si);
+          if (si) setEditando(null);
+        },
+      } : undefined}
       onRestablecer={() => {
         deshacerAjuste(editando.alumno.id);
         setEditando(null);
@@ -1032,8 +1081,8 @@ export default function MatricularDesdeSigerd() {
         )}
 
         <div className="min-w-0 space-y-4">
-          {/* Buscar y filtrar */}
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {/* Buscar y filtrar. El formulario lo lleva dentro de su lista, como el de migración. */}
+          <div className={`${vista === 'formulario' ? 'hidden' : 'flex'} flex-col gap-2 sm:flex-row sm:items-center`}>
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
@@ -1083,6 +1132,21 @@ export default function MatricularDesdeSigerd() {
             </div>
           )}
 
+          {vista === 'formulario' && (
+            <VistaFormulario
+              grupos={visibles} todos={datos.grupos} editandoId={editando?.alumno.id ?? null}
+              fuera={fuera} completados={completados} editor={editorDelAlumno}
+              busqueda={busqueda} onBusqueda={setBusqueda}
+              filtros={filtros} filtro={filtro} onFiltro={(f) => setFiltro(f as Filtro)}
+              onAbrir={(alumno, grupo) => {
+                if (editando?.alumno.id === alumno.id) return;
+                const abrir = () => { setEditando({ alumno, grupo }); setPaso('familia'); };
+                if (editando) salirDelEditor(abrir);
+                else abrir();
+              }}
+              onIncluir={(id) => alternarFuera([id], false)} />
+          )}
+
           {vista === 'alumno' && (
             <VistaAlumnos
               grupos={visibles} planes={planes} cambiadosSeccion={cambiadosSeccion}
@@ -1091,9 +1155,12 @@ export default function MatricularDesdeSigerd() {
               editandoId={editando?.alumno.id ?? null} editor={editorDelAlumno}
               onEditar={(alumno, cursoId) => {
                 if (editando?.alumno.id === alumno.id) { cerrarEditor(); return; }
-                if (editando && editorSucio) { setAvisoSalir(true); return; }
                 const grupo = completos.get(cursoId);
-                if (grupo) setEditando({ alumno, grupo });
+                if (grupo) {
+                  const abrir = () => setEditando({ alumno, grupo });
+                  if (editando) salirDelEditor(abrir);
+                  else abrir();
+                }
               }}
               onSacar={(id) => { alternarFuera([id], true); if (editando?.alumno.id === id) setEditando(null); }}
               onIncluir={(id) => alternarFuera([id], false)}
@@ -1343,27 +1410,36 @@ export default function MatricularDesdeSigerd() {
         confirmLabel={resumen.alumnos > 0 ? (cambiosMatriculados.length > 0 ? 'Sí, matricular y guardar' : 'Sí, matricular') : 'Sí, guardar'}
         onConfirm={() => void matricular()} />
 
-      {/* En la vista por alumno el plan se abre debajo de su fila; en las demás, en el cajón. */}
+      {/* Formulario y Por alumno muestran el editor en la página; las otras vistas usan el cajón. */}
       <ConceptosYTarifasDialog open={conceptosAbierto}
         onCerrar={() => { setConceptosAbierto(false); setRecargarPlanes((n) => n + 1); }} />
 
-      <Drawer anchor="right" open={!!editando && vista !== 'alumno'} onClose={cerrarEditor} keepMounted={false}
+      <Drawer anchor="right" open={!!editando && vista !== 'alumno' && vista !== 'formulario'} onClose={cerrarEditor} keepMounted={false}
         slotProps={{
           backdrop: { sx: { backdropFilter: 'blur(2px)' } },
           // Ancho: la tabla de cargos (concepto, cuotas, por cuota, total y
           // acciones) se lee en una línea sin apretar. Lo pidió Alex.
           paper: { sx: { width: { xs: '100%', sm: 760, lg: 1000, xl: 1120 }, borderTopLeftRadius: { sm: 16 }, borderBottomLeftRadius: { sm: 16 } } },
         }}>
-        {vista !== 'alumno' && editorDelAlumno}
+        {vista !== 'alumno' && vista !== 'formulario' && editorDelAlumno}
       </Drawer>
 
-      <ConfirmDialog open={avisoSalir} onOpenChange={setAvisoSalir}
+      <ConfirmDialog open={avisoSalir} onOpenChange={(abierto) => {
+        setAvisoSalir(abierto);
+        if (!abierto) accionTrasSalir.current = null;
+      }}
         title="Tienes cambios sin guardar"
         description="Cambiaste los conceptos o los precios de este alumno y todavía no los has guardado. Si sales ahora, se pierden."
         confirmLabel="Salir sin guardar"
         cancelLabel="Seguir editando"
         destructive
-        onConfirm={() => { setAvisoSalir(false); setEditando(null); }} />
+        onConfirm={() => {
+          const accion = accionTrasSalir.current;
+          accionTrasSalir.current = null;
+          setAvisoSalir(false);
+          if (accion) accion();
+          else setEditando(null);
+        }} />
     </section>
   );
 }
@@ -1502,7 +1578,7 @@ function ArbolSecciones({ grupos, fuera, cuentas, alcance, onAlcance, onIncluir 
 /** El cajón de un alumno: sus conceptos y sus precios, con el selector de «Nueva matrícula». */
 function EditorAlumno({
   alumno, grupo, periodoId, fecha, corte, inicial, puedePrecios, conCambios, recargar, onAbrirConceptos,
-  paso, onPaso, onResponsable, onGuardar, onRestablecer, onSacar, onCerrar, onSucio,
+  paso, onPaso, onResponsable, onGuardar, onRestablecer, onSacar, onCerrar, onSucio, formulario,
 }: {
   alumno: Alumno;
   grupo: Grupo;
@@ -1521,12 +1597,23 @@ function EditorAlumno({
   onPaso: (p: PasoAlumno) => void;
   /** Se le puso (o cambió) el responsable de pago desde «Familia». */
   onResponsable: (tiene: boolean) => void;
-  onGuardar: (a: Ajuste) => void;
+  /** `seguir`: se guarda sin cerrar, para pasar al paso siguiente del formulario. */
+  onGuardar: (a: Ajuste, seguir?: boolean) => void;
   onRestablecer: () => void;
   onSacar: () => void;
   onCerrar: () => void;
   /** Avisa si hay cambios sin guardar, para preguntar antes de cerrar. */
   onSucio?: (sucio: boolean) => void;
+  /**
+   * En la vista Formulario: pasos con Atrás/Siguiente, un último paso
+   * «Revisar» y el alumno se da por completado al terminar.
+   */
+  formulario?: {
+    /** Lo de su sección y lo de otros grados, para nombrar sus conceptos al revisar. */
+    lineas: LineaPlan[] | null;
+    completado: boolean;
+    onCompletar: (si: boolean) => Promise<void>;
+  };
 }) {
   // Lo que el selector va diciendo. Antes de que llegue el plan su lista de
   // conceptos va vacía sin querer decir «ninguno»: hasta entonces no se guarda.
@@ -1559,6 +1646,31 @@ function EditorAlumno({
   useEffect(() => { onSucio?.(sucio); }, [sucio, onSucio]);
   const [pagosVisto, setPagosVisto] = useState(paso === 'pagos');
   useEffect(() => { if (paso === 'pagos') setPagosVisto(true); }, [paso]);
+  // «Revisar» solo existe en el formulario: en el cajón se ven los cargos.
+  const pasoVisto: PasoAlumno = !formulario && paso === 'revisar' ? 'conceptos' : paso;
+  const [completando, setCompletando] = useState(false);
+  const [errorCompletar, setErrorCompletar] = useState<string | null>(null);
+
+  /**
+   * Formulario: «Siguiente» en los cargos guarda lo cambiado sin cerrar y lo
+   * deja como nuevo punto de partida, para que ya no cuente como sin guardar.
+   */
+  const guardarYSeguir = () => {
+    if (sucio) {
+      onGuardar({ conceptos, precios }, true);
+      base.current = { conceptos: claveIds(conceptos), precios: clavePrecios(precios) };
+    }
+    onPaso('pagos');
+  };
+  const completar = async (si: boolean) => {
+    if (!formulario) return;
+    setCompletando(true); setErrorCompletar(null);
+    try { await formulario.onCompletar(si); } catch (e) {
+      setErrorCompletar(e instanceof Error ? e.message : 'No se pudo guardar');
+    } finally { setCompletando(false); }
+  };
+  const pasos = formulario ? PASOS_FORMULARIO : PASOS_ALUMNO;
+  const indice = pasos.findIndex((p) => p.id === pasoVisto);
 
   return (
     <div className="flex h-full flex-col">
@@ -1567,8 +1679,20 @@ function EditorAlumno({
           {iniciales(alumno.nombre)}
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-base font-semibold text-gray-900">{alumno.nombre}</h2>
-          <p className="text-xs text-gray-500">{titulo(grupo)}{grupo.tanda ? ` · ${grupo.tanda}` : ''}</p>
+          <h2 className={`truncate font-semibold text-gray-900 ${formulario ? 'text-xl' : 'text-base'}`}>{alumno.nombre}</h2>
+          <p className="text-xs text-gray-500">
+            {formulario && `${grupo.servicio}, `}{titulo(grupo)}{grupo.tanda ? ` · ${grupo.tanda}` : ''}
+          </p>
+          {formulario && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${esMatriculado(alumno) ? 'bg-gray-100 text-gray-600' : 'bg-amber-50 text-amber-800'}`}>
+                {esMatriculado(alumno) ? 'Ya matriculado' : 'Por matricular'}
+              </span>
+              <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${formulario.completado ? 'bg-zero-50 text-zero-700' : 'bg-gray-100 text-gray-600'}`}>
+                {formulario.completado ? 'Modificando' : 'Nuevo registro'}
+              </span>
+            </div>
+          )}
         </div>
         <button type="button" onClick={onCerrar} aria-label="Cerrar"
           className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
@@ -1577,8 +1701,26 @@ function EditorAlumno({
       </div>
 
       {/* Primero quién es su familia y quién paga, después lo que se le cobra:
-          el orden del formulario de migración. Los dos pasos quedan montados
+          el orden del formulario de migración. Los pasos quedan montados
           para no perder lo marcado al ir y volver. */}
+      {formulario ? (
+        <ol aria-label="Pasos del alumno" className="grid grid-cols-2 gap-1.5 border-b border-gray-100 px-5 py-3 sm:grid-cols-4">
+          {pasos.map((p, i) => (
+            <li key={p.id}>
+              <button type="button" onClick={() => onPaso(p.id)} aria-current={pasoVisto === p.id ? 'step' : undefined}
+                className={`flex w-full items-center gap-1.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                  pasoVisto === p.id ? 'bg-zero-600 text-white'
+                    : i < indice ? 'bg-zero-50 text-zero-700 hover:bg-zero-100' : 'bg-gray-100 text-gray-500 hover:text-gray-800'}`}>
+                {i < indice ? <Check className="h-3.5 w-3.5 shrink-0" /> : <span>{i + 1}.</span>}
+                <span className="truncate">{p.etiqueta}</span>
+                {p.id === 'familia' && alumno.sinResponsable && (
+                  <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-amber-500" title="Sin responsable de pago" />
+                )}
+              </button>
+            </li>
+          ))}
+        </ol>
+      ) : (
       <div role="tablist" aria-label="Partes del alumno" className="flex gap-1 border-b border-gray-100 px-5">
         {PASOS_ALUMNO.map((p, i) => (
           <button key={p.id} type="button" role="tab" aria-selected={paso === p.id} onClick={() => onPaso(p.id)}
@@ -1593,14 +1735,15 @@ function EditorAlumno({
           </button>
         ))}
       </div>
+      )}
 
-      <div className={`flex-1 overflow-y-auto px-5 py-4 ${paso === 'familia' ? '' : 'hidden'}`}>
+      <div className={`flex-1 overflow-y-auto px-5 py-4 ${pasoVisto === 'familia' ? '' : 'hidden'}`}>
         <FamiliaDelAlumno estudianteId={alumno.id} onResponsable={onResponsable} />
       </div>
 
       {/* Se monta la primera vez que se entra: abrir un alumno no pide sus cargos. */}
-      {(paso === 'pagos' || pagosVisto) && (
-        <div className={`flex-1 overflow-y-auto px-5 py-4 ${paso === 'pagos' ? '' : 'hidden'}`}>
+      {(pasoVisto === 'pagos' || pagosVisto) && (
+        <div className={`flex-1 overflow-y-auto px-5 py-4 ${pasoVisto === 'pagos' ? '' : 'hidden'}`}>
           {alumno.matriculaId != null ? (
             <PagosDelAlumno estudianteId={alumno.id} matriculaId={alumno.matriculaId} />
           ) : (
@@ -1611,7 +1754,15 @@ function EditorAlumno({
         </div>
       )}
 
-      <div className={`flex-1 space-y-4 overflow-y-auto px-5 py-4 ${paso === 'conceptos' ? '' : 'hidden'}`}>
+      {/* Se vuelve a montar cada vez: enseña lo guardado de verdad. */}
+      {formulario && pasoVisto === 'revisar' && (
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          <RevisarAlumno alumno={alumno} lineas={formulario.lineas} conceptos={conceptos} precios={precios}
+            corte={corte} sinGuardar={sucio} conCambios={conCambios} onPaso={onPaso} />
+        </div>
+      )}
+
+      <div className={`flex-1 space-y-4 overflow-y-auto px-5 py-4 ${pasoVisto === 'conceptos' ? '' : 'hidden'}`}>
         {esMatriculado(alumno) && (
           <div className="flex gap-2 rounded-lg border border-zero-200 bg-zero-50 px-3 py-2 text-xs text-zero-900">
             <GraduationCap className="h-4 w-4 shrink-0 text-zero-600" />
@@ -1670,6 +1821,41 @@ function EditorAlumno({
             </button>
           )}
         </div>
+        {formulario ? (
+          <div className="flex flex-col items-stretch gap-1 sm:items-end">
+            {errorCompletar && <p className="text-xs text-red-600">{errorCompletar}</p>}
+            <div className="flex flex-wrap justify-end gap-2">
+              {indice === 0
+                ? <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
+                : <Button variant="outline" onClick={() => onPaso(pasos[indice - 1].id)}>Atrás</Button>}
+              {pasoVisto === 'familia' && (
+                <Button className="bg-zero-600 hover:bg-zero-700" onClick={() => onPaso('conceptos')}>Siguiente: cargos del año</Button>
+              )}
+              {pasoVisto === 'conceptos' && (
+                <Button className="bg-zero-600 hover:bg-zero-700" disabled={!cargado} onClick={guardarYSeguir}>
+                  {sucio ? 'Guardar y seguir: pagos' : 'Siguiente: pagos'}
+                </Button>
+              )}
+              {pasoVisto === 'pagos' && (
+                <Button className="bg-zero-600 hover:bg-zero-700" onClick={() => onPaso('revisar')}>Siguiente: revisar</Button>
+              )}
+              {pasoVisto === 'revisar' && (
+                <>
+                  {formulario.completado && (
+                    <Button variant="outline" disabled={completando} onClick={() => void completar(false)}>Volver a pendiente</Button>
+                  )}
+                  <Button className="bg-zero-600 hover:bg-zero-700" disabled={completando || sucio}
+                    title={sucio ? 'Guarda antes los cambios de «Cargos del año»' : undefined}
+                    onClick={() => void completar(true)}>
+                    {completando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />}
+                    {/* No «Guardar cambios»: así se llama el botón de abajo que guarda las matrículas. */}
+                    {formulario.completado ? 'Seguir completado' : 'Guardar estudiante'}
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
         <div className="flex gap-2">
           <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
           {paso === 'familia' ? (
@@ -1684,6 +1870,7 @@ function EditorAlumno({
             </Button>
           )}
         </div>
+        )}
       </div>
     </div>
   );

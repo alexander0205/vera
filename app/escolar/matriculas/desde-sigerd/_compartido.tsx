@@ -18,6 +18,9 @@ export interface Alumno {
   conceptos?: number[];
 }
 
+/** Los pasos del alumno abierto. «Revisar» solo sale en la vista Formulario. Vive en la URL (`?paso=`). */
+export type PasoAlumno = 'familia' | 'conceptos' | 'pagos' | 'revisar';
+
 export const esMatriculado = (a: Pick<Alumno, 'matriculaId'>) => a.matriculaId != null;
 export interface Grupo {
   cursoId: number; curso: string; servicio: string; grado: string; seccion: string; tanda: string | null;
