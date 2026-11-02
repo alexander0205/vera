@@ -41,6 +41,31 @@ type ClienteForm = typeof EMPTY_FORM;
 
 const inputSx = { '& .MuiOutlinedInput-root': { borderRadius: '8px' } } as const;
 
+const ETIQUETAS: Record<keyof ClienteForm, string> = {
+  razonSocial: 'Nombre / Razón Social', rnc: 'RNC / Cédula', email: 'Email',
+  telefono: 'Teléfono', celular: 'Celular', whatsapp: 'WhatsApp',
+  direccion: 'Dirección', descripcion: 'Descripción',
+};
+
+/**
+ * El error del servidor dicho con el campo que lo causó.
+ *
+ * Un 400 llega como «Datos inválidos» y el porqué viene aparte, en `detalles`.
+ * Sin esto, quien hacía responsable a un tutor con un correo mal escrito —el
+ * tutor se guarda sin validarlo— veía «Datos inválidos» sin pista de qué
+ * corregir, y el campo culpable quedaba fuera de la vista, más abajo.
+ */
+function mensajeDeError(data: {
+  mensaje?: string; error?: string;
+  detalles?: { fieldErrors?: Record<string, string[] | undefined> };
+}): string {
+  const campos = Object.entries(data.detalles?.fieldErrors ?? {})
+    .filter(([, msgs]) => msgs?.length)
+    .map(([k, msgs]) => `${ETIQUETAS[k as keyof ClienteForm] ?? k}: ${msgs![0]}`);
+  if (campos.length) return campos.join(' · ');
+  return data.mensaje ?? data.error ?? 'Error guardando';
+}
+
 /**
  * Campo de texto. Definido FUERA del componente página: si se define adentro,
  * cada render crea una función nueva y React remonta el <TextField>, tumbando el foco.
@@ -310,7 +335,7 @@ export default function ClienteForm({
           body: JSON.stringify(form),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.mensaje ?? data.error ?? 'Error guardando');
+        if (!res.ok) throw new Error(mensajeDeError(data));
         id = data.cliente.id as number;
         createdIdRef.current = id;
       } else {
@@ -320,7 +345,7 @@ export default function ClienteForm({
           body: JSON.stringify(form),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.mensaje ?? data.error ?? 'Error guardando');
+        if (!res.ok) throw new Error(mensajeDeError(data));
       }
 
       // 2. Persistir dependientes acumulados en memoria (modo crear).

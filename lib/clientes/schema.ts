@@ -12,7 +12,7 @@ import { z } from 'zod';
 
 // Cadena opcional: vacío o solo espacios → null.
 const optStr = (max = 500) =>
-  z.string().max(max).optional().nullable()
+  z.string().max(max, `Máximo ${max} caracteres`).optional().nullable()
     .transform(v => (typeof v === 'string' && v.trim() === '' ? null : v ?? null));
 
 // Documento de identidad: RNC (9 dígitos), cédula (11 dígitos) o pasaporte (alfanumérico 5-20).
@@ -34,9 +34,10 @@ const rncSchema = z.preprocess(
 export const clienteSchema = z.object({
   razonSocial: z.string().min(1, 'El nombre es obligatorio').max(255).transform(v => v.trim()),
   rnc:         rncSchema,
-  // email: vacío o null → null; con valor debe ser email válido
+  // email: vacío o null → null; con valor debe ser email válido. Se recorta
+  // antes de validar: un espacio pegado al final no hace inválido el correo.
   email: z.preprocess(
-    v => (typeof v === 'string' && v.trim() === '' ? null : v),
+    v => (typeof v === 'string' ? (v.trim() === '' ? null : v.trim()) : v),
     z.string().email('Correo electrónico inválido').nullable().optional()
   ),
   telefono:    optStr(30),
