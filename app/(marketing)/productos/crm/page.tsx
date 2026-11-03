@@ -15,18 +15,23 @@
  *    integrarse—, no por el organismo que las pidió. Ni nombres de sistemas
  *    ajenos ni siglas de un expediente en concreto.
  *
+ * Esta es el resumen. Cada parte se cuenta entera en su subpágina: el contenido
+ * de esas vive en `lib/agentes/crm.ts`, con el estado de cada función.
+ *
  * Las capturas salen de la maqueta del propio CRM (`public/home/capturas/crm-*`).
  */
 
 import type { Metadata } from 'next';
 import { TEXTO_BAJO_COTIZACION, getProductoAparte } from '@/lib/config/plans';
 import { urlDelSitio } from '@/lib/config/enlaces';
-import { DatosDePreguntas, DatosDeProducto, DatosDeRuta } from '../../_datos-estructurados';
+import { PREGUNTAS_DESTACADAS_CRM } from '@/lib/agentes/crm';
+import { RUTA_CRM, RUTA_CRM_MD, paginaCrm } from '@/lib/agentes/crm-rutas';
+import { DatosDeProducto, DatosDeRuta } from '../../_datos-estructurados';
 import { Cheque, CONTACTO, Contenedor, IconoWhatsApp, Iconos } from '../../_piezas';
 import { Acordeon, type Pregunta } from '../../_acordeon';
 import { Antetitulo, Encabezado, Titulo } from '../../_bloques';
 import {
-  CierreProducto, FranjaProducto, HeroProducto, SeccionConImagen, SeccionProducto,
+  CierreProducto, FranjaProducto, HeroProducto, PreguntasProducto, SeccionConImagen, SeccionProducto,
   type PuntoDeProducto,
 } from '../../_producto';
 import { LazoZero } from '@/lib/marca/isotipo';
@@ -35,17 +40,24 @@ import { Canales, type Canal } from './_canales';
 import { Pruebalo } from './_pruebalo';
 import { RecorridoIA } from './_recorrido-ia';
 import { CifrasIA } from './_cifras';
+import { LeyendaEstados, NavCrm, TarjetasCrm } from './_subpagina';
 
 export const metadata: Metadata = {
-  title: 'Zero CRM — agentes de inteligencia artificial que atienden por WhatsApp, web y teléfono',
+  // Corto a propósito (60 y 155 caracteres): lo largo lo corta el buscador. Lo demás lo dice la página.
+  title: 'Zero CRM: agentes de IA para WhatsApp, web y teléfono',
   description:
-    'CRM con inteligencia artificial: agentes que contestan al instante por WhatsApp, Messenger, Instagram, correo, tu web y el teléfono; verifican identidad, agendan, cobran, responden desde tus documentos y se integran con los sistemas que ya usas. Con tickets y turnos.',
+    'Agentes de IA que contestan por WhatsApp, redes, correo, web y teléfono: verifican identidad, agendan, cobran y responden desde tus documentos.',
   keywords: [
     'CRM con inteligencia artificial', 'agente de IA para WhatsApp', 'chatbot con IA República Dominicana',
     'atención al cliente con inteligencia artificial', 'agente de voz para llamadas', 'WhatsApp Business API',
     'sistema de tickets', 'sistema de turnos', 'integración con sistemas existentes', 'RAG sobre documentos',
+    'chatbot omnicanal', 'bandeja de agentes', 'supervisión de chats en vivo', 'lectura de documentos OCR',
   ],
-  alternates: { canonical: '/productos/crm' },
+  alternates: {
+    canonical: RUTA_CRM,
+    // El gemelo en texto: la versión que le cuesta menos leer a un asistente.
+    types: { 'text/markdown': RUTA_CRM_MD },
+  },
   openGraph: {
     type: 'website',
     url: urlDelSitio('/productos/crm'),
@@ -144,6 +156,9 @@ const ENTIENDE = [
  * Son muchas —salen de un levantamiento completo— y en lista se leen como un
  * inventario. Plegadas, el visitante abre la que le toca. El texto va en el
  * HTML aunque esté cerrado, así que se busca desde fuera igual.
+ *
+ * No van en el `FAQPage`: son afirmaciones, no preguntas. Lo que se declara como
+ * pregunta frecuente es el bloque de preguntas de abajo, que sí lo son.
  */
 const CAPACIDADES: Pregunta[] = [
   {
@@ -256,6 +271,7 @@ export default function CrmPage() {
         accion="Pedir una demostración"
         href="/contacto?perfil=pyme"
       />
+      <NavCrm actual={RUTA_CRM} />
 
       {/* ── El agente, contestando ─────────────────────────────────────────── */}
       <section id="demo" className="scroll-mt-20">
@@ -283,6 +299,19 @@ export default function CrmPage() {
             </p>
             <Pruebalo />
           </div>
+        </Contenedor>
+      </section>
+
+      {/* ── Cada parte, con su página ─────────────────────────────────────── */}
+      <section id="por-partes" className="scroll-mt-20">
+        <Contenedor className="pt-16 sm:pt-[82px]">
+          <Antetitulo>Por partes</Antetitulo>
+          <Titulo className="mt-3.5">Cada parte del CRM, contada entera.</Titulo>
+          <p className="m-0 mt-3.5 max-w-[640px] text-pretty text-[15px] leading-[1.6] text-[#5c6373]">
+            Esto es el resumen. Cada página dice qué hace esa parte y en qué estado está cada función.
+          </p>
+          <div className="mt-7"><TarjetasCrm /></div>
+          <div className="mt-3"><LeyendaEstados /></div>
         </Contenedor>
       </section>
 
@@ -352,6 +381,7 @@ export default function CrmPage() {
               antetitulo="Por dónde te buscan"
               titulo="Seis puertas, una sola bandeja."
               detalle="El cliente usa lo que le queda cómodo —y hasta el teléfono—. Tu equipo contesta desde un solo sitio, sin saltar entre aplicaciones ni entre celulares."
+              enlace={{ texto: 'Ver el chatbot y WhatsApp', href: paginaCrm('chatbot-whatsapp').ruta }}
             />
             <Canales canales={CANALES} />
           </div>
@@ -371,6 +401,7 @@ export default function CrmPage() {
         ]}
         captura="/home/capturas/crm-inbox.png"
         alt="Bandeja de Zero CRM con conversaciones de WhatsApp y las que atendió el agente"
+        enlace={{ texto: 'Ver la bandeja de asesores', href: paginaCrm('bandeja').ruta }}
       />
 
       <SeccionConImagen
@@ -474,6 +505,7 @@ export default function CrmPage() {
               antetitulo="Todo lo que sabe hacer"
               titulo="Seis capacidades, abiertas una por una."
               detalle="El agente no sale de una plantilla: se arma con tus servicios, tus documentos y tus reglas. Abre la que te interese."
+              enlace={{ texto: 'Ver las preguntas frecuentes', href: paginaCrm('preguntas').ruta }}
             />
             <div className="min-w-0">
               <Acordeon preguntas={CAPACIDADES} />
@@ -490,6 +522,7 @@ export default function CrmPage() {
               antetitulo="Cómo le escriben"
               titulo="No hace falta escribirle bonito."
               detalle="La gente manda audios, fotos de un papel y mensajes a medias. El agente entiende eso, que es como se escribe de verdad."
+              enlace={{ texto: 'Ver documentos y OCR', href: paginaCrm('documentos').ruta }}
             />
             <ul className="m-0 grid min-w-0 list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2">
               {ENTIENDE.map(e => (
@@ -514,6 +547,7 @@ export default function CrmPage() {
               antetitulo="Integraciones"
               titulo="Se mete entre tus sistemas, no encima de ellos."
               detalle="Nadie cambia de sistema para probar un asistente. El agente habla con lo que ya tienes puesto, en las dos direcciones, y si algo no contesta lo reintenta."
+              enlace={{ texto: 'Ver integraciones y conectores', href: paginaCrm('integraciones').ruta }}
             />
             <ul className="m-0 grid min-w-0 list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3">
               {INTEGRACIONES.map(g => (
@@ -555,6 +589,7 @@ export default function CrmPage() {
             <Encabezado
               antetitulo="Lo que preguntan los que compran en serio"
               titulo="Rápido, cifrado y con tus datos en tu poder."
+              enlace={{ texto: 'Ver seguridad y privacidad', href: paginaCrm('seguridad').ruta }}
             />
             <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3">
               {SERIEDAD.map(s => (
@@ -569,6 +604,11 @@ export default function CrmPage() {
           </div>
         </Contenedor>
       </section>
+
+      <PreguntasProducto
+        preguntas={PREGUNTAS_DESTACADAS_CRM}
+        enlace={{ texto: 'Ver todas las preguntas', href: paginaCrm('preguntas').ruta }}
+      />
 
       <CierreProducto
         antetitulo={CRM.nombre}
@@ -600,10 +640,15 @@ export default function CrmPage() {
           'Sistema de tickets con llamadas y grabación',
           'Sistema de turnos con pantalla de llamado',
           'API REST y webhooks en las dos direcciones',
+          'Chat web con marca propia',
+          'Lectura y validación de documentos con confirmación',
+          'Bandeja de asesores con reparto, prioridad, plantillas y respuestas sugeridas',
+          'Supervisión en vivo, análisis de sentimiento e indicadores de atención',
+          'Doble factor e inicio de sesión único por OIDC',
+          'Conectores por API para CRM y centro de contacto, que se enlazan al implementar',
         ]}
       />
-      <DatosDeRuta migas={[{ nombre: 'Productos', ruta: '/productos/crm' }, { nombre: 'Zero CRM', ruta: '/productos/crm' }]} />
-      <DatosDePreguntas preguntas={CAPACIDADES} />
+      <DatosDeRuta migas={[{ nombre: 'Zero CRM', ruta: RUTA_CRM }]} />
     </>
   );
 }

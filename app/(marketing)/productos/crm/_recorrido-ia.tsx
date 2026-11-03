@@ -97,7 +97,7 @@ export function RecorridoIA() {
                   } ${actual ? 'shadow-[0_0_14px_rgba(54,88,225,.9)]' : ''}`}
                 />
                 <span className={`mt-2.5 block text-[11px] font-semibold uppercase tracking-[.14em] transition ${
-                  on ? 'text-white' : 'text-white/35'
+                  on ? 'text-white' : 'text-white/60'
                 }`}
                 >
                   {e.rotulo}
