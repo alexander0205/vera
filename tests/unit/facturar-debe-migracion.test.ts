@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 // Solo se prueban las piezas puras: la base no hace falta.
 vi.mock('@/lib/db/drizzle', () => ({ db: {} }));
 
-import { agruparPorMes, nombreMes } from '@/lib/administracion-escolar/facturar-debe-migracion';
+import { agruparPorMes, nombreMes, repartir } from '@/lib/administracion-escolar/facturar-debe-migracion';
 
 const cargo = (id: number, mes: number | null, anio: number | null = 2026) =>
   ({ id, mes, anio, saldoCentavos: 500_000, fechaVencimiento: mes ? `2026-${String(mes).padStart(2, '0')}-29` : null });
@@ -23,6 +23,14 @@ describe('facturar los «Debe todo» de la migración', () => {
   it('cada pago único va solo', () => {
     const grupos = agruparPorMes([cargo(1, null), cargo(2, null), cargo(3, 8)]);
     expect(grupos.map((g) => g.map((c) => c.id))).toEqual([[1], [2], [3]]);
+  });
+
+  it('la mora que ya traía se reparte entre los periodos vencidos y suma exacto', () => {
+    expect(repartir(300_000, 3)).toEqual([100_000, 100_000, 100_000]);
+    // Lo que no divide parejo va en los primeros: nadie pierde un centavo.
+    expect(repartir(100_001, 3)).toEqual([33_334, 33_334, 33_333]);
+    expect(repartir(100_001, 3).reduce((a, b) => a + b, 0)).toBe(100_001);
+    expect(repartir(5_000, 0)).toEqual([]);
   });
 
   it('nombra el mes como en la pantalla', () => {

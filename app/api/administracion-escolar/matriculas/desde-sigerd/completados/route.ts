@@ -7,15 +7,17 @@
  * borradores (migración 0216) con su propia clave, así que matricular o
  * «Empezar de cero» no lo borra.
  *
- *   GET  ?periodoId=                          → { alumnos: { [id]: { en, por } }, debe: number[] }
+ *   GET  ?periodoId=  → { alumnos: { [id]: { en, por } }, debe: number[], moraPrevia: { [cargoId]: centavos } }
  *   POST { periodoId, estudianteId, completado }
  *   POST { periodoId, cargoId, debe }
+ *   POST { periodoId, cargoId, moraPrevia }   (centavos; null o 0 la quita)
  *
  * Al completar un alumno se facturan sus meses «Debe todo» (borrador, con el
- * vencimiento del mes: desde ahí corre la mora; ver `facturar-debe-migracion`).
- * Lo facturado sale de la lista; lo que no se pudo, se queda y se explica en
- * `facturacion.sinFacturar`. Completar no espera a que todo se facture: el
- * alumno queda completado igual y se corrige después.
+ * vencimiento del mes) y se pone al día su mora: la que calcula el sistema o la
+ * que ya traía de otro sistema (ver `facturar-debe-migracion`). Lo facturado
+ * —y lo que mientras tanto se pagó— sale de la lista; lo que no se pudo, se
+ * queda y se explica en `facturacion.sinFacturar`. Completar no espera a que
+ * todo se facture: el alumno queda completado igual y se corrige después.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -30,7 +32,7 @@ import { facturarDebeDelAlumno, type ResultadoFacturarDebe } from '@/lib/adminis
 const CLAVE = 'desde-sigerd-completados';
 
 type Completados = Record<string, { en: string; por: string | null }>;
-interface Datos { alumnos: Completados; debe: number[] }
+interface Datos { alumnos: Completados; debe: number[]; moraPrevia: Record<string, number> }
 
 async function periodoDelColegio(teamId: number, crudo: unknown): Promise<number | null> {
   const id = Number(crudo);
@@ -47,10 +49,14 @@ const delColegio = (teamId: number, periodoId: number) => and(
 );
 
 const leer = (datos: unknown): Datos => {
-  const d = (datos ?? {}) as { alumnos?: unknown; debe?: unknown };
+  const d = (datos ?? {}) as { alumnos?: unknown; debe?: unknown; moraPrevia?: unknown };
   const alumnos = d.alumnos && typeof d.alumnos === 'object' && !Array.isArray(d.alumnos) ? d.alumnos as Completados : {};
   const debe = Array.isArray(d.debe) ? d.debe.map(Number).filter((n) => Number.isInteger(n) && n > 0) : [];
-  return { alumnos, debe };
+  const moraPrevia = d.moraPrevia && typeof d.moraPrevia === 'object' && !Array.isArray(d.moraPrevia)
+    ? Object.fromEntries(Object.entries(d.moraPrevia as Record<string, unknown>)
+      .map(([k, v]) => [k, Math.round(Number(v))] as const).filter(([, v]) => Number.isFinite(v) && v > 0))
+    : {};
+  return { alumnos, debe, moraPrevia };
 };
 
 export async function GET(req: NextRequest) {
@@ -68,23 +74,32 @@ export async function POST(req: NextRequest) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar', { escritura: true });
   if (!auth.ok) return auth.response;
   const body = await req.json().catch(() => null) as
-    { periodoId?: unknown; estudianteId?: unknown; completado?: unknown; cargoId?: unknown; debe?: unknown } | null;
+    { periodoId?: unknown; estudianteId?: unknown; completado?: unknown; cargoId?: unknown; debe?: unknown; moraPrevia?: unknown } | null;
   const periodoId = await periodoDelColegio(auth.teamId, body?.periodoId);
   if (!periodoId) return NextResponse.json({ error: 'Año escolar inválido' }, { status: 400 });
 
-  // Uno de los dos: un alumno completado, o un mes que «debe todo».
+  // Un alumno completado, un mes que «debe todo» o la mora que ese mes ya traía.
   let cambio: (d: Datos) => void;
   let facturacion: ResultadoFacturarDebe | null = null;
   if (body?.cargoId !== undefined) {
     const cargoId = Number(body.cargoId);
-    if (!Number.isInteger(cargoId) || cargoId <= 0 || typeof body.debe !== 'boolean') {
+    const mora = body.moraPrevia === undefined ? undefined
+      : body.moraPrevia === null ? 0 : Math.round(Number(body.moraPrevia));
+    if (!Number.isInteger(cargoId) || cargoId <= 0
+      || (mora === undefined ? typeof body.debe !== 'boolean' : !Number.isFinite(mora) || mora < 0)) {
       return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 });
     }
     const [cargo] = await db.select({ id: adminEscolarCargos.id }).from(adminEscolarCargos)
       .where(and(eq(adminEscolarCargos.id, cargoId), eq(adminEscolarCargos.teamId, auth.teamId))).limit(1);
     if (!cargo) return NextResponse.json({ error: 'Cargo no encontrado' }, { status: 404 });
     const debe = body.debe;
-    cambio = (d) => { d.debe = debe ? [...new Set([...d.debe, cargoId])] : d.debe.filter((id) => id !== cargoId); };
+    cambio = mora !== undefined
+      ? (d) => { if (mora > 0) d.moraPrevia[String(cargoId)] = mora; else delete d.moraPrevia[String(cargoId)]; }
+      : (d) => {
+        d.debe = debe ? [...new Set([...d.debe, cargoId])] : d.debe.filter((id) => id !== cargoId);
+        // Sin «Debe todo» no hay mora que traer.
+        if (!debe) delete d.moraPrevia[String(cargoId)];
+      };
   } else {
     const estudianteId = Number(body?.estudianteId);
     if (!Number.isInteger(estudianteId) || estudianteId <= 0 || typeof body?.completado !== 'boolean') {
@@ -97,15 +112,17 @@ export async function POST(req: NextRequest) {
     if (completado) {
       const [b] = await db.select({ datos: adminEscolarBorradores.datos }).from(adminEscolarBorradores)
         .where(delColegio(auth.teamId, periodoId)).limit(1);
-      facturacion = await facturarDebeDelAlumno(auth.teamId, auth.user.id, estudianteId, leer(b?.datos).debe);
+      const actual = leer(b?.datos);
+      facturacion = await facturarDebeDelAlumno(auth.teamId, auth.user.id, estudianteId, actual.debe, actual.moraPrevia);
     }
-    const facturados = new Set(facturacion?.facturados ?? []);
+    const quitar = new Set(facturacion?.quitar ?? []);
     const por = auth.user.name || auth.user.email || null;
     cambio = (d) => {
       if (completado) d.alumnos[String(estudianteId)] = { en: new Date().toISOString(), por };
       else delete d.alumnos[String(estudianteId)];
-      // Ya tienen factura: dejan de ser «Debe todo» y pasan a «Facturado, debe».
-      d.debe = d.debe.filter((id) => !facturados.has(id));
+      // Ya tienen factura (o se pagaron): dejan de ser «Debe todo».
+      d.debe = d.debe.filter((id) => !quitar.has(id));
+      for (const id of quitar) delete d.moraPrevia[String(id)];
     };
   }
 
@@ -113,7 +130,7 @@ export async function POST(req: NextRequest) {
   // lo suyo, sin pisar lo que marcó la otra.
   const datos = await db.transaction(async (tx) => {
     await tx.insert(adminEscolarBorradores)
-      .values({ teamId: auth.teamId, periodoId, clave: CLAVE, datos: { alumnos: {}, debe: [] }, updatedBy: auth.user.id })
+      .values({ teamId: auth.teamId, periodoId, clave: CLAVE, datos: { alumnos: {}, debe: [], moraPrevia: {} }, updatedBy: auth.user.id })
       .onConflictDoNothing();
     const [fila] = await tx.select({ id: adminEscolarBorradores.id, datos: adminEscolarBorradores.datos })
       .from(adminEscolarBorradores).where(delColegio(auth.teamId, periodoId)).for('update');

@@ -21,9 +21,10 @@ import { VincularFacturaDialog } from './VincularFacturaDialog';
  *    NCF —se elige el prefijo y se teclea solo el final—. Debajo es una factura
  *    histórica con su pago (`/cargos/[id]/pago-anterior`);
  *  - «Debe todo»: no se anota pago. El cargo ya existe desde la matrícula; al
- *    «Guardar estudiante» se factura (borrador, con el vencimiento del mes) para
- *    que entre en cuentas por cobrar y le corra la mora. Hasta entonces es una
- *    marca compartida en el borrador del año;
+ *    «Guardar estudiante» se factura (borrador, con el vencimiento del mes) y se
+ *    le pone la mora ya vencida: la que calcula el sistema o, si se anotó, la
+ *    que ya traía de otro sistema. Hasta entonces es una marca compartida en el
+ *    borrador del año, que se quita sola si al mes se le anota un pago;
  *  - vincular una factura que ya está en Zero (la de Alegra, por ejemplo);
  *  - no cobrarlo (entró en septiembre: agosto no le toca). Es anular el cargo.
  *
@@ -100,6 +101,8 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
   const [noCobrar, setNoCobrar] = useState<CargoFicha | null>(null);
   const [anulando, setAnulando] = useState(false);
   const [debe, setDebe] = useState<Set<number>>(new Set());
+  /** La mora que un mes «Debe todo» ya traía de otro sistema, en centavos. */
+  const [moraPrevia, setMoraPrevia] = useState<Map<number, number>>(new Map());
   // Si ya se anotó algún NCF, lo normal es que los pagos lo lleven.
   const [conNcf, setConNcf] = useState(() => (leerPref(CLAVE_NCF_DEFECTO) ?? (leerUltimoNcf() ? '1' : '0')) === '1');
   const [forma, setForma] = useState(() => leerPref(CLAVE_FORMA) ?? 'efectivo');
@@ -120,6 +123,7 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
       setCargos(((c.cargos ?? []) as CargoFicha[]).filter((x) => x.matriculaId === matriculaId));
       setClienteId(e.estudiante?.responsable?.clientId ?? null);
       setDebe(new Set((d.debe ?? []) as number[]));
+      setMoraPrevia(new Map(Object.entries((d.moraPrevia ?? {}) as Record<string, number>).map(([k, v]) => [Number(k), v])));
     } catch {
       setError('No se pudieron leer los cargos del alumno');
     }
@@ -159,7 +163,31 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
     if (!r?.ok) {
       setDebe((s) => { const n = new Set(s); if (si) n.delete(c.id); else n.add(c.id); return n; });
       setError('No se pudo guardar «Debe todo»');
+    } else if (!si) {
+      setMoraPrevia((m) => { const n = new Map(m); n.delete(c.id); return n; });
     }
+  }
+
+  /** Al mes se le anotó un pago, se vinculó o se anuló: ya no «debe todo». */
+  async function soltarDebe(ids: number[]) {
+    if (!periodoId) return;
+    const marcados = ids.filter((id) => debe.has(id));
+    if (marcados.length === 0) return;
+    setDebe((s) => { const n = new Set(s); for (const id of marcados) n.delete(id); return n; });
+    await Promise.all(marcados.map((cargoId) => fetch('/api/administracion-escolar/matriculas/desde-sigerd/completados', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ periodoId, cargoId, debe: false }),
+    }).catch(() => null)));
+  }
+
+  async function guardarMoraPrevia(c: CargoFicha, centavos: number | null) {
+    if (!periodoId) return;
+    const r = await fetch('/api/administracion-escolar/matriculas/desde-sigerd/completados', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ periodoId, cargoId: c.id, moraPrevia: centavos }),
+    }).catch(() => null);
+    if (!r?.ok) { setError('No se pudo guardar la mora que traía'); return; }
+    setMoraPrevia((m) => { const n = new Map(m); if (centavos) n.set(c.id, centavos); else n.delete(c.id); return n; });
   }
 
   async function anular() {
@@ -169,6 +197,7 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
       const r = await fetch(`/api/administracion-escolar/cargos/${noCobrar.id}`, { method: 'DELETE' });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error ?? 'No se pudo quitar el cobro');
+      await soltarDebe([noCobrar.id]);
       setNoCobrar(null);
       await cargar();
     } catch (e) {
@@ -198,6 +227,7 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(`${mesDe(c)}: ${d.error ?? 'no se pudo anotar el pago'}`);
         if (ncf) { guardarUltimoNcf(ncf); ncf = siguienteNcf(ncf); }
+        await soltarDebe([c.id]);
       }
       setHastaPago(null);
     } catch (e) {
@@ -238,8 +268,9 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
                 pago; lo que falta sigue vencido desde el vencimiento del mes y, si el concepto cobra mora, la pone el sistema.</dd></div>
             <div><dt className="inline font-semibold text-orange-700">Debe todo · </dt>
               <dd className="inline">no pagó nada. El cargo ya existe, pero no se factura solo: al pulsar «Guardar
-                estudiante» se factura el mes (borrador sin NCF, con su vencimiento) y desde ahí corre la mora, si el concepto la cobra.
-                Necesita responsable de pago.</dd></div>
+                estudiante» se factura el mes (borrador sin NCF, con su vencimiento) y se le pone de una vez la mora ya
+                vencida, si el concepto la cobra. Si venía de otro sistema con mora, anótala en «Mora que ya traía» y se
+                usa esa. Necesita responsable de pago.</dd></div>
             <div><dt className="inline font-semibold text-gray-800">Vincular factura · </dt>
               <dd className="inline">el mes ya tiene una factura en Zero (por ejemplo, importada de otro sistema): se le
                 asocia en vez de crear otra.</dd></div>
@@ -375,11 +406,15 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
                               <p className={`rounded-md px-2.5 py-1.5 text-[11px] ${clienteId ? 'bg-orange-50 text-orange-900' : 'bg-amber-50 text-amber-900'}`}>
                                 {clienteId
                                   ? <>Su cargo ya existe, pero <b>no se factura solo</b>. Se factura al pulsar «Guardar estudiante»
-                                    (borrador sin NCF{c.fechaVencimiento ? <>, vence {fmtFechaCorta(c.fechaVencimiento)}</> : null}) y desde
-                                    ahí corre la mora, si el concepto la cobra.</>
+                                    (borrador sin NCF{c.fechaVencimiento ? <>, vence {fmtFechaCorta(c.fechaVencimiento)}</> : null}) y se
+                                    le pone de una vez la mora ya vencida, si el concepto la cobra.</>
                                   : <>Sin responsable de pago <b>no se podrá facturar</b>: el mes se quedaría como cargo pendiente,
                                     sin factura y sin mora. Ponle el responsable en «Familia».</>}
                               </p>
+                              {clienteId && (
+                                <MoraQueTraia key={moraPrevia.get(c.id) ?? 0} centavos={moraPrevia.get(c.id) ?? null}
+                                  onGuardar={(v) => void guardarMoraPrevia(c, v)} />
+                              )}
                             </td>
                           </tr>
                         )}
@@ -388,7 +423,7 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
                             <td colSpan={4} className="px-3 pb-3 pt-1">
                               <AnotarPago key={`${c.id}-${anotando.abono}`} cargo={c} abono={anotando.abono}
                                 conNcf={conNcf} forma={forma} onCancelar={() => setAnotando(null)}
-                                onHecho={async () => { setAnotando(null); await cargar(); }} />
+                                onHecho={async () => { setAnotando(null); await soltarDebe([c.id]); await cargar(); }} />
                             </td>
                           </tr>
                         )}
@@ -410,7 +445,7 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
           cargoSaldoCentavos={vinculando.saldoCentavos}
           clienteId={clienteId}
           onClose={() => setVinculando(null)}
-          onSaved={() => { setVinculando(null); void cargar(); }}
+          onSaved={() => { const id = vinculando.id; setVinculando(null); void soltarDebe([id]).then(cargar); }}
         />
       )}
       <ConfirmDialog
@@ -548,6 +583,12 @@ function AnotarPago({ cargo, abono, conNcf, forma, onCancelar, onHecho }: {
           {propuesto && ncf === propuesto && ' · el siguiente al último que anotaste'}
         </p>
       )}
+      {prefijo && (
+        <p className="rounded-md bg-gray-50 px-2.5 py-1.5 text-[11px] text-gray-600">
+          Este NCF ya lo emitió el colegio: aquí <b>solo se registra</b>, no se envía a la DGII ni gasta comprobantes de Zero.
+          Si te equivocas, anula la factura en Facturación y vuelve a anotarlo.
+        </p>
+      )}
       {error && <p className="text-xs text-red-600">{error}</p>}
       <div className="flex gap-2">
         <Button size="sm" className="bg-zero-600 hover:bg-zero-700" disabled={guardando} onClick={() => void guardar()}>
@@ -556,5 +597,30 @@ function AnotarPago({ cargo, abono, conNcf, forma, onCancelar, onHecho }: {
         <Button size="sm" variant="outline" onClick={onCancelar} disabled={guardando}>Cancelar</Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * La mora que un mes ya traía de otro sistema (Alegra, la libreta del colegio).
+ * Vacío = la calcula el sistema. Se guarda al salir del campo.
+ */
+function MoraQueTraia({ centavos, onGuardar }: { centavos: number | null; onGuardar: (centavos: number | null) => void }) {
+  const [texto, setTexto] = useState(centavos ? (centavos / 100).toFixed(2) : '');
+  const guardar = () => {
+    const v = texto.trim() ? parseDOPaCentavos(texto) : null;
+    if (texto.trim() && (v == null || v < 0)) return;
+    if ((v || null) !== (centavos || null)) onGuardar(v || null);
+  };
+  return (
+    <label className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-gray-600">
+      Mora que ya traía (opcional)
+      <input value={texto} onChange={(e) => setTexto(e.target.value)} onBlur={guardar} inputMode="decimal"
+        placeholder="RD$" aria-label="Mora que ya traía"
+        className="h-7 w-28 rounded-md border border-gray-300 bg-white px-2 text-xs tabular-nums focus:border-zero-500 focus:outline-none" />
+      <span className="text-gray-500">
+        {centavos ? 'Se usa esta en vez de la que calcula el sistema, repartida entre los periodos vencidos.'
+          : 'Vacío: la calcula el sistema. Llénalo solo si venía de otro sistema con mora ya cobrada.'}
+      </span>
+    </label>
   );
 }

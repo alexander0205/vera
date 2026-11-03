@@ -121,14 +121,18 @@ const VISTAS: Array<{ id: Vista; etiqueta: string; icono: ReactNode; ayuda: stri
   { id: 'concepto', etiqueta: 'Por concepto', icono: <Tag className="h-4 w-4" />, ayuda: 'Elige un concepto y marca quién lo lleva' },
 ];
 
+/**
+ * En «Por sección» y «Por alumno» el cajón es para matricular: familia y
+ * cargos. Los pagos de antes se anotan solo en el Formulario, que es donde se
+ * migra alumno por alumno y donde «Guardar estudiante» factura lo que debe.
+ */
 const PASOS_ALUMNO: Array<{ id: PasoAlumno; etiqueta: string }> = [
   { id: 'familia', etiqueta: 'Familia y quién paga' },
   { id: 'conceptos', etiqueta: 'Cargos del año' },
-  { id: 'pagos', etiqueta: 'Pagos' },
 ];
-/** En la vista Formulario, como el formulario de migración: se termina revisando. */
+/** En la vista Formulario, como el formulario de migración: pagos y se termina revisando. */
 const PASOS_FORMULARIO: Array<{ id: PasoAlumno; etiqueta: string }> = [
-  ...PASOS_ALUMNO, { id: 'revisar', etiqueta: 'Revisar' },
+  ...PASOS_ALUMNO, { id: 'pagos', etiqueta: 'Pagos' }, { id: 'revisar', etiqueta: 'Revisar' },
 ];
 
 // Las tres alturas del árbol: nivel → grado → sección. La clave de cada nodo
@@ -1090,8 +1094,9 @@ export default function MatricularDesdeSigerd() {
           const f = await marcarCompletado(editando.alumno.id, si);
           if (f?.facturas.length) {
             toast.success(`${editando.alumno.nombre}: ${f.facturas.length === 1 ? 'se facturó 1 mes' : `se facturaron ${f.facturas.length} meses`} que debe`, {
-              description: f.facturas.map((x) => `${x.mes} · ${fmtDOP(x.montoCentavos)}${x.vence ? ` · vence ${fmtFechaCorta(x.vence)}` : ''}`).join(' — ')
-                + '. Son borradores sin NCF; desde el vencimiento corre la mora de los conceptos que la cobran.',
+              description: f.facturas.map((x) => `${x.mes} · ${fmtDOP(x.montoCentavos)}${x.vence ? ` · vence ${fmtFechaCorta(x.vence)}` : ''}`
+                + (x.moraCentavos ? ` · mora ${fmtDOP(x.moraCentavos)}` : '')).join(' — ')
+                + '. Son borradores sin NCF; la mora que venga la pone el sistema.',
             });
           }
           // Si algo no se facturó, el panel se queda abierto para que se lea por qué.
@@ -1305,6 +1310,7 @@ export default function MatricularDesdeSigerd() {
             </div>
           )}
 
+          {vista === 'formulario' && <AvisoFacturacionAutomatica hasta={hasta} />}
           {vista === 'formulario' && (
             <VistaFormulario
               grupos={visibles} todos={grupos} editandoId={editando?.alumno.id ?? null}
@@ -1839,7 +1845,7 @@ function EditorAlumno({
   const [pagosVisto, setPagosVisto] = useState(paso === 'pagos');
   useEffect(() => { if (paso === 'pagos') setPagosVisto(true); }, [paso]);
   // «Revisar» solo existe en el formulario: en el cajón se ven los cargos.
-  const pasoVisto: PasoAlumno = !formulario && paso === 'revisar' ? 'conceptos' : paso;
+  const pasoVisto: PasoAlumno = !formulario && (paso === 'revisar' || paso === 'pagos') ? 'conceptos' : paso;
   const [completando, setCompletando] = useState(false);
   const [errorCompletar, setErrorCompletar] = useState<string | null>(null);
   const [avisosCompletar, setAvisosCompletar] = useState<string[]>([]);
@@ -2252,3 +2258,34 @@ const MESES_LARGOS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Ju
   'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 /** «2026-08» → «Agosto 2026». */
 const nombreMes = (aaaamm: string) => `${MESES_LARGOS[Number(aaaamm.slice(5, 7)) - 1]} ${aaaamm.slice(0, 4)}`;
+
+/**
+ * La facturación automática del colegio, dicha en el formulario. El formulario
+ * resuelve los meses hasta «Hasta el mes»; lo que se emita después lo factura
+ * el interruptor de Configuración → Conceptos, que al encenderse cuenta desde
+ * ese día y no factura hacia atrás. Aquí solo se enseña y se enlaza: el
+ * interruptor vive en su sitio.
+ */
+function AvisoFacturacionAutomatica({ hasta }: { hasta: string }) {
+  const { data } = useSWR<{ activa: boolean; desde: string | null }>(
+    '/api/administracion-escolar/facturacion-automatica',
+    (u: string) => fetch(u, { cache: 'no-store' }).then((r) => r.json()),
+  );
+  if (!data) return null;
+  const [a, m] = hasta.split('-').map(Number);
+  const mes = new Date(a, m - 1, 1).toLocaleDateString('es-DO', { month: 'long', year: 'numeric' });
+  return (
+    <div className={`flex flex-col gap-2 rounded-xl border px-4 py-3 text-sm sm:flex-row sm:items-center ${
+      data.activa ? 'border-gray-200 bg-gray-50 text-gray-700' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+      <p className="min-w-0 flex-1">
+        {data.activa && data.desde
+          ? <>Facturación automática del colegio: <b>encendida desde el {fmtFechaCorta(data.desde)}</b>. Lo de antes se resuelve aquí; lo que se emita desde esa fecha se factura solo.</>
+          : <>Facturación automática del colegio: <b>apagada</b>. Aquí se resuelven los meses hasta {mes}. Al terminar la migración, enciéndela <b>ese mismo día</b> para que lo que venga se facture solo: no factura hacia atrás.</>}
+      </p>
+      <Link href="/escolar/configuracion/conceptos"
+        className="shrink-0 text-sm font-medium text-zero-700 underline hover:text-zero-800">
+        {data.activa ? 'Ver' : 'Encenderla'} en Configuración → Conceptos
+      </Link>
+    </div>
+  );
+}

@@ -45,6 +45,7 @@ export function RevisarAlumno({ alumno, periodoId, lineas, conceptos, precios, b
   const [tutores, setTutores] = useState<TutorVinculo[] | null>(null);
   const [cargos, setCargos] = useState<Cargo[] | null>(null);
   const [debe, setDebe] = useState<Set<number>>(new Set());
+  const [moraPrevia, setMoraPrevia] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,6 +64,7 @@ export function RevisarAlumno({ alumno, periodoId, lineas, conceptos, precios, b
       setTutores(t.tutores ?? []);
       setCargos(c ? ((c.cargos ?? []) as Cargo[]).filter((x) => x.matriculaId === alumno.matriculaId) : null);
       setDebe(new Set((d.debe ?? []) as number[]));
+      setMoraPrevia((d.moraPrevia ?? {}) as Record<string, number>);
     }).catch(() => { if (vigente) setError('No se pudo leer la cuenta del alumno'); });
     return () => { vigente = false; };
   }, [alumno, periodoId]);
@@ -94,18 +96,19 @@ export function RevisarAlumno({ alumno, periodoId, lineas, conceptos, precios, b
 
   // Los «Debe todo» que siguen sin factura: se facturan al guardar, uno por mes.
   const porFacturar = useMemo(() => {
-    const m = new Map<string, { mes: string; total: number; conceptos: string[]; vence: string | null }>();
+    const m = new Map<string, { mes: string; total: number; conceptos: string[]; vence: string | null; moraPrevia: number }>();
     for (const c of cargos ?? []) {
       if (!debe.has(c.id) || c.ecfDocumentId != null || c.estado === 'anulado' || c.saldoCentavos !== c.montoCentavos) continue;
       const clave = c.mes ? `${c.anio}-${String(c.mes).padStart(2, '0')}` : `0-${c.id}`;
-      const g = m.get(clave) ?? { mes: c.mes ? `${MESES_LARGOS[c.mes - 1]}${c.anio ? ` ${c.anio}` : ''}` : 'Pago único', total: 0, conceptos: [], vence: null };
+      const g = m.get(clave) ?? { mes: c.mes ? `${MESES_LARGOS[c.mes - 1]}${c.anio ? ` ${c.anio}` : ''}` : 'Pago único', total: 0, conceptos: [], vence: null, moraPrevia: 0 };
       g.total += c.montoCentavos;
+      g.moraPrevia += moraPrevia[String(c.id)] ?? 0;
       g.conceptos.push(c.concepto);
       if (c.fechaVencimiento && (!g.vence || c.fechaVencimiento > g.vence)) g.vence = c.fechaVencimiento;
       m.set(clave, g);
     }
     return [...m.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, g]) => g);
-  }, [cargos, debe]);
+  }, [cargos, debe, moraPrevia]);
 
   const avisos: Array<{ texto: string; paso?: PasoAlumno }> = [];
   if (responsable === null && porFacturar.length > 0) {
@@ -242,8 +245,9 @@ export function RevisarAlumno({ alumno, periodoId, lineas, conceptos, precios, b
           <p className="mt-0.5 text-xs text-gray-600">
             Su cargo ya existe desde que se matriculó, pero sin factura no está en cuentas por cobrar ni lleva mora.
             Se crea una factura por mes, en <b>borrador y sin NCF</b> (no va a la DGII; si la quieren fiscal, se edita
-            y se emite desde Facturación), con el <b>vencimiento original</b> del mes. Desde ese vencimiento la mora
-            la pone el sistema en los conceptos que cobran mora, como a cualquier factura vencida.
+            y se emite desde Facturación), con el <b>vencimiento original</b> del mes, y se le pone de una vez la
+            mora ya vencida en los conceptos que la cobran: la que calcula el sistema o, donde se anotó, la que ya
+            traía. Lo que venga después lo pone el sistema, como a cualquier factura vencida.
           </p>
           <ul className="mt-2 divide-y divide-orange-100 rounded-lg border border-orange-100 bg-white">
             {porFacturar.map((g) => (
@@ -254,6 +258,7 @@ export function RevisarAlumno({ alumno, periodoId, lineas, conceptos, precios, b
                 </span>
                 <span className="shrink-0 text-xs tabular-nums text-gray-600">
                   {fmtDOP(g.total)}{g.vence && <> · vence {fmtFechaCorta(g.vence)}</>}
+                  {g.moraPrevia > 0 && <> · mora que traía {fmtDOP(g.moraPrevia)}</>}
                 </span>
               </li>
             ))}
