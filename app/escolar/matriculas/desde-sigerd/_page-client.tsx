@@ -15,8 +15,10 @@ import { FamiliaDelAlumno } from '@/components/administracion-escolar/FamiliaDel
 import { CompletarFamiliasSigerd } from '@/components/administracion-escolar/CompletarFamiliasSigerd';
 import { aBorrador, deBorrador, estaVacio, type EstadoLote } from '@/lib/administracion-escolar/borrador-lote';
 import { PagosDelAlumno } from '@/components/administracion-escolar/PagosDelAlumno';
+import type { ResultadoFacturarDebe } from '@/lib/administracion-escolar/facturar-debe-migracion';
+import { toast } from 'sonner';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import { fmtDOP, hoyRD } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import {
   PlanCobroSelector, escritoDesdeTarifa, modoPrecio, obligatoriosPrimero, type LineaPlan,
 } from '@/components/administracion-escolar/PlanCobroSelector';
@@ -409,6 +411,7 @@ export default function MatricularDesdeSigerd() {
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error ?? 'No se pudo guardar');
     setCompletados(new Map(Object.entries(d.alumnos ?? {}).map(([k, v]) => [Number(k), v as { en: string; por: string | null }])));
+    return (d.facturacion ?? null) as ResultadoFacturarDebe | null;
   }, [periodoBorrador]);
 
 
@@ -1084,8 +1087,16 @@ export default function MatricularDesdeSigerd() {
         })(),
         completado: completados.has(editando.alumno.id),
         onCompletar: async (si) => {
-          await marcarCompletado(editando.alumno.id, si);
-          if (si) setEditando(null);
+          const f = await marcarCompletado(editando.alumno.id, si);
+          if (f?.facturas.length) {
+            toast.success(`${editando.alumno.nombre}: ${f.facturas.length === 1 ? 'se facturó 1 mes' : `se facturaron ${f.facturas.length} meses`} que debe`, {
+              description: f.facturas.map((x) => `${x.mes} · ${fmtDOP(x.montoCentavos)}${x.vence ? ` · vence ${fmtFechaCorta(x.vence)}` : ''}`).join(' — ')
+                + '. Son borradores sin NCF; desde el vencimiento corre la mora de los conceptos que la cobran.',
+            });
+          }
+          // Si algo no se facturó, el panel se queda abierto para que se lea por qué.
+          if (si && !f?.sinFacturar.length) setEditando(null);
+          return f;
         },
       } : undefined}
       onRestablecer={() => {
@@ -1786,7 +1797,8 @@ function EditorAlumno({
     /** Lo de su sección y lo de otros grados, para nombrar sus conceptos al revisar. */
     lineas: LineaPlan[] | null;
     completado: boolean;
-    onCompletar: (si: boolean) => Promise<void>;
+    /** Devuelve lo que se facturó de «Debe todo» al guardarlo, y lo que no. */
+    onCompletar: (si: boolean) => Promise<ResultadoFacturarDebe | null>;
   };
 }) {
   // Lo que el selector va diciendo. Antes de que llegue el plan su lista de
@@ -1830,6 +1842,7 @@ function EditorAlumno({
   const pasoVisto: PasoAlumno = !formulario && paso === 'revisar' ? 'conceptos' : paso;
   const [completando, setCompletando] = useState(false);
   const [errorCompletar, setErrorCompletar] = useState<string | null>(null);
+  const [avisosCompletar, setAvisosCompletar] = useState<string[]>([]);
 
   /**
    * Formulario: «Siguiente» en los cargos guarda lo cambiado sin cerrar y lo
@@ -1844,8 +1857,11 @@ function EditorAlumno({
   };
   const completar = async (si: boolean) => {
     if (!formulario) return;
-    setCompletando(true); setErrorCompletar(null);
-    try { await formulario.onCompletar(si); } catch (e) {
+    setCompletando(true); setErrorCompletar(null); setAvisosCompletar([]);
+    try {
+      const f = await formulario.onCompletar(si);
+      setAvisosCompletar(f?.sinFacturar ?? []);
+    } catch (e) {
       setErrorCompletar(e instanceof Error ? e.message : 'No se pudo guardar');
     } finally { setCompletando(false); }
   };
@@ -1964,7 +1980,7 @@ function EditorAlumno({
       {/* Se vuelve a montar cada vez: enseña lo guardado de verdad. */}
       {formulario && pasoVisto === 'revisar' && (
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          <RevisarAlumno alumno={alumno} lineas={formulario.lineas} conceptos={conceptos} precios={precios}
+          <RevisarAlumno alumno={alumno} periodoId={periodoId} lineas={formulario.lineas} conceptos={conceptos} precios={precios}
             beca={beca} corte={corte} sinGuardar={sucio} conCambios={conCambios} onPaso={onPaso} />
         </div>
       )}
@@ -2043,6 +2059,9 @@ function EditorAlumno({
         {formulario ? (
           <div className="flex flex-col items-stretch gap-1 sm:items-end">
             {errorCompletar && <p className="text-xs text-red-600">{errorCompletar}</p>}
+            {avisosCompletar.map((a) => (
+              <p key={a} className="max-w-xl rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">Guardado, pero: {a}</p>
+            ))}
             <div className="flex flex-wrap justify-end gap-2">
               {indice === 0
                 ? <Button variant="outline" onClick={onCerrar}>Cancelar</Button>

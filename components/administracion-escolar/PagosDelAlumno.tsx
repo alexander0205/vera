@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Ban, Check, ChevronDown, Link2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { fmtDOP, hoyRD, parseDOPaCentavos } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, hoyRD, parseDOPaCentavos } from '@/lib/utils/format';
 import { METODOS_PAGO } from '@/lib/pagos/metodos';
 import {
   PREFIJOS_NCF, armarNcf, cifrasDe, estadoDelPago, siguienteNcf,
@@ -20,8 +20,10 @@ import { VincularFacturaDialog } from './VincularFacturaDialog';
  *  - «Pagó todo» o «Abonó»: con su fecha, su forma de pago y, si lo tiene, el
  *    NCF —se elige el prefijo y se teclea solo el final—. Debajo es una factura
  *    histórica con su pago (`/cargos/[id]/pago-anterior`);
- *  - «Debe todo»: no se anota nada, el cargo ya está debiendo; solo queda la
- *    marca de que se revisó (compartida, en el borrador del año);
+ *  - «Debe todo»: no se anota pago. El cargo ya existe desde la matrícula; al
+ *    «Guardar estudiante» se factura (borrador, con el vencimiento del mes) para
+ *    que entre en cuentas por cobrar y le corra la mora. Hasta entonces es una
+ *    marca compartida en el borrador del año;
  *  - vincular una factura que ya está en Zero (la de Alegra, por ejemplo);
  *  - no cobrarlo (entró en septiembre: agosto no le toca). Es anular el cargo.
  *
@@ -223,8 +225,28 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
         <h3 className="text-base font-semibold text-gray-900">Pagos y moras, mes a mes</h3>
         <p className="text-xs text-gray-500">
           Por cada mes indique si <b>pagó todo</b>, si <b>abonó</b> una parte o si <b>debe todo</b>. Cuando pagó, anote
-          cuánto, la fecha, la forma de pago y el NCF. Lo que debe ya sale debiendo; la mora la pone el sistema.
+          cuánto, la fecha, la forma de pago y el NCF.
         </p>
+        <details className="mt-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 open:pb-2.5">
+          <summary className="cursor-pointer font-medium text-gray-800">Qué hace cada opción</summary>
+          <dl className="mt-1.5 space-y-1.5">
+            <div><dt className="inline font-semibold text-emerald-700">Pagó todo · </dt>
+              <dd className="inline">anota el pago entero con su fecha, forma de pago y NCF. Queda una factura histórica
+                pagada: el mes se cierra y no lleva mora. No va a la DGII ni gasta NCF.</dd></div>
+            <div><dt className="inline font-semibold text-amber-700">Abonó · </dt>
+              <dd className="inline">anota lo que el padre pagó (no lo que debe). Queda una factura histórica con ese
+                pago; lo que falta sigue vencido desde el vencimiento del mes y, si el concepto cobra mora, la pone el sistema.</dd></div>
+            <div><dt className="inline font-semibold text-orange-700">Debe todo · </dt>
+              <dd className="inline">no pagó nada. El cargo ya existe, pero no se factura solo: al pulsar «Guardar
+                estudiante» se factura el mes (borrador sin NCF, con su vencimiento) y desde ahí corre la mora, si el concepto la cobra.
+                Necesita responsable de pago.</dd></div>
+            <div><dt className="inline font-semibold text-gray-800">Vincular factura · </dt>
+              <dd className="inline">el mes ya tiene una factura en Zero (por ejemplo, importada de otro sistema): se le
+                asocia en vez de crear otra.</dd></div>
+            <div><dt className="inline font-semibold text-gray-800">No cobrar · </dt>
+              <dd className="inline">el mes no le tocaba (entró después): se anula su cargo, no se factura ni se debe.</dd></div>
+          </dl>
+        </details>
         {!clienteId && <p className="mt-1 text-xs font-medium text-amber-800">Falta el responsable de pago: ponlo en «Familia» para poder anotar.</p>}
       </div>
 
@@ -315,17 +337,19 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
                                 <div role="group" aria-label={`Qué pasó con ${mesDe(c)}`}
                                   className="inline-flex overflow-hidden rounded-md border border-gray-200">
                                   <button type="button" disabled={!clienteId} aria-pressed={anotando?.id === c.id && !anotando.abono}
+                                    title="Pagó el mes entero: queda una factura histórica pagada"
                                     onClick={() => setAnotando({ id: c.id, abono: false })}
                                     className={`${seg} ${anotando?.id === c.id && !anotando.abono ? 'bg-emerald-600 text-white' : 'text-gray-700 hover:bg-emerald-50'}`}>
                                     Pagó todo
                                   </button>
                                   <button type="button" disabled={!clienteId} aria-pressed={anotando?.id === c.id && anotando.abono}
+                                    title="Pagó una parte: se anota lo que pagó y lo demás sigue debiéndose (con mora, si el concepto la cobra)"
                                     onClick={() => setAnotando({ id: c.id, abono: true })}
                                     className={`${seg} border-l border-gray-200 ${anotando?.id === c.id && anotando.abono ? 'bg-amber-500 text-white' : 'text-gray-700 hover:bg-amber-50'}`}>
                                     Abonó
                                   </button>
                                   <button type="button" disabled={!periodoId} aria-pressed={marcadoDebe}
-                                    title={periodoId ? 'No pagó nada: ya sale debiendo' : undefined}
+                                    title={periodoId ? 'No pagó nada: se factura al guardar el estudiante y desde su vencimiento corre la mora (si el concepto la cobra)' : undefined}
                                     onClick={() => { setAnotando(null); void marcarDebe(c); }}
                                     className={`${seg} border-l border-gray-200 ${marcadoDebe ? 'bg-orange-600 text-white' : 'text-gray-700 hover:bg-orange-50'}`}>
                                     Debe todo
@@ -345,6 +369,20 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
                             )}
                           </td>
                         </tr>
+                        {marcadoDebe && anotando?.id !== c.id && (
+                          <tr className="border-b border-gray-50">
+                            <td colSpan={4} className="px-3 pb-2 pt-0">
+                              <p className={`rounded-md px-2.5 py-1.5 text-[11px] ${clienteId ? 'bg-orange-50 text-orange-900' : 'bg-amber-50 text-amber-900'}`}>
+                                {clienteId
+                                  ? <>Su cargo ya existe, pero <b>no se factura solo</b>. Se factura al pulsar «Guardar estudiante»
+                                    (borrador sin NCF{c.fechaVencimiento ? <>, vence {fmtFechaCorta(c.fechaVencimiento)}</> : null}) y desde
+                                    ahí corre la mora, si el concepto la cobra.</>
+                                  : <>Sin responsable de pago <b>no se podrá facturar</b>: el mes se quedaría como cargo pendiente,
+                                    sin factura y sin mora. Ponle el responsable en «Familia».</>}
+                              </p>
+                            </td>
+                          </tr>
+                        )}
                         {anotando?.id === c.id && (
                           <tr className="border-b border-gray-100 bg-zero-50/40">
                             <td colSpan={4} className="px-3 pb-3 pt-1">
@@ -496,6 +534,14 @@ function AnotarPago({ cargo, abono, conNcf, forma, onCancelar, onHecho }: {
           </span>
         </label>
       </div>
+      <p className="text-[11px] text-gray-500">
+        {estado === 'abono'
+          ? <>Se anota lo que pagó. Los {fmtDOP(cargo.montoCentavos - pagado)} que faltan siguen vencidos
+            {cargo.fechaVencimiento ? <> desde el {fmtFechaCorta(cargo.fechaVencimiento)}</> : null} y, si el concepto cobra mora, la pone el sistema.</>
+          : estado === 'pagado'
+            ? 'Queda una factura histórica pagada (no va a la DGII ni gasta NCF): el mes se cierra sin mora.'
+            : 'Escribe cuánto pagó.'}
+      </p>
       {prefijo && (
         <p className="text-[11px] text-gray-500">
           {ncf ? <>Queda <span className="font-mono text-gray-800">{ncf}</span></> : 'Escribe solo el final: los ceros se ponen solos.'}

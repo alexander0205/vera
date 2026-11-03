@@ -10,6 +10,12 @@
  *   GET  ?periodoId=                          → { alumnos: { [id]: { en, por } }, debe: number[] }
  *   POST { periodoId, estudianteId, completado }
  *   POST { periodoId, cargoId, debe }
+ *
+ * Al completar un alumno se facturan sus meses «Debe todo» (borrador, con el
+ * vencimiento del mes: desde ahí corre la mora; ver `facturar-debe-migracion`).
+ * Lo facturado sale de la lista; lo que no se pudo, se queda y se explica en
+ * `facturacion.sinFacturar`. Completar no espera a que todo se facture: el
+ * alumno queda completado igual y se corrige después.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -19,6 +25,7 @@ import {
   adminEscolarBorradores, adminEscolarCargos, adminEscolarEstudiantes, adminEscolarPeriodos,
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
+import { facturarDebeDelAlumno, type ResultadoFacturarDebe } from '@/lib/administracion-escolar/facturar-debe-migracion';
 
 const CLAVE = 'desde-sigerd-completados';
 
@@ -67,6 +74,7 @@ export async function POST(req: NextRequest) {
 
   // Uno de los dos: un alumno completado, o un mes que «debe todo».
   let cambio: (d: Datos) => void;
+  let facturacion: ResultadoFacturarDebe | null = null;
   if (body?.cargoId !== undefined) {
     const cargoId = Number(body.cargoId);
     if (!Number.isInteger(cargoId) || cargoId <= 0 || typeof body.debe !== 'boolean') {
@@ -86,10 +94,18 @@ export async function POST(req: NextRequest) {
       .where(and(eq(adminEscolarEstudiantes.id, estudianteId), eq(adminEscolarEstudiantes.teamId, auth.teamId))).limit(1);
     if (!est) return NextResponse.json({ error: 'Estudiante no encontrado' }, { status: 404 });
     const completado = body.completado;
+    if (completado) {
+      const [b] = await db.select({ datos: adminEscolarBorradores.datos }).from(adminEscolarBorradores)
+        .where(delColegio(auth.teamId, periodoId)).limit(1);
+      facturacion = await facturarDebeDelAlumno(auth.teamId, auth.user.id, estudianteId, leer(b?.datos).debe);
+    }
+    const facturados = new Set(facturacion?.facturados ?? []);
     const por = auth.user.name || auth.user.email || null;
     cambio = (d) => {
       if (completado) d.alumnos[String(estudianteId)] = { en: new Date().toISOString(), por };
       else delete d.alumnos[String(estudianteId)];
+      // Ya tienen factura: dejan de ser «Debe todo» y pasan a «Facturado, debe».
+      d.debe = d.debe.filter((id) => !facturados.has(id));
     };
   }
 
@@ -108,5 +124,5 @@ export async function POST(req: NextRequest) {
       .where(eq(adminEscolarBorradores.id, fila.id));
     return actual;
   });
-  return NextResponse.json(datos);
+  return NextResponse.json(facturacion ? { ...datos, facturacion } : datos);
 }
