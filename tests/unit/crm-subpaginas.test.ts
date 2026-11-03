@@ -57,6 +57,24 @@ describe('contenido de las subpáginas del CRM', () => {
     expect(notas).toMatch(/no están en operación/);
   });
 
+  it('citas dice que el conector de turnos no está en operación', () => {
+    const notas = CONTENIDO_CRM.citas.notas?.map(n => n.texto).join(' ') ?? '';
+    expect(notas).toMatch(/ambientes simulados/);
+    expect(notas).toMatch(/no está en operación/);
+  });
+
+  it('lo que va hacia una plataforma de encuestas ajena se conecta al implementar', () => {
+    const grupo = CONTENIDO_CRM.encuestas.grupos.find(g => /plataforma de encuestas/.test(g.titulo));
+    expect(grupo).toBeDefined();
+    for (const f of grupo!.funciones) expect(f.estado, f.titulo).toBe('implementar');
+  });
+
+  it('accesibilidad dice lo que no se ha probado', () => {
+    const notas = CONTENIDO_CRM.idiomas.notas?.map(n => n.texto).join(' ') ?? '';
+    expect(notas).toMatch(/lectores de pantalla reales/);
+    expect(notas).toMatch(/no tenemos una certificación/);
+  });
+
   it('el 99.9 % solo aparece atado a infraestructura dedicada', () => {
     const texto = crmMarkdown();
     for (const m of texto.matchAll(/[^.\n]*99\.9[^\n]*/g)) {

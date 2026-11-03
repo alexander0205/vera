@@ -283,7 +283,7 @@ export function CabeceraMarketing() {
               {crm.abierto && (
                 <div
                   id="menu-crm"
-                  className="absolute left-[-22px] top-[62px] w-[640px] rounded-[18px] border border-[#e7eaf4] bg-white p-[18px] shadow-[0_34px_70px_-30px_rgba(16,42,114,.34)]"
+                  className="absolute left-[-22px] top-[62px] w-[780px] rounded-[18px] border border-[#e7eaf4] bg-white p-[18px] shadow-[0_34px_70px_-30px_rgba(16,42,114,.34)]"
                 >
                   <Link
                     href={ENLACE_CRM}
@@ -303,7 +303,7 @@ export function CabeceraMarketing() {
                   <p className="m-0 px-2 pb-2 pt-3 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#666d80]">
                     Por partes
                   </p>
-                  <div className="grid grid-cols-2 gap-1">
+                  <div className="grid grid-cols-3 gap-1">
                     {ENTRADAS_CRM.map(m => (
                       <Link
                         key={m.href}

@@ -158,6 +158,234 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
     ],
   },
 
+  seguimiento: {
+    tituloSeo: 'Seguimiento de solicitudes por chat y WhatsApp — Zero CRM',
+    descripcion: 'Registra solicitudes desde la conversación con su número, deja consultar el estado de forma segura, avisa cada cambio y agrega documentos a la solicitud abierta.',
+    palabras: ['seguimiento de solicitudes por WhatsApp', 'consulta de estado de un caso', 'número de caso por chat', 'avisos de cambio de estado', 'gestión de reclamaciones'],
+    encabezado: 'Cada solicitud con su número, y la persona sabe siempre en qué va.',
+    bajada: 'Lo que se pide en la conversación queda como una solicitud con número propio. La persona consulta el estado cuando quiere, recibe un aviso cuando cambia y agrega lo que falte sin empezar otra vez.',
+    grupos: [
+      {
+        titulo: 'Registrar',
+        funciones: [
+          { titulo: 'Número al momento', detalle: 'Al registrar la solicitud, la persona recibe su número en la misma conversación.', estado: 'activa' },
+          { titulo: 'Motivo y submotivo', detalle: 'Cada solicitud se clasifica con un catálogo que defines tú. Lo que no encaja queda como «Otro» para revisarlo.', estado: 'activa' },
+          { titulo: 'Sin duplicar a la persona', detalle: 'Si ya existe por su documento, correo o teléfono, se usa el mismo registro.', estado: 'disponible' },
+        ],
+      },
+      {
+        titulo: 'Consultar el estado',
+        funciones: [
+          { titulo: 'Por número u otros datos', detalle: 'Por número de solicitud, cédula, pasaporte, RNC, correo o teléfono, escritos como la persona quiera.', estado: 'activa' },
+          { titulo: 'Con un segundo dato', detalle: 'Para no mostrar lo ajeno, pide otro dato de la misma solicitud. No hace falta si escribe desde la conversación donde la registró o desde el WhatsApp del titular.', estado: 'activa' },
+          { titulo: 'Respuesta clara', detalle: 'Estado, fechas y tipo, en palabras sencillas. Si hay varias, las lista; si no hay ninguna, lo dice y ofrece ayuda.', estado: 'disponible' },
+          { titulo: 'Una persona cuando la pida', detalle: 'Si en medio de la consulta prefiere hablar con alguien, pasa a una persona del equipo.', estado: 'disponible' },
+        ],
+      },
+      {
+        titulo: 'Mientras avanza',
+        funciones: [
+          { titulo: 'Avisos de cambio', detalle: 'Cuando cambia el estado, se avisa por el canal donde escribió, sin términos técnicos, y queda registrado el envío. Fuera de la ventana de 24 horas de WhatsApp hace falta una plantilla aprobada por Meta.', estado: 'disponible' },
+          { titulo: 'Agregar a la solicitud abierta', detalle: 'Si manda un documento con una solicitud abierta, se agrega a esa solicitud, queda en su historial y se le confirma.', estado: 'activa' },
+          { titulo: 'Lo ya dicho no se vuelve a pedir', detalle: 'Nombre, documento y respuestas previas se reutilizan en los pasos siguientes y al reasignar la conversación.', estado: 'disponible' },
+        ],
+      },
+      {
+        titulo: 'Al terminar',
+        funciones: [
+          { titulo: 'Cierre según la solicitud', detalle: 'Mientras sigue en proceso, la conversación no se cierra en silencio. Cuando se resuelve, pregunta si quedó bien y si necesita algo más.', estado: 'activa' },
+          { titulo: 'Reabrir si no quedó resuelto', detalle: 'Si responde que no, la solicitud vuelve a estar en proceso y la atención sigue.', estado: 'activa' },
+          { titulo: 'Inactividad aparte', detalle: 'El cierre por inactividad tiene su propia regla y su propio aviso, y no cuenta como resuelto.', estado: 'disponible' },
+        ],
+      },
+    ],
+    notas: [
+      {
+        titulo: 'Con tu sistema de casos',
+        texto: 'Si tus solicitudes viven en otro sistema, el seguimiento se conecta a él durante la implementación, con el mismo número de caso en los dos lados.',
+        enlace: { texto: 'Ver las integraciones', href: `${RUTA_CRM}/integraciones` },
+      },
+    ],
+  },
+
+  citas: {
+    tituloSeo: 'Citas desde WhatsApp y el chat, con tu agenda — Zero CRM',
+    descripcion: 'Agenda citas dentro de la conversación: ofrece horarios libres, registra y confirma. Con la agenda del CRM y Google Calendar, o con tu sistema de turnos al implementar.',
+    palabras: ['agendar citas por WhatsApp', 'citas por chat', 'reservas con chatbot', 'integración con Google Calendar', 'sistema de turnos'],
+    encabezado: 'La cita se agenda en la misma conversación.',
+    bajada: 'La persona elige día y hora entre los horarios libres, recibe la confirmación por el mismo canal y la cita queda ligada a su conversación y a su solicitud.',
+    grupos: [
+      {
+        titulo: 'En la conversación',
+        funciones: [
+          { titulo: 'Horarios libres', detalle: 'Ofrece solo los horarios disponibles, con botones o una lista según el canal.', estado: 'activa' },
+          { titulo: 'Registro y confirmación', detalle: 'Registra la cita y envía la confirmación con fecha, hora y lugar.', estado: 'activa' },
+          { titulo: 'Ligada a la persona', detalle: 'La cita queda en su ficha y, si hay una solicitud, en ella.', estado: 'activa' },
+        ],
+      },
+      {
+        titulo: 'Tu agenda',
+        funciones: [
+          { titulo: 'Calendario del equipo', detalle: 'Las citas se ven en el calendario del CRM, y se cancelan desde ahí.', estado: 'activa' },
+          { titulo: 'Google Calendar', detalle: 'Cada persona conecta su cuenta de Google: se consulta su disponibilidad y el evento se crea o se borra solo.', estado: 'activa' },
+        ],
+      },
+      {
+        titulo: 'Con tu sistema de turnos',
+        funciones: [
+          { titulo: 'Sistemas de turnos y Microsoft Bookings', detalle: 'Consultar horarios, registrar, confirmar y cancelar la cita en tu sistema.', estado: 'implementar' },
+        ],
+      },
+    ],
+    notas: [
+      {
+        titulo: 'Lo que debes saber',
+        texto: 'El conector con sistemas de turnos se ha probado contra ambientes simulados y todavía no está en operación con ningún cliente. Los nombres de productos son de sus dueños; mencionarlos no implica relación con ellos.',
+      },
+    ],
+  },
+
+  encuestas: {
+    tituloSeo: 'Encuesta de satisfacción en el chat y cierre confirmado — Zero CRM',
+    descripcion: 'Antes de cerrar pregunta si quedó resuelto, mide la satisfacción con botones, recoge un comentario y guarda todo con la conversación. Puede enviar el resultado a tu plataforma de encuestas.',
+    palabras: ['encuesta de satisfacción por WhatsApp', 'CSAT en chat', 'encuesta al cerrar la conversación', 'plantillas de cierre', 'medir la satisfacción del cliente'],
+    encabezado: 'Se cierra cuando la persona confirma, y se mide cómo le fue.',
+    bajada: 'Antes de despedirse, el asistente pregunta si quedó resuelto. Después mide la satisfacción en el mismo canal y guarda la respuesta junto a la conversación y la solicitud.',
+    grupos: [
+      {
+        titulo: 'El cierre',
+        funciones: [
+          { titulo: 'Confirmar antes de cerrar', detalle: '«¿Quedó resuelto?» y «¿Algo más?». Si dice que no, la conversación sigue abierta.', estado: 'disponible' },
+          { titulo: 'Plantillas de cierre', detalle: 'Despedidas por categoría: el asesor elige una, la ajusta y la envía. Queda cuál usó.', estado: 'disponible' },
+          { titulo: 'También cuando cierra una persona', detalle: 'Si la conversación la cierra alguien del equipo, la encuesta sale igual.', estado: 'activa' },
+        ],
+      },
+      {
+        titulo: 'La encuesta',
+        funciones: [
+          { titulo: 'En el mismo canal', detalle: 'Con botones donde el canal los permite y con números donde no.', estado: 'activa' },
+          { titulo: 'Comentario', detalle: 'Un comentario libre después de la calificación. Si en vez de opinar hace una consulta nueva, se atiende como consulta.', estado: 'activa' },
+          { titulo: 'Registro completo', detalle: 'Calificación, comentario, fecha y el identificador de la conversación y de la solicitud.', estado: 'activa' },
+          { titulo: 'En los indicadores', detalle: 'Los resultados se ven en los paneles y se exportan.', estado: 'activa' },
+        ],
+      },
+      {
+        titulo: 'Con tu plataforma de encuestas',
+        detalle: 'Si ya mides la satisfacción en otra herramienta.',
+        funciones: [
+          { titulo: 'Enviar el resultado', detalle: 'El evento de cierre y la respuesta, con el contexto de la interacción.', estado: 'implementar' },
+          { titulo: 'Que tu plataforma decida', detalle: 'Reglas para hacer la encuesta en el chat, dejarla a tu plataforma u omitirla. Si tu plataforma no responde, sale la encuesta propia.', estado: 'implementar' },
+        ],
+      },
+    ],
+  },
+
+  reportes: {
+    tituloSeo: 'Reportes, exportación y trazabilidad de la atención — Zero CRM',
+    descripcion: 'Paneles con filtros por fecha, asesor, canal y tipo, el detalle de cada interacción por su identificador, exportación en formatos estándar y una bitácora que solo admite agregar.',
+    palabras: ['reportes de atención al cliente', 'exportar conversaciones a Excel', 'trazabilidad de interacciones', 'bitácora de auditoría', 'indicadores de chat'],
+    encabezado: 'Todo lo que pasó, con fecha, autor e identificador.',
+    bajada: 'Los paneles resumen la atención y dejan bajar hasta cada conversación. Lo que se exporta respeta los permisos y queda registrado.',
+    grupos: [
+      {
+        titulo: 'Paneles',
+        funciones: [
+          { titulo: 'Filtros', detalle: 'Por fecha, asesor, canal y tipo de solicitud.', estado: 'activa' },
+          { titulo: 'Del total al detalle', detalle: 'De un indicador a la conversación, por su identificador único.', estado: 'activa' },
+          { titulo: 'El equipo', detalle: 'Estado de cada asesor con sus pausas, y conversaciones activas, en espera, reasignadas y cerradas.', estado: 'activa' },
+        ],
+      },
+      {
+        titulo: 'Exportación',
+        funciones: [
+          { titulo: 'Formatos estándar', detalle: 'Excel y CSV, y una carpeta por conversación con sus documentos.', estado: 'activa' },
+          { titulo: 'Con identificadores', detalle: 'Cada fila lleva el identificador de la conversación y de la solicitud, y la referencia a sus documentos.', estado: 'activa' },
+          { titulo: 'Con permiso y registro', detalle: 'Solo exporta quien tiene permiso, y cada exportación queda anotada.', estado: 'activa' },
+        ],
+      },
+      {
+        titulo: 'Trazabilidad',
+        funciones: [
+          { titulo: 'Bitácora', detalle: 'Quién hizo qué, cuándo y sobre qué registro, con filtros.', estado: 'activa' },
+          { titulo: 'Protegida', detalle: 'La aplicación solo permite agregar registros, no cambiarlos ni borrarlos.', estado: 'activa' },
+          { titulo: 'Exportar la bitácora', detalle: 'En CSV, para auditoría, con permiso.', estado: 'activa' },
+        ],
+      },
+    ],
+  },
+
+  administracion: {
+    tituloSeo: 'Administración del chatbot sin programar — Zero CRM',
+    descripcion: 'Flujos, respuestas, plantillas, horarios, metas de tiempo, reparto y roles se editan desde pantallas, con versiones, publicación controlada y registro de cada cambio.',
+    palabras: ['editor visual de flujos', 'administrar un chatbot sin código', 'roles y permisos', 'SLA configurable', 'versiones de flujos'],
+    encabezado: 'Lo cambias tú, desde pantallas, y queda registrado.',
+    bajada: 'Flujos, respuestas, reglas y permisos se ajustan sin programar. Cada cambio guarda quién lo hizo y cuándo, y se puede volver a una versión anterior.',
+    grupos: [
+      {
+        titulo: 'Contenido y flujos',
+        funciones: [
+          { titulo: 'Editor visual', detalle: 'Los pasos de la conversación se arman con bloques, sin escribir código.', estado: 'disponible' },
+          { titulo: 'Respuestas y documentos', detalle: 'Textos, documentos de consulta y respuestas aprobadas, que se activan o se desactivan.', estado: 'disponible' },
+          { titulo: 'Versiones', detalle: 'Cada cambio publicado queda como versión con autor, fecha y nota, y se puede restaurar.', estado: 'disponible' },
+          { titulo: 'Publicación controlada', detalle: 'Los cambios quedan en borrador y se prueban con teléfonos de prueba antes de publicarlos.', estado: 'activa' },
+        ],
+      },
+      {
+        titulo: 'Reglas de atención',
+        funciones: [
+          { titulo: 'Horarios y feriados', detalle: 'Horario de atención, feriados y el mensaje para fuera de horario.', estado: 'activa' },
+          { titulo: 'Metas de tiempo', detalle: 'Tiempos por prioridad o condición, con aviso al asesor y al supervisor antes de vencer.', estado: 'activa' },
+          { titulo: 'Reparto y topes', detalle: 'Cuántas conversaciones atiende cada persona, por área y por canal.', estado: 'activa' },
+          { titulo: 'Prioridades', detalle: 'Palabras clave y condiciones que suben la prioridad. Los niveles son alta, media y baja.', estado: 'activa' },
+          { titulo: 'Plantillas', detalle: 'Por categoría y por rol, desde una pantalla.', estado: 'disponible' },
+        ],
+      },
+      {
+        titulo: 'Personas y permisos',
+        funciones: [
+          { titulo: 'Roles', detalle: 'Asesor, supervisor y administrador, y roles propios con permisos por función.', estado: 'activa' },
+          { titulo: 'Datos según el rol', detalle: 'Cada rol ve solo lo que le toca, y se valida en el servidor.', estado: 'disponible' },
+          { titulo: 'Registro de cambios', detalle: 'Los cambios de permisos y los accesos privilegiados quedan en la bitácora.', estado: 'activa' },
+        ],
+      },
+    ],
+  },
+
+  idiomas: {
+    tituloSeo: 'Chatbot multilingüe y accesible — Zero CRM',
+    descripcion: 'Reconoce el idioma de quien escribe y contesta en él; el asesor lee la traducción y responde en español. El chat y la bandeja se revisan con pautas de accesibilidad y se usan con teclado.',
+    palabras: ['chatbot multilingüe', 'traducción automática en el chat', 'atención en inglés y francés', 'chat accesible', 'WCAG'],
+    encabezado: 'Atiende en el idioma de quien escribe, y se puede usar sin ratón.',
+    bajada: 'El asistente reconoce el idioma y responde en él. Tu equipo trabaja en español y ve cada mensaje traducido. Y las pantallas se revisan con pautas de accesibilidad.',
+    grupos: [
+      {
+        titulo: 'Idiomas',
+        funciones: [
+          { titulo: 'Reconoce el idioma', detalle: 'Lo detecta en cada mensaje y el asistente contesta en él.', estado: 'activa' },
+          { titulo: 'El asesor ve la traducción', detalle: 'Cada mensaje llega traducido al idioma de tu equipo.', estado: 'activa' },
+          { titulo: 'Responder en su idioma', detalle: 'El asesor escribe en español y, con un botón, lo traduce antes de enviar.', estado: 'activa' },
+          { titulo: 'Idiomas probados', detalle: 'Inglés y francés en el chat web. Otros idiomas se prueban al implementar.', estado: 'activa' },
+        ],
+      },
+      {
+        titulo: 'Accesibilidad',
+        funciones: [
+          { titulo: 'Revisión con pautas', detalle: 'Las pantallas se revisan con herramientas automáticas según las pautas WCAG 2.2, niveles A y AA.', estado: 'disponible' },
+          { titulo: 'Con teclado', detalle: 'Las funciones principales se usan con teclado, con el foco visible y un enlace para saltar el menú.', estado: 'disponible' },
+          { titulo: 'Contraste y etiquetas', detalle: 'Colores con contraste suficiente, y botones y campos con su nombre.', estado: 'disponible' },
+          { titulo: 'En cualquier pantalla', detalle: 'Se adapta al celular, la tableta y la computadora, sin desplazamiento lateral.', estado: 'disponible' },
+          { titulo: 'Tu identidad visual', detalle: 'Logo, colores y letra de tu organización en el chat.', estado: 'disponible' },
+        ],
+      },
+    ],
+    notas: [
+      {
+        titulo: 'Lo que no hemos probado',
+        texto: 'No lo hemos probado con lectores de pantalla reales ni con personas con discapacidad, y no tenemos una certificación de accesibilidad.',
+      },
+    ],
+  },
+
   bandeja: {
     tituloSeo: 'Bandeja de asesores con reparto y ayuda de IA — Zero CRM',
     descripcion: 'Lo que el bot no resuelve llega a tu equipo con el contexto completo: reparto por topes, prioridad automática, plantillas, respuestas sugeridas y corrector.',
@@ -188,6 +416,7 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
         titulo: 'Reglas de atención',
         funciones: [
           { titulo: 'Reparto', detalle: 'Tope de chats por persona, área y canal, con cola que se reparte al liberarse un asesor.', estado: 'activa' },
+          { titulo: 'Cola con su posición', detalle: 'Mientras espera, la persona sabe cuántas conversaciones hay antes de la suya.', estado: 'activa' },
           { titulo: 'Prioridad automática', detalle: 'Por palabras clave, tono, tipo de solicitud y estado del caso, con el motivo a la vista.', estado: 'activa' },
         ],
       },
@@ -382,6 +611,10 @@ export const PREGUNTAS_CRM: readonly PreguntaCrm[] = [
   { pregunta: '¿Puede leer documentos?', respuesta: 'Sí. Lee fotos y PDF, revisa su calidad y pide confirmar lo leído.' },
   { pregunta: '¿Qué hace cuando no sabe la respuesta?', respuesta: 'Se puede configurar para responder solo con tus documentos y, si no está, decirlo y ofrecer a una persona. Ninguna IA acierta siempre; por eso hay supervisión y registro de fuentes.' },
   { pregunta: '¿Cómo pasa una conversación a una persona?', respuesta: 'El bot pide los datos que faltan, confirma y entrega al asesor la conversación con un resumen. Fuera de horario informa la alternativa.' },
+  { pregunta: '¿Se puede consultar el estado de una solicitud por WhatsApp?', respuesta: 'Sí, y se activa por cliente. Por número u otro dato, y con un segundo dato para proteger a la persona. Cada cambio de estado se le avisa por su canal.' },
+  { pregunta: '¿Puede agendar citas?', respuesta: 'Sí, con la agenda del CRM y Google Calendar, que se activan por cliente. Con sistemas de turnos externos se conecta al implementar.' },
+  { pregunta: '¿Mide la satisfacción al terminar?', respuesta: 'Sí, y se activa por cliente. Pregunta si quedó resuelto y hace una encuesta con botones y comentario en el mismo canal.' },
+  { pregunta: '¿Hace falta programar para cambiar el chatbot?', respuesta: 'No. Flujos, respuestas, plantillas, horarios y permisos se editan desde pantallas, con versiones y registro de cada cambio.' },
   { pregunta: '¿Hay supervisión en vivo?', respuesta: 'Sí, y se activa por cliente: monitoreo, mensaje privado al asesor, intervención y análisis de sentimiento.', destacada: true },
   { pregunta: '¿Funciona en otros idiomas?', respuesta: 'Sí, y se activa por cliente. Lo probamos en inglés y francés en el chat web.' },
   { pregunta: '¿Se integra con Dynamics o uContact?', respuesta: 'Hay conectores por API que se conectan al sistema del cliente durante la implementación. Se han probado contra ambientes simulados y todavía no están en operación con clientes.', destacada: true },
