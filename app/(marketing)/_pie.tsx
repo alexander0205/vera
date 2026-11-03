@@ -12,7 +12,7 @@
  */
 
 import Link from 'next/link';
-import { PAGINAS_CRM, RUTA_CRM } from '@/lib/agentes/crm-rutas';
+import { PAGINAS_SIN_CATEGORIA, RUTA_CRM, paginasPorCategoria } from '@/lib/agentes/crm-rutas';
 import { CONTACTO, Contenedor } from './_piezas';
 
 /**
@@ -23,7 +23,10 @@ import { CONTACTO, Contenedor } from './_piezas';
  * por línea vive en `/precios`, que enseña una línea a la vez con su selector:
  * no hay ancla por producto a la que apuntar.
  */
-const COLUMNAS: readonly { titulo: string; enlaces: readonly { texto: string; href: string }[] }[] = [
+type EnlacePie = { texto: string; href: string };
+type ColumnaPie = { titulo: string; enlaces: readonly EnlacePie[]; secciones?: readonly { titulo: string; enlaces: readonly EnlacePie[] }[] };
+
+const COLUMNAS: readonly ColumnaPie[] = [
   {
     titulo: 'Navegación',
     enlaces: [
@@ -51,12 +54,25 @@ const COLUMNAS: readonly { titulo: string; enlaces: readonly { texto: string; hr
     // Aquí salen en el HTML de todas las páginas: es el enlace interno que un
     // buscador sigue aunque el desplegable de la cabecera esté cerrado.
     titulo: 'Zero CRM',
-    enlaces: [
-      { texto: 'Resumen', href: RUTA_CRM },
-      ...PAGINAS_CRM.map(p => ({ texto: p.menu, href: p.ruta })),
+    enlaces: [{ texto: 'Resumen', href: RUTA_CRM }],
+    // Por categoría, con su nombre encima; preguntas frecuentes va al final, sin categoría.
+    secciones: [
+      ...paginasPorCategoria().map(c => ({ titulo: c.nombre, enlaces: c.paginas.map(p => ({ texto: p.menu, href: p.ruta })) })),
+      { titulo: '', enlaces: PAGINAS_SIN_CATEGORIA.map(p => ({ texto: p.menu, href: p.ruta })) },
     ],
   },
 ];
+
+/* Los que llevan ancla van en `a` y no en `Link`: estando ya en la portada, el
+   Link de Next cambia la URL pero deja la página arriba del todo, así que el
+   enlace parecía roto. */
+function EnlaceDelPie({ enlace: l }: { enlace: EnlacePie }) {
+  return l.href.includes('#') ? (
+    <a href={l.href} className="text-[12.5px] text-white/55 transition hover:text-white">{l.texto}</a>
+  ) : (
+    <Link href={l.href} className="text-[12.5px] text-white/55 transition hover:text-white">{l.texto}</Link>
+  );
+}
 
 export function PieMarketing() {
   return (
@@ -79,18 +95,13 @@ export function PieMarketing() {
             <div key={col.titulo}>
               <p className="text-[12.5px] font-semibold text-white">{col.titulo}</p>
               <div className="mt-4 flex flex-col gap-2.5">
-                {/* Los que llevan ancla van en `a` y no en `Link`: estando ya
-                    en la portada, el Link de Next cambia la URL pero deja la
-                    página arriba del todo, así que el enlace parecía roto. */}
-                {col.enlaces.map(l => (l.href.includes('#') ? (
-                  <a key={l.texto} href={l.href} className="text-[12.5px] text-white/55 transition hover:text-white">
-                    {l.texto}
-                  </a>
-                ) : (
-                  <Link key={l.texto} href={l.href} className="text-[12.5px] text-white/55 transition hover:text-white">
-                    {l.texto}
-                  </Link>
-                )))}
+                {col.enlaces.map(l => <EnlaceDelPie key={l.texto} enlace={l} />)}
+                {col.secciones?.map(sec => (
+                  <div key={sec.titulo || 'sin-titulo'} className="mt-1.5 flex flex-col gap-2.5">
+                    {sec.titulo && <p className="m-0 text-[10.5px] font-semibold uppercase tracking-[.16em] text-white/65">{sec.titulo}</p>}
+                    {sec.enlaces.map(l => <EnlaceDelPie key={l.texto} enlace={l} />)}
+                  </div>
+                ))}
               </div>
             </div>
           ))}

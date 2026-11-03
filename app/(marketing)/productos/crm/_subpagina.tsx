@@ -13,7 +13,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { urlDelSitio } from '@/lib/config/enlaces';
-import { PAGINAS_CRM, CRM_ACTUALIZADA, RUTA_CRM, type ClaveCrm } from '@/lib/agentes/crm-rutas';
+import { PAGINAS_CRM, PAGINAS_SIN_CATEGORIA, CRM_ACTUALIZADA, RUTA_CRM, paginasPorCategoria, type ClaveCrm, type PaginaCrm } from '@/lib/agentes/crm-rutas';
 import { ESTADOS, fechaCrm, subpaginaCrm, type EstadoCrm } from '@/lib/agentes/crm';
 import { DatosDePagina, DatosDeRuta } from '../../_datos-estructurados';
 import { Contenedor, Flecha } from '../../_piezas';
@@ -85,25 +85,47 @@ export function NavCrm({ actual }: { actual: string }) {
   );
 }
 
-/** Las tarjetas que llevan a las subpáginas, con lo que se encuentra en cada una. */
-export function TarjetasCrm({ excluir }: { excluir?: ClaveCrm }) {
+function TarjetaCrm({ p }: { p: PaginaCrm }) {
   return (
-    <ul className="m-0 grid min-w-0 list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3">
-      {PAGINAS_CRM.filter(p => p.clave !== excluir).map(p => (
-        <li key={p.clave} className="min-w-0">
-          <Link
-            href={p.ruta}
-            className="flex h-full flex-col rounded-[15px] border border-[#e7edfb] bg-white p-5 transition hover:-translate-y-0.5 hover:border-zero-200 hover:shadow-[0_22px_40px_-28px_rgba(16,42,114,.45)]"
-          >
-            <span className="flex items-center justify-between gap-3 font-[family-name:var(--font-display)] text-[14.5px] font-semibold tracking-[-.015em] text-[#102a72]">
-              {p.menu}
-              <Flecha tamano={13} className="shrink-0 text-zero-600" />
-            </span>
-            <span className="mt-1.5 block text-pretty text-[12.5px] leading-[1.5] text-[#5c6373]">{p.resumen}</span>
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <li className="min-w-0">
+      <Link
+        href={p.ruta}
+        className="flex h-full flex-col rounded-[15px] border border-[#e7edfb] bg-white p-5 transition hover:-translate-y-0.5 hover:border-zero-200 hover:shadow-[0_22px_40px_-28px_rgba(16,42,114,.45)]"
+      >
+        <span className="flex items-center justify-between gap-3 font-[family-name:var(--font-display)] text-[14.5px] font-semibold tracking-[-.015em] text-[#102a72]">
+          {p.menu}
+          <Flecha tamano={13} className="shrink-0 text-zero-600" />
+        </span>
+        <span className="mt-1.5 block text-pretty text-[12.5px] leading-[1.5] text-[#5c6373]">{p.resumen}</span>
+      </Link>
+    </li>
+  );
+}
+
+/** Las tarjetas que llevan a las subpáginas, en sus tres categorías, con lo que se encuentra en cada una. */
+export function TarjetasCrm({ excluir }: { excluir?: ClaveCrm }) {
+  const sueltas = PAGINAS_SIN_CATEGORIA.filter(p => p.clave !== excluir);
+  return (
+    <div className="flex min-w-0 flex-col gap-8">
+      {paginasPorCategoria().map(c => {
+        const paginas = c.paginas.filter(p => p.clave !== excluir);
+        if (!paginas.length) return null;
+        return (
+          <div key={c.clave} className="min-w-0">
+            <h3 className="m-0 font-[family-name:var(--font-display)] text-[16px] font-semibold tracking-[-.02em] text-[#102a72]">{c.nombre}</h3>
+            <p className="m-0 mt-1 text-pretty text-[13px] leading-[1.5] text-[#5c6373]">{c.resumen}</p>
+            <ul className="m-0 mt-3.5 grid min-w-0 list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3">
+              {paginas.map(p => <TarjetaCrm key={p.clave} p={p} />)}
+            </ul>
+          </div>
+        );
+      })}
+      {sueltas.length > 0 && (
+        <ul className="m-0 grid min-w-0 list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3">
+          {sueltas.map(p => <TarjetaCrm key={p.clave} p={p} />)}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -155,8 +177,9 @@ function Migas({ titulo }: { titulo: string }) {
  * Una subpágina completa. `children` reemplaza los grupos de funciones: lo usa la
  * de preguntas frecuentes, que no es una lista de funciones. `modulo` es el
  * ejemplo que se toca, y va antes de la lista para que se vea sin bajar.
+ * `despues` va tras la lista y antes de las notas: lo usa el catálogo de integraciones.
  */
-export function Subpagina({ clave, modulo, children }: { clave: ClaveCrm; modulo?: React.ReactNode; children?: React.ReactNode }) {
+export function Subpagina({ clave, modulo, despues, children }: { clave: ClaveCrm; modulo?: React.ReactNode; despues?: React.ReactNode; children?: React.ReactNode }) {
   const p = subpaginaCrm(clave);
 
   return (
@@ -213,6 +236,8 @@ export function Subpagina({ clave, modulo, children }: { clave: ClaveCrm; modulo
           </Contenedor>
         </section>
       ))}
+
+      {despues}
 
       {p.notas?.map(n => (
         <section key={n.titulo}>

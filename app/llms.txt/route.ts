@@ -4,7 +4,7 @@ import { GUIAS } from '@/app/(marketing)/guias/page';
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
 import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 import { ALTA, CONECTOR, RUTA_AGENTES_MD, RUTA_FUNCIONES_MD, textoDeLaPrueba } from '@/lib/agentes/contenido';
-import { PAGINAS_CRM, RUTA_CRM_MD, RUTA_LLMS_FULL, RUTA_MCP_PUBLICO } from '@/lib/agentes/crm-rutas';
+import { PAGINAS_SIN_CATEGORIA, RUTA_CRM_MD, RUTA_LLMS_FULL, RUTA_MCP_PUBLICO, paginasPorCategoria } from '@/lib/agentes/crm-rutas';
 import { RUTA_CAPACIDADES } from '@/lib/agentes/crm-capacidades';
 
 /**
@@ -29,7 +29,10 @@ import { RUTA_CAPACIDADES } from '@/lib/agentes/crm-capacidades';
 export const dynamic = 'force-static';
 
 function paginasCrm(): string {
-  return PAGINAS_CRM.map(p => `  - [${p.menu}](${SITIO_PUBLICO}${p.ruta}): ${p.resumen}`).join('\n');
+  const grupos = paginasPorCategoria().map(c =>
+    `  - ${c.nombre}: ${c.resumen}\n${c.paginas.map(p => `    - [${p.menu}](${SITIO_PUBLICO}${p.ruta}): ${p.resumen}`).join('\n')}`);
+  const sueltas = PAGINAS_SIN_CATEGORIA.map(p => `  - [${p.menu}](${SITIO_PUBLICO}${p.ruta}): ${p.resumen}`);
+  return [...grupos, ...sueltas].join('\n');
 }
 
 function guias(): string {
@@ -61,7 +64,7 @@ Zero es un producto de Yisrael Technology. Opera en República Dominicana, en es
 - [Zero CRM por partes](${SITIO_PUBLICO}${RUTA_CRM_MD}): cada función con su estado, en texto.
 - [Zero CRM, todo el texto](${SITIO_PUBLICO}${RUTA_LLMS_FULL}): las subpáginas, las preguntas y los precios en un archivo. Cada subpágina tiene además su versión en texto: su dirección terminada en \`.md\`.
 - [Capacidades de Zero CRM en JSON](${SITIO_PUBLICO}${RUTA_CAPACIDADES}): cada capacidad con su estado, su página y las funciones que cubre, con su esquema.
-- Servidor MCP público del sitio, de solo lectura, sin clave y sin datos de clientes: \`${SITIO_PUBLICO}${RUTA_MCP_PUBLICO}\` (HTTP con streaming). Herramientas: listar_paginas, leer_pagina, buscar_capacidades, estado_capacidad, catalogo_funciones y precios. En un cliente MCP: \`{"mcpServers":{"zero":{"url":"${SITIO_PUBLICO}${RUTA_MCP_PUBLICO}"}}}\`.
+- Servidor MCP público del sitio, de solo lectura, sin clave y sin datos de clientes: \`${SITIO_PUBLICO}${RUTA_MCP_PUBLICO}\` (HTTP con streaming). Herramientas: listar_paginas, leer_pagina, buscar_capacidades, estado_capacidad, catalogo_funciones, catalogo_integraciones y precios. En un cliente MCP: \`{"mcpServers":{"zero":{"url":"${SITIO_PUBLICO}${RUTA_MCP_PUBLICO}"}}}\`.
 - Conector MCP, de solo lectura: \`${CONECTOR.url}\`. Se usa con una llave por empresa (\`${CONECTOR.cabecera}\`).
 - Crear una empresa: la crea una persona en ${ALTA.url}. Prueba gratis: ${textoDeLaPrueba()}.
 
@@ -100,7 +103,7 @@ ${guias()}
 - **¿Incluye contabilidad?** Sí, en todos los planes, sin costo aparte.
 - **¿Tiene inteligencia artificial?** Sí. Zero CRM usa agentes que entienden lenguaje natural, leen notas de voz y fotos con OCR, responden desde los documentos que se les cargan citando la fuente, verifican identidad, agendan citas, cobran y contestan llamadas por voz.
 - **¿Zero ERP se integra con otros sistemas?** En parte: una API de solo lectura y un conector MCP, con una llave por empresa; webhooks de salida, todavía sin pantalla para configurarlos; avisos de cobro a los padres por WhatsApp, SMS y correo; y conexión con SIGERD para los colegios. No hay API para crear o cambiar datos desde fuera.
-- **¿Zero CRM se integra con otros sistemas?** Es otra aplicación, con su propia API: desde tu sistema envías mensajes por WhatsApp y consultas conversaciones, y por webhook recibes los que entran. Además tiene conectores por API para CRM y centro de contacto, como Dynamics y uContact, que se conectan al sistema del cliente durante la implementación; se han probado contra ambientes simulados y todavía no están en operación con clientes.
+- **¿Zero CRM se integra con otros sistemas?** Es otra aplicación, con su propia API: desde tu sistema envías mensajes por WhatsApp y consultas conversaciones, y por webhook recibes los que entran. Además se conecta, al implementar, con los sistemas que publican una API, servicios web o webhooks: CRM y gestión de casos, centros de contacto, ERP, identidad, SIEM, turnos, documentos, pagos y sistemas del Estado dominicano, con el acceso que dé cada institución. Esos conectores se han probado contra ambientes simulados y todavía no están en operación con clientes. El catálogo completo está en la página de integraciones.
 - **¿Hay prueba?** ${textoPrueba()} Sin contrato mínimo.
 - **Contacto:** ${CONTACTO.ventas} · ${CONTACTO.telefono} · WhatsApp ${CONTACTO.whatsapp}
 

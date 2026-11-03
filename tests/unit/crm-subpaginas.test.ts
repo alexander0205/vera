@@ -15,7 +15,8 @@ import { CONTENIDO_CRM, ESTADOS, PREGUNTAS_CRM, crmMarkdown, subpaginaMarkdown }
 import { FUNCIONES_CRM, buscarCapacidades, capacidadesCrm, capacidadesJson } from '@/lib/agentes/crm-capacidades';
 import { GET as llmsFull } from '@/app/llms-full.txt/route';
 import robots from '@/app/robots';
-import { PAGINAS_CRM, RUTA_CRM, RUTA_MCP_PUBLICO } from '@/lib/agentes/crm-rutas';
+import { CATEGORIAS_CRM, PAGINAS_CRM, PAGINAS_SIN_CATEGORIA, RUTA_CRM, RUTA_MCP_PUBLICO, paginasPorCategoria } from '@/lib/agentes/crm-rutas';
+import { CATALOGO_INTEGRACIONES, REQUIERE_INSTITUCION } from '@/lib/agentes/crm-integraciones';
 import sitemap from '@/app/sitemap';
 import { GET as llms } from '@/app/llms.txt/route';
 
@@ -178,5 +179,54 @@ describe('lo que leen los asistentes de IA', () => {
     for (const x of reglas) expect([x.allow].flat()).toContain(RUTA_MCP_PUBLICO);
     const texto = await llms().text();
     expect(texto).toContain(RUTA_MCP_PUBLICO);
+  });
+});
+
+describe('las tres categorías', () => {
+  it('toda página es de una categoría, salvo preguntas frecuentes', () => {
+    expect(CATEGORIAS_CRM.map(c => c.nombre)).toEqual(['Atención', 'Operación', 'Plataforma']);
+    expect(PAGINAS_SIN_CATEGORIA.map(p => p.clave)).toEqual(['preguntas']);
+    for (const c of paginasPorCategoria()) expect(c.paginas.length, c.clave).toBeGreaterThan(0);
+    expect(paginasPorCategoria().reduce((n, c) => n + c.paginas.length, 0)).toBe(PAGINAS_CRM.length - 1);
+  });
+
+  it('crm.md, llms.txt y capacidades.json van por categoría', async () => {
+    const md = crmMarkdown();
+    for (const c of CATEGORIAS_CRM) expect(md).toContain(`## ${c.nombre}`);
+    const texto = await llms().text();
+    for (const c of CATEGORIAS_CRM) expect(texto).toContain(`- ${c.nombre}:`);
+    const json = capacidadesJson();
+    expect(json.categorias.length).toBe(3);
+    expect(json.paginas.every(p => p.clave === 'preguntas' || p.categoria)).toBe(true);
+  });
+});
+
+describe('el catálogo de integraciones', () => {
+  const todos = CATALOGO_INTEGRACIONES.flatMap(c => c.sistemas.map((s, i) => ({ ...s, categoria: c.clave, posicion: i })));
+
+  it('solo los canales dicen Disponible; lo demás se conecta al implementar, se activa o es a medida', () => {
+    for (const s of todos) {
+      if (s.estado === 'disponible') expect(s.categoria, s.nombre).toBe('canales');
+    }
+    expect(todos.filter(s => s.estado === 'implementar').length).toBeGreaterThan(40);
+  });
+
+  it('los sistemas usados en pruebas no se destacan: van como uno más, nunca primero', () => {
+    for (const s of todos.filter(x => /dynamics|ucontact|bookings/i.test(x.nombre))) {
+      expect(s.estado, s.nombre).toBe('implementar');
+      expect(s.posicion, s.nombre).toBeGreaterThan(0);
+    }
+    expect(crmMarkdown()).not.toMatch(/cx360|eflow/i);
+    expect(JSON.stringify(capacidadesJson())).not.toMatch(/cx360|eflow/i);
+  });
+
+  it('cada sistema del Estado lleva fuente oficial y dice que hace falta el acceso de la institución', () => {
+    const estado = CATALOGO_INTEGRACIONES.find(c => c.clave === 'estado-dominicano')!;
+    expect(estado.como).toContain(REQUIERE_INSTITUCION);
+    for (const s of estado.sistemas) expect(s.fuente ?? '', s.nombre).toMatch(/^https:\/\/([a-z0-9-]+\.)*(gob|gov)\.do(\/|$)/);
+  });
+
+  it('nada del catálogo se presenta como alianza o en operación', () => {
+    for (const s of todos) expect(`${s.nombre} ${s.detalle}`, s.nombre).not.toMatch(/alianza|partner|certificad[oa] por|en operación/i);
   });
 });

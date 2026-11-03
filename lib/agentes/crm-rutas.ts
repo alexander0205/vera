@@ -21,23 +21,46 @@ export const RUTA_LLMS_FULL = '/llms-full.txt';
 /** Se cambia al tocar los textos de `crm.ts`: es la fecha que se ve en cada página. */
 export const CRM_ACTUALIZADA = '2026-11-03';
 
-export const PAGINAS_CRM = [
-  { clave: 'chatbot-whatsapp', ruta: `${RUTA_CRM}/chatbot-whatsapp`, menu: 'Chatbot y WhatsApp', resumen: 'Conversación abierta o guiada, en cada canal.' },
-  { clave: 'chat-web', ruta: `${RUTA_CRM}/chat-web`, menu: 'Chat web', resumen: 'Una ventana en tu página, con tu marca y tu horario.' },
-  { clave: 'documentos', ruta: `${RUTA_CRM}/documentos`, menu: 'Documentos y OCR', resumen: 'Recibe, lee y revisa documentos, y responde desde los tuyos.' },
-  { clave: 'seguimiento', ruta: `${RUTA_CRM}/seguimiento`, menu: 'Solicitudes y seguimiento', resumen: 'Número propio, consulta segura del estado y avisos de cada cambio.' },
-  { clave: 'citas', ruta: `${RUTA_CRM}/citas`, menu: 'Citas y agenda', resumen: 'Horarios libres, registro y confirmación dentro de la conversación.' },
-  { clave: 'encuestas', ruta: `${RUTA_CRM}/encuestas`, menu: 'Encuestas y cierre', resumen: 'Cierre confirmado, satisfacción con botones y comentario.' },
-  { clave: 'bandeja', ruta: `${RUTA_CRM}/bandeja`, menu: 'Bandeja de asesores', resumen: 'Reparto, prioridad, plantillas y ayuda de la IA.' },
-  { clave: 'supervision', ruta: `${RUTA_CRM}/supervision`, menu: 'Supervisión', resumen: 'Indicadores, tiempos de atención y monitoreo en vivo.' },
-  { clave: 'reportes', ruta: `${RUTA_CRM}/reportes`, menu: 'Reportes y trazabilidad', resumen: 'Paneles con filtros, exportación y bitácora de todo.' },
-  { clave: 'administracion', ruta: `${RUTA_CRM}/administracion`, menu: 'Administración', resumen: 'Flujos, reglas, horarios y permisos, sin programar.' },
-  { clave: 'idiomas', ruta: `${RUTA_CRM}/idiomas`, menu: 'Idiomas y accesibilidad', resumen: 'Responde en el idioma de quien escribe y se usa con teclado.' },
-  { clave: 'integraciones', ruta: `${RUTA_CRM}/integraciones`, menu: 'Integraciones', resumen: 'API, webhooks y conectores que se enlazan al implementar.' },
-  { clave: 'seguridad', ruta: `${RUTA_CRM}/seguridad`, menu: 'Seguridad y privacidad', resumen: 'Cifrado, acceso, bitácora y qué pasa con los datos personales.' },
-  { clave: 'disponibilidad', ruta: `${RUTA_CRM}/disponibilidad`, menu: 'Disponibilidad', resumen: 'Lo que se mide en público y lo que se pacta por contrato.' },
-  { clave: 'preguntas', ruta: `${RUTA_CRM}/preguntas`, menu: 'Preguntas frecuentes', resumen: 'Las dudas directas, con respuesta directa.' },
+/**
+ * Las tres partes en que se agrupan las páginas. Preguntas frecuentes queda
+ * fuera de las tres: no es una parte del producto.
+ */
+export const CATEGORIAS_CRM = [
+  { clave: 'atencion', nombre: 'Atención', resumen: 'Por dónde te escribe la gente y cómo se le contesta.' },
+  { clave: 'operacion', nombre: 'Operación', resumen: 'Cómo trabaja tu equipo cada conversación y cada solicitud.' },
+  { clave: 'plataforma', nombre: 'Plataforma', resumen: 'Cómo se administra, se conecta, se protege y se mantiene en pie.' },
 ] as const;
+
+export type ClaveCategoriaCrm = (typeof CATEGORIAS_CRM)[number]['clave'];
+
+/** En el orden en que se muestran: por categoría, y preguntas al final. */
+export const PAGINAS_CRM = [
+  { clave: 'chatbot-whatsapp', categoria: 'atencion', ruta: `${RUTA_CRM}/chatbot-whatsapp`, menu: 'Chatbot y WhatsApp', resumen: 'Conversación abierta o guiada, en cada canal.' },
+  { clave: 'chat-web', categoria: 'atencion', ruta: `${RUTA_CRM}/chat-web`, menu: 'Chat web', resumen: 'Una ventana en tu página, con tu marca y tu horario.' },
+  { clave: 'documentos', categoria: 'atencion', ruta: `${RUTA_CRM}/documentos`, menu: 'Documentos y OCR', resumen: 'Recibe, lee y revisa documentos, y responde desde los tuyos.' },
+  { clave: 'idiomas', categoria: 'atencion', ruta: `${RUTA_CRM}/idiomas`, menu: 'Idiomas y accesibilidad', resumen: 'Responde en el idioma de quien escribe y se usa con teclado.' },
+  { clave: 'bandeja', categoria: 'operacion', ruta: `${RUTA_CRM}/bandeja`, menu: 'Bandeja de asesores', resumen: 'Reparto, prioridad, plantillas y ayuda de la IA.' },
+  { clave: 'supervision', categoria: 'operacion', ruta: `${RUTA_CRM}/supervision`, menu: 'Supervisión', resumen: 'Indicadores, tiempos de atención y monitoreo en vivo.' },
+  { clave: 'seguimiento', categoria: 'operacion', ruta: `${RUTA_CRM}/seguimiento`, menu: 'Solicitudes y seguimiento', resumen: 'Número propio, consulta segura del estado y avisos de cada cambio.' },
+  { clave: 'citas', categoria: 'operacion', ruta: `${RUTA_CRM}/citas`, menu: 'Citas y agenda', resumen: 'Horarios libres, registro y confirmación dentro de la conversación.' },
+  { clave: 'encuestas', categoria: 'operacion', ruta: `${RUTA_CRM}/encuestas`, menu: 'Encuestas y cierre', resumen: 'Cierre confirmado, satisfacción con botones y comentario.' },
+  { clave: 'reportes', categoria: 'operacion', ruta: `${RUTA_CRM}/reportes`, menu: 'Reportes y trazabilidad', resumen: 'Paneles con filtros, exportación y bitácora de todo.' },
+  { clave: 'administracion', categoria: 'plataforma', ruta: `${RUTA_CRM}/administracion`, menu: 'Administración', resumen: 'Flujos, reglas, horarios y permisos, sin programar.' },
+  { clave: 'integraciones', categoria: 'plataforma', ruta: `${RUTA_CRM}/integraciones`, menu: 'Integraciones', resumen: 'Catálogo de sistemas con los que se conecta al implementar.' },
+  { clave: 'seguridad', categoria: 'plataforma', ruta: `${RUTA_CRM}/seguridad`, menu: 'Seguridad y privacidad', resumen: 'Cifrado, acceso, bitácora y qué pasa con los datos personales.' },
+  { clave: 'disponibilidad', categoria: 'plataforma', ruta: `${RUTA_CRM}/disponibilidad`, menu: 'Disponibilidad', resumen: 'Lo que se mide en público y lo que se pacta por contrato.' },
+  { clave: 'preguntas', categoria: null, ruta: `${RUTA_CRM}/preguntas`, menu: 'Preguntas frecuentes', resumen: 'Las dudas directas, con respuesta directa.' },
+] as const;
+
+export type PaginaCrm = (typeof PAGINAS_CRM)[number];
+
+/** Las páginas de cada categoría, en orden. Lo usan el menú, el pie, las tarjetas y los textos para IA. */
+export function paginasPorCategoria() {
+  return CATEGORIAS_CRM.map(c => ({ ...c, paginas: PAGINAS_CRM.filter(p => p.categoria === c.clave) }));
+}
+
+/** Las páginas que no son de ninguna categoría: hoy, preguntas frecuentes. */
+export const PAGINAS_SIN_CATEGORIA = PAGINAS_CRM.filter(p => p.categoria === null);
 
 export type ClaveCrm = (typeof PAGINAS_CRM)[number]['clave'];
 

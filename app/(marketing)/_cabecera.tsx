@@ -22,7 +22,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LogoZero } from '@/components/marca-zero';
 import { CONTACTO, Contenedor, Flecha, IconoWhatsApp, Iconos } from './_piezas';
-import { ENLACE_CRM, ENLACE_ERP, ENTRADAS_CRM, MODULOS, SECCIONES } from './_menu';
+import { ENLACE_CRM, ENLACE_ERP, ENTRADAS_CRM_SUELTAS, GRUPOS_CRM, MODULOS, SECCIONES } from './_menu';
 
 /**
  * La barra: ERP y CRM con su desplegable, y estos cuatro sueltos.
@@ -300,28 +300,49 @@ export function CabeceraMarketing() {
                     <Flecha tamano={13} className="ml-auto shrink-0 text-zero-600" />
                   </Link>
 
-                  <p className="m-0 px-2 pb-2 pt-3 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#666d80]">
-                    Por partes
-                  </p>
-                  <div className="grid grid-cols-3 gap-1">
-                    {ENTRADAS_CRM.map(m => (
+                  {/* Las tres categorías, una por columna; preguntas frecuentes va abajo, fuera de ellas. */}
+                  <div className="mt-3 grid grid-cols-3 gap-3">
+                    {GRUPOS_CRM.map(g => (
+                      <div key={g.clave} className="min-w-0">
+                        <p className="m-0 px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#666d80]">
+                          {g.titulo}
+                        </p>
+                        <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+                          {g.entradas.map(m => (
+                            <li key={m.href}>
+                              <Link
+                                href={m.href}
+                                onClick={crm.cerrar}
+                                className="flex min-w-0 gap-2.5 rounded-[12px] p-2.5 transition hover:bg-[#f4f7fe]"
+                              >
+                                <span className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-[#edf1fe] text-zero-600">
+                                  <m.icono className="size-[15px]" />
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block text-pretty font-[family-name:var(--font-display)] text-[13px] font-semibold tracking-[-.015em] text-[#102a72]">
+                                    {m.titulo}
+                                  </span>
+                                  <span className="mt-0.5 block text-pretty text-[11px] leading-[1.4] text-[#6b7280]">
+                                    {m.detalle}
+                                  </span>
+                                </span>
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex gap-2 border-t border-[#eef1f8] pt-2">
+                    {ENTRADAS_CRM_SUELTAS.map(m => (
                       <Link
                         key={m.href}
                         href={m.href}
                         onClick={crm.cerrar}
-                        className="flex min-w-0 gap-3 rounded-[13px] p-3 transition hover:bg-[#f4f7fe]"
+                        className="flex items-center gap-2 rounded-[10px] px-2.5 py-2 text-[12.5px] font-semibold text-[#102a72] transition hover:bg-[#f4f7fe]"
                       >
-                        <span className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-[#edf1fe] text-zero-600">
-                          <m.icono className="size-[17px]" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block text-pretty font-[family-name:var(--font-display)] text-[13.5px] font-semibold tracking-[-.015em] text-[#102a72]">
-                            {m.titulo}
-                          </span>
-                          <span className="mt-1 block text-pretty text-[11.5px] leading-[1.45] text-[#6b7280]">
-                            {m.detalle}
-                          </span>
-                        </span>
+                        <m.icono className="size-[14px] text-zero-600" />
+                        {m.titulo}
                       </Link>
                     ))}
                   </div>
@@ -436,17 +457,24 @@ export function CabeceraMarketing() {
               </span>
               Zero CRM
             </Link>
-            {ENTRADAS_CRM.map(m => (
-              <Link
-                key={m.href}
-                href={m.href}
-                className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-[#3b4252]"
-              >
-                <span className="grid size-7 shrink-0 place-items-center rounded-[9px] bg-[#edf1fe] text-zero-600">
-                  <m.icono className="size-[15px]" />
-                </span>
-                {m.titulo}
-              </Link>
+            {[...GRUPOS_CRM, { clave: 'mas', titulo: '', entradas: ENTRADAS_CRM_SUELTAS }].map(g => (
+              <div key={g.clave} className="flex flex-col">
+                {g.titulo && (
+                  <p className="m-0 px-3 pb-1 pt-2.5 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#666d80]">{g.titulo}</p>
+                )}
+                {g.entradas.map(m => (
+                  <Link
+                    key={m.href}
+                    href={m.href}
+                    className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-[#3b4252]"
+                  >
+                    <span className="grid size-7 shrink-0 place-items-center rounded-[9px] bg-[#edf1fe] text-zero-600">
+                      <m.icono className="size-[15px]" />
+                    </span>
+                    {m.titulo}
+                  </Link>
+                ))}
+              </div>
             ))}
 
             <div className="mt-2 border-t border-[#f0f3fa] pt-2" />
