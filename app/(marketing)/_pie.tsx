@@ -114,15 +114,15 @@ export function PieMarketing() {
         </div>
 
         <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-white/10 py-5">
-          <span className="text-[11.5px] text-white/40">
+          <span className="text-[11.5px] text-white/65">
             © {new Date().getFullYear()} Zero · Yisrael Technology LLC
           </span>
-          <span className="text-[11.5px] text-white/40">
+          <span className="text-[11.5px] text-white/65">
             Ventas: lun a vie 8:00–17:00 · Soporte: 7:00–24:00
           </span>
           <span className="flex-1" />
-          <Link href="/privacidad" className="text-[11.5px] text-white/40 transition hover:text-white">Privacidad</Link>
-          <Link href="/terminos" className="text-[11.5px] text-white/40 transition hover:text-white">Términos</Link>
+          <Link href="/privacidad" className="text-[11.5px] text-white/65 transition hover:text-white">Privacidad</Link>
+          <Link href="/terminos" className="text-[11.5px] text-white/65 transition hover:text-white">Términos</Link>
         </div>
       </Contenedor>
     </footer>

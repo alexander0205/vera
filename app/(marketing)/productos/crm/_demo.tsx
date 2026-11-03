@@ -189,7 +189,7 @@ export function DemoConversacion() {
           })}
 
           {!terminado && (
-            <span className="flex w-[52px] items-center justify-center gap-1 self-end rounded-2xl bg-[#edf1fe] px-3 py-3" aria-label="escribiendo">
+            <span role="status" className="flex w-[52px] items-center justify-center gap-1 self-end rounded-2xl bg-[#edf1fe] px-3 py-3" aria-label="escribiendo">
               {[0, 1, 2].map(i => (
                 <span
                   key={i}

@@ -13,7 +13,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { urlDelSitio } from '@/lib/config/enlaces';
-import { PAGINAS_CRM, CRM_ACTUALIZADA, RUTA_CRM, RUTA_CRM_MD, type ClaveCrm } from '@/lib/agentes/crm-rutas';
+import { PAGINAS_CRM, CRM_ACTUALIZADA, RUTA_CRM, type ClaveCrm } from '@/lib/agentes/crm-rutas';
 import { ESTADOS, fechaCrm, subpaginaCrm, type EstadoCrm } from '@/lib/agentes/crm';
 import { DatosDePagina, DatosDeRuta } from '../../_datos-estructurados';
 import { Contenedor, Flecha } from '../../_piezas';
@@ -107,25 +107,31 @@ export function TarjetasCrm({ excluir }: { excluir?: ClaveCrm }) {
   );
 }
 
-/** `metadata` de una subpágina: título, descripción, canónica y el gemelo en texto. */
+/** El `<title>` completo de una subpágina. Va entero (sin la plantilla « · Zero») y no pasa de 60 caracteres. */
+export const tituloDeSubpagina = (clave: ClaveCrm) => `${subpaginaCrm(clave).tituloSeo} · Zero CRM`;
+
+/** `metadata` de una subpágina: título, descripción, canónica, su gemelo en texto y su imagen para compartir. */
 export function metadataDeSubpagina(clave: ClaveCrm): Metadata {
   const p = subpaginaCrm(clave);
+  const titulo = tituloDeSubpagina(clave);
+  const imagen = { url: `/og/crm/${clave}`, width: 1200, height: 630, alt: `${p.menu} · Zero CRM` };
   return {
-    title: p.tituloSeo,
+    title: { absolute: titulo },
     description: p.descripcion,
     keywords: [...p.palabras],
     alternates: {
       canonical: p.ruta,
-      // El gemelo en texto: la versión que le cuesta menos leer a un asistente.
-      types: { 'text/markdown': RUTA_CRM_MD },
+      // El gemelo en texto de ESTA página: la versión que le cuesta menos leer a un asistente.
+      types: { 'text/markdown': `${p.ruta}.md` },
     },
     openGraph: {
       type: 'website',
       url: urlDelSitio(p.ruta),
-      title: p.tituloSeo,
+      title: titulo,
       description: p.descripcion,
-      images: [{ url: p.captura?.src ?? '/home/capturas/crm-panel.png', width: 1440, height: 900, alt: p.captura?.alt ?? 'Panel de Zero CRM' }],
+      images: [imagen],
     },
+    twitter: { card: 'summary_large_image', title: titulo, description: p.descripcion, images: [imagen.url] },
   };
 }
 
@@ -147,9 +153,10 @@ function Migas({ titulo }: { titulo: string }) {
 
 /**
  * Una subpágina completa. `children` reemplaza los grupos de funciones: lo usa la
- * de preguntas frecuentes, que no es una lista de funciones.
+ * de preguntas frecuentes, que no es una lista de funciones. `modulo` es el
+ * ejemplo que se toca, y va antes de la lista para que se vea sin bajar.
  */
-export function Subpagina({ clave, children }: { clave: ClaveCrm; children?: React.ReactNode }) {
+export function Subpagina({ clave, modulo, children }: { clave: ClaveCrm; modulo?: React.ReactNode; children?: React.ReactNode }) {
   const p = subpaginaCrm(clave);
 
   return (
@@ -171,10 +178,20 @@ export function Subpagina({ clave, children }: { clave: ClaveCrm; children?: Rea
           <LeyendaEstados />
           <p className="m-0 mt-3 text-[12px] text-[#666d80]">
             Actualizada el <time dateTime={CRM_ACTUALIZADA}>{fechaCrm()}</time>.{' '}
-            <a href={RUTA_CRM_MD} className="underline transition hover:text-zero-600">Versión en texto</a>.
+            <a href={`${p.ruta}.md`} className="underline transition hover:text-zero-600">Versión en texto</a>.
           </p>
         </Contenedor>
       </section>
+
+      {modulo && (
+        <section aria-label={`Pruébalo: ${p.menu}`}>
+          <Contenedor className="pt-14 sm:pt-[68px]">
+            <Antetitulo>Pruébalo</Antetitulo>
+            <Titulo className="mt-3.5">Así se ve, con datos ficticios.</Titulo>
+            <div className="mt-7">{modulo}</div>
+          </Contenedor>
+        </section>
+      )}
 
       {children ?? p.grupos.map(g => (
         <section key={g.titulo}>

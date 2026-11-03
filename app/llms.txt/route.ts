@@ -1,10 +1,11 @@
-import { ADDONS, LINEAS_PRODUCTO, PRODUCTOS_APARTE, lineaBajoCotizacion, planesDeLinea } from '@/lib/config/plans';
+import { preciosAdicionales, preciosDeLineas } from '@/lib/agentes/precios';
 import { CONTACTO } from '@/app/(marketing)/_piezas';
 import { GUIAS } from '@/app/(marketing)/guias/page';
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
 import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 import { ALTA, CONECTOR, RUTA_AGENTES_MD, RUTA_FUNCIONES_MD, textoDeLaPrueba } from '@/lib/agentes/contenido';
-import { PAGINAS_CRM, RUTA_CRM_MD } from '@/lib/agentes/crm-rutas';
+import { PAGINAS_CRM, RUTA_CRM_MD, RUTA_LLMS_FULL, RUTA_MCP_PUBLICO } from '@/lib/agentes/crm-rutas';
+import { RUTA_CAPACIDADES } from '@/lib/agentes/crm-capacidades';
 
 /**
  * `/llms.txt` — el sitio resumido para quien lo lee con un modelo.
@@ -26,29 +27,6 @@ import { PAGINAS_CRM, RUTA_CRM_MD } from '@/lib/agentes/crm-rutas';
  */
 
 export const dynamic = 'force-static';
-
-const usd = (n: number) => `US$${n}`;
-
-function lineas(): string {
-  return LINEAS_PRODUCTO.map(l => {
-    if (lineaBajoCotizacion(l.key)) {
-      return `- **${l.nombre}** — ${l.descripcion} Precio bajo cotización.`;
-    }
-    const planes = planesDeLinea(l.key);
-    const detalle = planes.map(({ plan, precio }) => `${plan.name} ${usd(precio)}/mes`).join(' · ');
-    return `- **${l.nombre}** — ${l.descripcion}\n  ${detalle}`;
-  }).join('\n');
-}
-
-function adicionales(): string {
-  const sueltos = ADDONS.map(a => {
-    const incluido = a.incluidoEn.length > 0 ? ` (incluido en ${a.incluidoEn.join(', ')})` : '';
-    return `- **${a.name}** — +${usd(a.price)}/mes. ${a.descripcion}${incluido}`;
-  });
-  const aparte = PRODUCTOS_APARTE.map(p =>
-    `- **${p.nombre}** — ${p.descripcion} Se contrata aparte de los planes; precio bajo cotización.`);
-  return [...sueltos, ...aparte].join('\n');
-}
 
 function paginasCrm(): string {
   return PAGINAS_CRM.map(p => `  - [${p.menu}](${SITIO_PUBLICO}${p.ruta}): ${p.resumen}`).join('\n');
@@ -81,16 +59,19 @@ Zero es un producto de Yisrael Technology. Opera en República Dominicana, en es
 - [Zero para agentes](${SITIO_PUBLICO}${RUTA_AGENTES_MD}): qué puede hacer hoy un agente con Zero, cómo se conecta y con qué reglas.
 - [Todas las funciones](${SITIO_PUBLICO}${RUTA_FUNCIONES_MD}): el sistema entero, módulo por módulo, con lo que no hace.
 - [Zero CRM por partes](${SITIO_PUBLICO}${RUTA_CRM_MD}): cada función con su estado, en texto.
+- [Zero CRM, todo el texto](${SITIO_PUBLICO}${RUTA_LLMS_FULL}): las subpáginas, las preguntas y los precios en un archivo. Cada subpágina tiene además su versión en texto: su dirección terminada en \`.md\`.
+- [Capacidades de Zero CRM en JSON](${SITIO_PUBLICO}${RUTA_CAPACIDADES}): cada capacidad con su estado, su página y las funciones que cubre, con su esquema.
+- Servidor MCP público del sitio, de solo lectura, sin clave y sin datos de clientes: \`${SITIO_PUBLICO}${RUTA_MCP_PUBLICO}\` (HTTP con streaming). Herramientas: listar_paginas, leer_pagina, buscar_capacidades, estado_capacidad, catalogo_funciones y precios. En un cliente MCP: \`{"mcpServers":{"zero":{"url":"${SITIO_PUBLICO}${RUTA_MCP_PUBLICO}"}}}\`.
 - Conector MCP, de solo lectura: \`${CONECTOR.url}\`. Se usa con una llave por empresa (\`${CONECTOR.cabecera}\`).
 - Crear una empresa: la crea una persona en ${ALTA.url}. Prueba gratis: ${textoDeLaPrueba()}.
 
 ## Productos
 
-${lineas()}
+${preciosDeLineas()}
 
 ## Adicionales y productos aparte
 
-${adicionales()}
+${preciosAdicionales()}
 
 ## Páginas
 

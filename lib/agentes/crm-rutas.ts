@@ -12,6 +12,12 @@
 export const RUTA_CRM = '/productos/crm';
 export const RUTA_CRM_MD = '/productos/crm.md';
 
+/** El MCP público del sitio: solo lectura, sin clave y sin datos de clientes. */
+export const RUTA_MCP_PUBLICO = '/api/mcp-publico';
+
+/** Todo el texto del CRM en un archivo, para quien lo lee con un modelo. */
+export const RUTA_LLMS_FULL = '/llms-full.txt';
+
 /** Se cambia al tocar los textos de `crm.ts`: es la fecha que se ve en cada página. */
 export const CRM_ACTUALIZADA = '2026-11-03';
 

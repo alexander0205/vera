@@ -43,9 +43,10 @@ import { CifrasIA } from './_cifras';
 import { LeyendaEstados, NavCrm, TarjetasCrm } from './_subpagina';
 
 export const metadata: Metadata = {
-  title: 'Zero CRM — agentes de inteligencia artificial que atienden por WhatsApp, web y teléfono',
+  // Corto a propósito (60 y 155 caracteres): lo largo lo corta el buscador. Lo demás lo dice la página.
+  title: 'Zero CRM: agentes de IA para WhatsApp, web y teléfono',
   description:
-    'CRM con inteligencia artificial: agentes que contestan al instante por WhatsApp, Messenger, Instagram, correo, tu web y el teléfono; verifican identidad, agendan, cobran, responden desde tus documentos y se integran con los sistemas que ya usas. Con tickets y turnos.',
+    'Agentes de IA que contestan por WhatsApp, redes, correo, web y teléfono: verifican identidad, agendan, cobran y responden desde tus documentos.',
   keywords: [
     'CRM con inteligencia artificial', 'agente de IA para WhatsApp', 'chatbot con IA República Dominicana',
     'atención al cliente con inteligencia artificial', 'agente de voz para llamadas', 'WhatsApp Business API',

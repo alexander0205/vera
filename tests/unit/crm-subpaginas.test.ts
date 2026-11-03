@@ -11,8 +11,11 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { CONTENIDO_CRM, ESTADOS, PREGUNTAS_CRM, crmMarkdown } from '@/lib/agentes/crm';
-import { PAGINAS_CRM, RUTA_CRM } from '@/lib/agentes/crm-rutas';
+import { CONTENIDO_CRM, ESTADOS, PREGUNTAS_CRM, crmMarkdown, subpaginaMarkdown } from '@/lib/agentes/crm';
+import { FUNCIONES_CRM, buscarCapacidades, capacidadesCrm, capacidadesJson } from '@/lib/agentes/crm-capacidades';
+import { GET as llmsFull } from '@/app/llms-full.txt/route';
+import robots from '@/app/robots';
+import { PAGINAS_CRM, RUTA_CRM, RUTA_MCP_PUBLICO } from '@/lib/agentes/crm-rutas';
 import sitemap from '@/app/sitemap';
 import { GET as llms } from '@/app/llms.txt/route';
 
@@ -116,5 +119,64 @@ describe('lo que leen los robots', () => {
   it('las cifras del CRM salen en el HTML inicial, no solo al animarse', () => {
     const fuente = readFileSync(join(process.cwd(), 'app/(marketing)/productos/crm/_cifras.tsx'), 'utf8');
     expect(fuente).toContain('useState(cifra.valor)');
+  });
+});
+
+describe('buscadores', () => {
+  it('cada subpágina tiene un título de 60 caracteres o menos y una descripción de 155 o menos', () => {
+    const titulos = new Set<string>();
+    for (const p of PAGINAS_CRM) {
+      const c = CONTENIDO_CRM[p.clave];
+      const titulo = `${c.tituloSeo} · Zero CRM`;
+      expect(titulo.length, titulo).toBeLessThanOrEqual(60);
+      expect(c.descripcion.length, c.descripcion).toBeLessThanOrEqual(155);
+      titulos.add(titulo);
+    }
+    expect(titulos.size).toBe(PAGINAS_CRM.length);
+  });
+});
+
+describe('lo que leen los asistentes de IA', () => {
+  it('cada capacidad apunta a funciones que existen, y el catálogo entero está cubierto', () => {
+    const numeros = new Set(FUNCIONES_CRM.map(f => f.numero));
+    const cubiertas = new Set<number>();
+    for (const c of capacidadesCrm()) {
+      for (const n of c.funciones) { expect(numeros.has(n), `${c.id} → ${n}`).toBe(true); cubiertas.add(n); }
+    }
+    for (const n of numeros) expect(cubiertas.has(n), `función ${n} sin capacidad`).toBe(true);
+  });
+
+  it('solo los conectores a medida quedan sin función del catálogo', () => {
+    const sin = capacidadesCrm().filter(c => c.funciones.length === 0).map(c => c.id);
+    expect(sin).toEqual(['integraciones.conectores-nuevos']);
+  });
+
+  it('cada subpágina tiene su versión en texto, con su dirección y sin palabras de un expediente', () => {
+    for (const p of PAGINAS_CRM) {
+      const md = subpaginaMarkdown(p.clave);
+      expect(md, p.clave).toContain(p.ruta);
+      expect(md, p.clave).not.toMatch(PROHIBIDO);
+    }
+  });
+
+  it('capacidades.json y llms-full.txt no nombran expedientes ni instituciones', async () => {
+    expect(JSON.stringify(capacidadesJson())).not.toMatch(PROHIBIDO);
+    const texto = await llmsFull().text();
+    expect(texto).not.toMatch(PROHIBIDO);
+    expect(texto).toContain(RUTA_MCP_PUBLICO);
+  });
+
+  it('la búsqueda encuentra sin acentos y filtra por estado', () => {
+    expect(buscarCapacidades('encuesta').length).toBeGreaterThan(0);
+    for (const c of buscarCapacidades('', 'implementar')) expect(c.estado).toBe('implementar');
+  });
+
+  it('robots deja entrar al MCP público y a los rastreadores de IA', async () => {
+    const r = robots();
+    const reglas = Array.isArray(r.rules) ? r.rules : [r.rules];
+    expect(reglas.some(x => x.userAgent === 'ClaudeBot')).toBe(true);
+    for (const x of reglas) expect([x.allow].flat()).toContain(RUTA_MCP_PUBLICO);
+    const texto = await llms().text();
+    expect(texto).toContain(RUTA_MCP_PUBLICO);
   });
 });

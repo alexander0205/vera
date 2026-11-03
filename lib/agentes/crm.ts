@@ -21,7 +21,7 @@
  */
 
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
-import { CRM_ACTUALIZADA, PAGINAS_CRM, RUTA_CRM, RUTA_CRM_MD, type ClaveCrm, paginaCrm } from './crm-rutas';
+import { CRM_ACTUALIZADA, PAGINAS_CRM, RUTA_CRM, RUTA_CRM_MD, RUTA_LLMS_FULL, RUTA_MCP_PUBLICO, type ClaveCrm, paginaCrm } from './crm-rutas';
 
 /** Dónde vive la aplicación del CRM: su estado público y su política de privacidad. */
 const APP_CRM = 'https://crm.zero.com.do';
@@ -60,7 +60,7 @@ export type ContenidoCrm = {
 
 export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
   'chatbot-whatsapp': {
-    tituloSeo: 'Chatbot con IA para WhatsApp y otros canales — Zero CRM',
+    tituloSeo: 'Chatbot con IA para WhatsApp y otros canales',
     descripcion: 'Chatbot con inteligencia artificial para WhatsApp, Messenger, Instagram, correo y chat web: entiende lenguaje natural, guía, retoma y pasa a una persona.',
     palabras: ['chatbot con IA para WhatsApp', 'chatbot omnicanal', 'WhatsApp Business API', 'procesamiento de lenguaje natural', 'formularios conversacionales', 'consulta de solicitudes por WhatsApp'],
     encabezado: 'Un asistente que entiende cómo escribe la gente de verdad.',
@@ -100,7 +100,7 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
   },
 
   'chat-web': {
-    tituloSeo: 'Chat web con tu marca para tu sitio — Zero CRM',
+    tituloSeo: 'Chat web con tu marca para tu sitio',
     descripcion: 'Un chat para tu página con tu logo, tus colores y tu horario, que atiende con el mismo flujo que WhatsApp. Se instala con una línea y acepta archivos.',
     palabras: ['chat web para mi página', 'widget de chat con IA', 'chat con marca propia', 'chat accesible'],
     encabezado: 'Un chat en tu página que parece tuyo.',
@@ -132,7 +132,7 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
   },
 
   documentos: {
-    tituloSeo: 'Lectura de documentos (OCR) y base de conocimiento — Zero CRM',
+    tituloSeo: 'Lectura de documentos OCR y base de conocimiento',
     descripcion: 'Lee fotos y PDF dentro de la conversación, revisa su calidad y pide confirmar lo leído. Responde desde tus documentos cargados, con registro de la fuente.',
     palabras: ['OCR en WhatsApp', 'lectura de documentos con IA', 'validación de documentos', 'base de conocimiento', 'respuestas desde documentos'],
     encabezado: 'Recibe, lee y revisa documentos dentro de la conversación.',
@@ -159,8 +159,8 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
   },
 
   seguimiento: {
-    tituloSeo: 'Seguimiento de solicitudes por chat y WhatsApp — Zero CRM',
-    descripcion: 'Registra solicitudes desde la conversación con su número, deja consultar el estado de forma segura, avisa cada cambio y agrega documentos a la solicitud abierta.',
+    tituloSeo: 'Seguimiento de solicitudes por chat y WhatsApp',
+    descripcion: 'Solicitudes con su número desde la conversación, consulta segura del estado, aviso de cada cambio y documentos agregados a la solicitud abierta.',
     palabras: ['seguimiento de solicitudes por WhatsApp', 'consulta de estado de un caso', 'número de caso por chat', 'avisos de cambio de estado', 'gestión de reclamaciones'],
     encabezado: 'Cada solicitud con su número, y la persona sabe siempre en qué va.',
     bajada: 'Lo que se pide en la conversación queda como una solicitud con número propio. La persona consulta el estado cuando quiere, recibe un aviso cuando cambia y agrega lo que falte sin empezar otra vez.',
@@ -209,8 +209,8 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
   },
 
   citas: {
-    tituloSeo: 'Citas desde WhatsApp y el chat, con tu agenda — Zero CRM',
-    descripcion: 'Agenda citas dentro de la conversación: ofrece horarios libres, registra y confirma. Con la agenda del CRM y Google Calendar, o con tu sistema de turnos al implementar.',
+    tituloSeo: 'Citas desde WhatsApp y el chat, con tu agenda',
+    descripcion: 'Citas dentro de la conversación: horarios libres, registro y confirmación. Con la agenda del CRM y Google Calendar, o tu sistema de turnos.',
     palabras: ['agendar citas por WhatsApp', 'citas por chat', 'reservas con chatbot', 'integración con Google Calendar', 'sistema de turnos'],
     encabezado: 'La cita se agenda en la misma conversación.',
     bajada: 'La persona elige día y hora entre los horarios libres, recibe la confirmación por el mismo canal y la cita queda ligada a su conversación y a su solicitud.',
@@ -246,8 +246,8 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
   },
 
   encuestas: {
-    tituloSeo: 'Encuesta de satisfacción en el chat y cierre confirmado — Zero CRM',
-    descripcion: 'Antes de cerrar pregunta si quedó resuelto, mide la satisfacción con botones, recoge un comentario y guarda todo con la conversación. Puede enviar el resultado a tu plataforma de encuestas.',
+    tituloSeo: 'Encuesta de satisfacción y cierre confirmado',
+    descripcion: 'Pregunta si quedó resuelto, mide la satisfacción con botones, recoge un comentario y lo guarda con la conversación y la solicitud.',
     palabras: ['encuesta de satisfacción por WhatsApp', 'CSAT en chat', 'encuesta al cerrar la conversación', 'plantillas de cierre', 'medir la satisfacción del cliente'],
     encabezado: 'Se cierra cuando la persona confirma, y se mide cómo le fue.',
     bajada: 'Antes de despedirse, el asistente pregunta si quedó resuelto. Después mide la satisfacción en el mismo canal y guarda la respuesta junto a la conversación y la solicitud.',
@@ -281,8 +281,8 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
   },
 
   reportes: {
-    tituloSeo: 'Reportes, exportación y trazabilidad de la atención — Zero CRM',
-    descripcion: 'Paneles con filtros por fecha, asesor, canal y tipo, el detalle de cada interacción por su identificador, exportación en formatos estándar y una bitácora que solo admite agregar.',
+    tituloSeo: 'Reportes, exportación y trazabilidad',
+    descripcion: 'Paneles con filtros por fecha, asesor y canal, detalle de cada interacción, exportación en formatos estándar y una bitácora protegida.',
     palabras: ['reportes de atención al cliente', 'exportar conversaciones a Excel', 'trazabilidad de interacciones', 'bitácora de auditoría', 'indicadores de chat'],
     encabezado: 'Todo lo que pasó, con fecha, autor e identificador.',
     bajada: 'Los paneles resumen la atención y dejan bajar hasta cada conversación. Lo que se exporta respeta los permisos y queda registrado.',
@@ -315,8 +315,8 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
   },
 
   administracion: {
-    tituloSeo: 'Administración del chatbot sin programar — Zero CRM',
-    descripcion: 'Flujos, respuestas, plantillas, horarios, metas de tiempo, reparto y roles se editan desde pantallas, con versiones, publicación controlada y registro de cada cambio.',
+    tituloSeo: 'Administración del chatbot sin programar',
+    descripcion: 'Flujos, respuestas, plantillas, horarios, metas de tiempo y roles se editan desde pantallas, con versiones y registro de cada cambio.',
     palabras: ['editor visual de flujos', 'administrar un chatbot sin código', 'roles y permisos', 'SLA configurable', 'versiones de flujos'],
     encabezado: 'Lo cambias tú, desde pantallas, y queda registrado.',
     bajada: 'Flujos, respuestas, reglas y permisos se ajustan sin programar. Cada cambio guarda quién lo hizo y cuándo, y se puede volver a una versión anterior.',
@@ -352,8 +352,8 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
   },
 
   idiomas: {
-    tituloSeo: 'Chatbot multilingüe y accesible — Zero CRM',
-    descripcion: 'Reconoce el idioma de quien escribe y contesta en él; el asesor lee la traducción y responde en español. El chat y la bandeja se revisan con pautas de accesibilidad y se usan con teclado.',
+    tituloSeo: 'Chatbot multilingüe y accesible',
+    descripcion: 'Contesta en el idioma de quien escribe y el asesor lee la traducción. Pantallas revisadas con pautas de accesibilidad y uso con teclado.',
     palabras: ['chatbot multilingüe', 'traducción automática en el chat', 'atención en inglés y francés', 'chat accesible', 'WCAG'],
     encabezado: 'Atiende en el idioma de quien escribe, y se puede usar sin ratón.',
     bajada: 'El asistente reconoce el idioma y responde en él. Tu equipo trabaja en español y ve cada mensaje traducido. Y las pantallas se revisan con pautas de accesibilidad.',
@@ -387,8 +387,8 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
   },
 
   bandeja: {
-    tituloSeo: 'Bandeja de asesores con reparto y ayuda de IA — Zero CRM',
-    descripcion: 'Lo que el bot no resuelve llega a tu equipo con el contexto completo: reparto por topes, prioridad automática, plantillas, respuestas sugeridas y corrector.',
+    tituloSeo: 'Bandeja de asesores con reparto y ayuda de IA',
+    descripcion: 'Lo que el bot no resuelve llega a tu equipo con contexto: reparto por topes, prioridad automática, plantillas, respuestas sugeridas y corrector.',
     palabras: ['bandeja de atención al cliente', 'consola de agentes', 'reparto de chats', 'prioridad de conversaciones', 'plantillas de respuesta', 'agent assist'],
     encabezado: 'Lo que el bot no resuelve llega a tu equipo con todo el contexto.',
     bajada: 'Quien atiende ve la conversación, los datos, los documentos y el historial en un solo sitio, con la IA ayudando al lado. Y las reglas de quién atiende qué las pones tú.',
@@ -424,7 +424,7 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
   },
 
   supervision: {
-    tituloSeo: 'Supervisión en vivo, indicadores y tiempos de atención — Zero CRM',
+    tituloSeo: 'Supervisión en vivo e indicadores de atención',
     descripcion: 'Indicadores con su definición, tiempos de atención con aviso, monitoreo en vivo, análisis de sentimiento, encuesta al cerrar y exportación con registro.',
     palabras: ['supervisión de chats en vivo', 'SLA de atención al cliente', 'análisis de sentimiento', 'indicadores de contact center', 'exportar conversaciones'],
     encabezado: 'Sabes cómo va la atención sin pedirle un reporte a nadie.',
@@ -457,7 +457,7 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
   },
 
   integraciones: {
-    tituloSeo: 'Integraciones, API y conectores con CRM y centro de contacto — Zero CRM',
+    tituloSeo: 'Integraciones, API y conectores',
     descripcion: 'API REST, webhooks y conectores por API para CRM y centro de contacto, como Dynamics y uContact, que se enlazan con el sistema del cliente al implementar.',
     palabras: ['integración de chatbot con CRM', 'conector Dynamics', 'conector uContact', 'Microsoft Bookings', 'API REST WhatsApp', 'webhooks', 'integración SIEM'],
     encabezado: 'API, webhooks y conectores para enlazarte con tus sistemas.',
@@ -494,12 +494,17 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
         titulo: 'Lo que debes saber',
         texto: 'Estos conectores se han probado contra ambientes simulados, no contra instalaciones de clientes. Todavía no están en operación con ningún cliente. La conexión real se ajusta y se prueba con tu sistema, y una instalación dentro de tu red puede requerir VPN o un agente puente. Los nombres de productos son de sus dueños; mencionarlos no implica relación con ellos.',
       },
+      {
+        titulo: 'Para asistentes de IA',
+        texto: `Este contenido se puede leer, bajar o conectar desde un asistente de IA. Cada página tiene su versión en texto (agrega .md a la dirección), todo junto está en ${SITIO_PUBLICO}${RUTA_LLMS_FULL}, cada capacidad con su estado está en ${SITIO_PUBLICO}${RUTA_CRM}/capacidades.json, y hay un servidor MCP público de solo lectura, sin clave y sin datos de clientes, en ${SITIO_PUBLICO}${RUTA_MCP_PUBLICO}.`,
+        enlace: { texto: 'Ver las capacidades en JSON', href: `${RUTA_CRM}/capacidades.json` },
+      },
     ],
   },
 
   seguridad: {
-    tituloSeo: 'Seguridad y privacidad — Zero CRM',
-    descripcion: 'Cifrado en tránsito y guardado, roles, doble factor, inicio único por OIDC, bitácora y cómo se tratan los datos personales. Y lo que todavía no podemos afirmar.',
+    tituloSeo: 'Seguridad y privacidad',
+    descripcion: 'Cifrado en tránsito y guardado, roles, doble factor, inicio único OIDC, bitácora y trato de datos personales. Y lo que aún no podemos afirmar.',
     palabras: ['seguridad chatbot', 'doble factor', 'inicio de sesión único OIDC', 'bitácora de auditoría', 'protección de datos personales', 'Ley 172-13'],
     encabezado: 'Cómo protegemos la información, y lo que todavía no podemos afirmar.',
     bajada: 'Lo que hace el producto, con su estado, y sin adornos: qué está cifrado y qué no lleva un cifrado adicional, qué se enciende por negocio y qué certificaciones hay.',
@@ -549,8 +554,8 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
   },
 
   disponibilidad: {
-    tituloSeo: 'Disponibilidad y continuidad — Zero CRM',
-    descripcion: 'Estado público del servicio, monitoreo cada 5 minutos, qué pasa si algo falla y cómo se pacta un compromiso de disponibilidad sobre infraestructura dedicada.',
+    tituloSeo: 'Disponibilidad y continuidad',
+    descripcion: 'Estado público del servicio, monitoreo cada 5 minutos, qué pasa si algo falla y cómo se pacta la disponibilidad con infraestructura dedicada.',
     palabras: ['disponibilidad del servicio', 'continuidad del negocio', 'estado del servicio', 'escalabilidad chatbot'],
     encabezado: 'Lo que medimos en público y lo que se puede contratar.',
     bajada: 'La medición está a la vista de cualquiera. Y un compromiso de disponibilidad por contrato se pacta sobre infraestructura dedicada, con sus condiciones escritas.',
@@ -588,7 +593,7 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
   },
 
   preguntas: {
-    tituloSeo: 'Preguntas frecuentes — Zero CRM',
+    tituloSeo: 'Preguntas frecuentes',
     descripcion: 'Respuestas directas sobre el chatbot, los canales, los documentos, las integraciones, la seguridad, la disponibilidad y el precio de Zero CRM.',
     palabras: ['preguntas frecuentes chatbot', 'chatbot con IA República Dominicana', 'cuánto cuesta un chatbot'],
     encabezado: 'Las dudas directas, con respuesta directa.',
@@ -624,6 +629,7 @@ export const PREGUNTAS_CRM: readonly PreguntaCrm[] = [
   { pregunta: '¿Qué disponibilidad ofrece?', respuesta: 'Publicamos la medición en la página de estado del servicio. Un compromiso por contrato se pacta sobre infraestructura dedicada, por ejemplo 99.9 % mensual, junto con objetivos de recuperación.' },
   { pregunta: '¿Ayuda a cumplir la Ley 172-13?', respuesta: 'Sí, con funciones como el consentimiento con fecha, el acceso por roles, la bitácora y la supresión de datos. El cumplimiento también depende de cómo lo use cada organización.' },
   { pregunta: '¿Para qué tipo de organización está pensado?', respuesta: 'Para quien recibe muchas consultas y trabaja con reglas claras: educación, salud, servicios, instituciones y sectores regulados. Es una orientación, no una lista de clientes.' },
+  { pregunta: '¿Puedo conectar un asistente de IA a esta información?', respuesta: `Sí. Hay un servidor MCP público de solo lectura en ${SITIO_PUBLICO}${RUTA_MCP_PUBLICO}, sin clave y sin datos de clientes, más la versión en texto de cada página y ${SITIO_PUBLICO}${RUTA_LLMS_FULL}.` },
   { pregunta: '¿Cuánto cuesta?', respuesta: 'Se cotiza según el volumen y lo que haya que conectar. Se contrata aparte de los planes de Zero.', destacada: true },
 ];
 
@@ -635,19 +641,50 @@ export function fechaCrm(iso: string = CRM_ACTUALIZADA): string {
   return new Date(anio, mes - 1, dia).toLocaleDateString('es-DO', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+/** Un enlace del sitio, absoluto: en texto plano un `/ruta` no lleva a ninguna parte. */
+const absoluta = (href: string) => (href.startsWith('/') ? `${SITIO_PUBLICO}${href}` : href);
+
+/** Una subpágina en Markdown: su bajada, sus grupos con el estado de cada función y sus notas. */
+function seccionMarkdown(clave: ClaveCrm, nivel: '#' | '##'): string {
+  const p = paginaCrm(clave);
+  const c = CONTENIDO_CRM[clave];
+  const grupos = c.grupos.map(g => {
+    const funciones = g.funciones.map(f => `- **${f.titulo}** (${ESTADOS[f.estado].nombre}): ${f.detalle}`).join('\n');
+    return `${nivel}# ${g.titulo}\n\n${g.detalle ? `${g.detalle}\n\n` : ''}${funciones}`;
+  }).join('\n\n');
+  const notas = (c.notas ?? []).map(n => `**${n.titulo}.** ${n.texto}${n.enlace ? ` ${n.enlace.texto}: ${absoluta(n.enlace.href)}` : ''}`).join('\n\n');
+  return `${nivel} ${p.menu}\n\n${c.bajada}\n\nPágina: ${SITIO_PUBLICO}${p.ruta}\n\n${grupos}${notas ? `\n\n${notas}` : ''}`;
+}
+
+function preguntasMarkdown(nivel: '##' | '###'): string {
+  return PREGUNTAS_CRM.map(q => `${nivel} ${q.pregunta}\n\n${q.respuesta}`).join('\n\n');
+}
+
+/** `/productos/crm/<página>.md`: una subpágina en texto limpio, con la leyenda de estados. */
+export function subpaginaMarkdown(clave: ClaveCrm): string {
+  const p = paginaCrm(clave);
+  const c = CONTENIDO_CRM[clave];
+  const estados = (Object.values(ESTADOS)).map(e => `- **${e.nombre}:** ${e.detalle}`).join('\n');
+  const cuerpo = clave === 'preguntas'
+    ? `# ${p.menu}\n\n${c.bajada}\n\nPágina: ${SITIO_PUBLICO}${p.ruta}\n\n${preguntasMarkdown('##')}`
+    : seccionMarkdown(clave, '#');
+  return `${cuerpo}
+
+## Qué significa cada estado
+
+${estados}
+
+---
+
+Zero CRM. Actualizado el ${fechaCrm()}. Todas las partes: ${SITIO_PUBLICO}${RUTA_CRM_MD} · Todo el texto: ${SITIO_PUBLICO}${RUTA_LLMS_FULL}
+`;
+}
+
 /** `/productos/crm.md`: las subpáginas en texto limpio, con el estado de cada función. */
 export function crmMarkdown(): string {
   const estados = (Object.values(ESTADOS)).map(e => `- **${e.nombre}:** ${e.detalle}`).join('\n');
-  const paginas = PAGINAS_CRM.filter(p => p.clave !== 'preguntas').map(p => {
-    const c = CONTENIDO_CRM[p.clave];
-    const grupos = c.grupos.map(g => {
-      const funciones = g.funciones.map(f => `- **${f.titulo}** (${ESTADOS[f.estado].nombre}): ${f.detalle}`).join('\n');
-      return `### ${g.titulo}\n\n${g.detalle ? `${g.detalle}\n\n` : ''}${funciones}`;
-    }).join('\n\n');
-    const notas = (c.notas ?? []).map(n => `**${n.titulo}.** ${n.texto}${n.enlace ? ` ${n.enlace.texto}: ${n.enlace.href}` : ''}`).join('\n\n');
-    return `## ${p.menu}\n\n${c.bajada}\n\nPágina: ${SITIO_PUBLICO}${p.ruta}\n\n${grupos}${notas ? `\n\n${notas}` : ''}`;
-  }).join('\n\n');
-  const preguntas = PREGUNTAS_CRM.map(q => `### ${q.pregunta}\n\n${q.respuesta}`).join('\n\n');
+  const paginas = PAGINAS_CRM.filter(p => p.clave !== 'preguntas').map(p => seccionMarkdown(p.clave, '##')).join('\n\n');
+  const preguntas = preguntasMarkdown('###');
 
   return `# Zero CRM, por partes
 
