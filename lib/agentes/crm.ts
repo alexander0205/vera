@@ -387,6 +387,130 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
     ],
   },
 
+  pipeline: {
+    tituloSeo: 'Pipeline de oportunidades con etapas',
+    descripcion: 'Tableros con las etapas de tu venta: tarjetas que se arrastran, responsable, prioridad, tareas, archivos, mensajes al cambiar de etapa y ganados.',
+    palabras: ['pipeline de ventas', 'CRM con kanban', 'embudo de ventas', 'oportunidades de venta', 'tablero de ventas con WhatsApp'],
+    encabezado: 'Cada oportunidad en su etapa, y nada se queda sin dueño.',
+    bajada: 'Las etapas las defines tú. Cada tarjeta lleva a la persona, quién la atiende, qué falta y qué se le ha dicho, y al moverla de etapa pueden salir solos los mensajes que toquen.',
+    grupos: [
+      {
+        titulo: 'El tablero',
+        funciones: [
+          { titulo: 'Etapas a tu medida', detalle: 'Varios tableros, con las columnas y el orden que uses para vender.', estado: 'disponible' },
+          { titulo: 'Arrastrar y soltar', detalle: 'La tarjeta se mueve de etapa arrastrándola, y el cambio queda en su historial.', estado: 'disponible' },
+          { titulo: 'Tablero armado con IA', detalle: 'Describes tu proceso y la IA arma las columnas y sus mensajes; después los ajustas.', estado: 'disponible' },
+        ],
+      },
+      {
+        titulo: 'La tarjeta',
+        funciones: [
+          { titulo: 'Responsable, prioridad y fecha', detalle: 'Quién la atiende, qué tan urgente es y para cuándo, con aviso antes de vencer.', estado: 'disponible' },
+          { titulo: 'Tareas', detalle: 'Lista de pasos por tarjeta, con los obligatorios marcados.', estado: 'disponible' },
+          { titulo: 'Archivos e imágenes', detalle: 'Adjuntos y fotos dentro de la tarjeta.', estado: 'disponible' },
+          { titulo: 'Contacto desde la tarjeta', detalle: 'Si la persona aún no tiene ficha, se crea desde la misma tarjeta.', estado: 'disponible' },
+          { titulo: 'Enlace directo', detalle: 'Cada tarjeta tiene su dirección para compartirla con el equipo.', estado: 'disponible' },
+        ],
+      },
+      {
+        titulo: 'Cerrar la venta',
+        funciones: [
+          { titulo: 'Interés detectado en el chat', detalle: 'El agente de IA registra la oportunidad cuando alguien dice que quiere comprar o contratar, con lo que necesita.', estado: 'activa' },
+          { titulo: 'Ganados', detalle: 'Una vista aparte con lo cerrado, con filtros y sus indicadores.', estado: 'disponible' },
+          { titulo: 'Cobro por enlace', detalle: 'Enlace de pago con CardNet o Azul. Se activa con las credenciales de comercio de cada negocio.', estado: 'medida' },
+        ],
+      },
+    ],
+  },
+
+  contactos: {
+    tituloSeo: 'Contactos y prospectos con su fuente',
+    descripcion: 'Ficha de cada contacto con su fuente de captación, notas, llamadas y recordatorios; importar y exportar en CSV y acciones en lote.',
+    palabras: ['gestión de prospectos', 'base de contactos CRM', 'fuente de captación de clientes', 'importar contactos CSV', 'CRM para WhatsApp'],
+    encabezado: 'Cada contacto con su historia y de dónde vino.',
+    bajada: 'La ficha junta lo que se habló por cada canal, las notas, las llamadas y lo pendiente. Y dice por dónde llegó, para saber qué canal te trae clientes.',
+    grupos: [
+      {
+        titulo: 'La ficha',
+        funciones: [
+          { titulo: 'Fuente de captación', detalle: 'Instagram, Facebook, referido, campaña, sitio web, WhatsApp, chatbot o formulario web.', estado: 'disponible' },
+          { titulo: 'Notas y llamadas', detalle: 'Lo que se habló fuera del chat queda anotado en la ficha, con fecha y autor.', estado: 'disponible' },
+          { titulo: 'Recordatorios', detalle: 'Un pendiente con fecha para cada contacto, asignado a alguien del equipo.', estado: 'disponible' },
+          { titulo: 'Todas sus conversaciones', detalle: 'Lo que escribió por cada canal, en la misma ficha.', estado: 'disponible' },
+        ],
+      },
+      {
+        titulo: 'La lista',
+        funciones: [
+          { titulo: 'Importar y exportar', detalle: 'Contactos en CSV, hacia dentro y hacia fuera, según los permisos. Cada exportación queda en la bitácora.', estado: 'disponible' },
+          { titulo: 'Acciones en lote', detalle: 'Cambiar de etapa o de responsable a varios a la vez. Los que no tienen lo que pide la etapa se quedan y se dice cuáles.', estado: 'disponible' },
+          { titulo: 'Visitantes del chat web', detalle: 'Quien escribió por la web y aún no dejó su teléfono aparece aparte, para no perderlo.', estado: 'activa' },
+        ],
+      },
+    ],
+  },
+
+  captacion: {
+    tituloSeo: 'Captación: formularios, anuncios y reservas',
+    descripcion: 'Formularios con enlace público, leads de anuncios de Meta y reservas en línea que entran solos al pipeline, más el interés detectado en el chat.',
+    palabras: ['captación de leads', 'formularios en línea', 'Meta Lead Ads', 'reservas en línea', 'formulario a WhatsApp'],
+    encabezado: 'Los clientes nuevos entran solos, cada uno a su etapa.',
+    bajada: 'Un formulario, un anuncio de Meta o una reserva en línea crean el contacto y su tarjeta en la columna que elijas, y pueden disparar el primer mensaje.',
+    grupos: [
+      {
+        titulo: 'Formularios',
+        funciones: [
+          { titulo: 'Editor y enlace público', detalle: 'Armas el formulario sin programar y lo compartes con un enlace.', estado: 'disponible' },
+          { titulo: 'Con IA', detalle: 'Describes lo que necesitas y la IA propone las preguntas.', estado: 'disponible' },
+          { titulo: 'Archivos', detalle: 'La persona puede adjuntar documentos o fotos al responder.', estado: 'disponible' },
+          { titulo: 'Respuestas y estadísticas', detalle: 'Cada respuesta con su contacto, y el resumen del formulario.', estado: 'disponible' },
+        ],
+      },
+      {
+        titulo: 'Anuncios y reservas',
+        funciones: [
+          { titulo: 'Anuncios de Meta', detalle: 'Los formularios de anuncios de Instagram y Facebook entran como contacto y tarjeta. Se conecta con la cuenta de cada negocio.', estado: 'activa' },
+          { titulo: 'Reservas en línea', detalle: 'Una página con tus horarios libres para que la persona reserve, con recordatorio y enlace para cancelar.', estado: 'disponible' },
+          { titulo: 'Interés en el chat', detalle: 'El agente de IA deja registrada la oportunidad cuando alguien quiere comprar o una cotización.', estado: 'activa' },
+        ],
+      },
+    ],
+  },
+
+  automatizaciones: {
+    tituloSeo: 'Seguimiento automático de ventas',
+    descripcion: 'Mensajes por etapa por WhatsApp, correo o SMS: al entrar, si se estanca o por vencer. Plantillas aprobadas por Meta, envíos en lote y recordatorios.',
+    palabras: ['seguimiento automático de clientes', 'automatización de ventas WhatsApp', 'plantillas de WhatsApp', 'mensajes masivos WhatsApp', 'recordatorios de ventas'],
+    encabezado: 'El seguimiento sale solo, y tú decides cuándo.',
+    bajada: 'Cada etapa del pipeline puede mandar su mensaje: al llegar, si la tarjeta se estanca o cuando se acerca la fecha. Y si prefieres revisarlo, queda un botón para enviarlo.',
+    grupos: [
+      {
+        titulo: 'Cuándo sale',
+        funciones: [
+          { titulo: 'Al entrar en una etapa', detalle: 'O cuando un contacto nuevo cae en ella desde un formulario o un anuncio.', estado: 'disponible' },
+          { titulo: 'Si se estanca o nadie la atiende', detalle: 'Tras los días u horas que definas sin moverse.', estado: 'disponible' },
+          { titulo: 'Por vencer o con las tareas hechas', detalle: 'Unos días antes de la fecha, o cuando el equipo termina las tareas obligatorias.', estado: 'disponible' },
+        ],
+      },
+      {
+        titulo: 'Cómo sale',
+        funciones: [
+          { titulo: 'Por WhatsApp, correo o SMS', detalle: 'Al contacto, al responsable o a la dirección, con variables como el nombre.', estado: 'disponible' },
+          { titulo: 'Plantillas aprobadas por Meta', detalle: 'Llegan aunque la persona no haya escrito en las últimas 24 horas, incluso con un PDF. La plantilla la aprueba Meta.', estado: 'disponible' },
+          { titulo: 'Con botón para enviar', detalle: 'El mensaje queda listo en la tarjeta y sale cuando alguien lo pulsa.', estado: 'disponible' },
+          { titulo: 'Esperar la confirmación', detalle: 'La tarjeta espera la respuesta del cliente y, al confirmar, pasa sola a la etapa siguiente.', estado: 'disponible' },
+          { titulo: 'Una sola vez', detalle: 'Aunque la tarjeta vuelva a la etapa, el mensaje no se repite.', estado: 'disponible' },
+        ],
+      },
+      {
+        titulo: 'A varios a la vez',
+        funciones: [
+          { titulo: 'Envío en lote', detalle: 'Un mensaje por WhatsApp o correo a hasta 100 contactos elegidos. Fuera de la ventana de 24 horas de WhatsApp hace falta una plantilla aprobada.', estado: 'disponible' },
+        ],
+      },
+    ],
+  },
+
   bandeja: {
     tituloSeo: 'Bandeja de asesores con reparto y ayuda de IA',
     descripcion: 'Lo que el bot no resuelve llega a tu equipo con contexto: reparto por topes, prioridad automática, plantillas, respuestas sugeridas y corrector.',
@@ -621,6 +745,7 @@ export const PREGUNTAS_CRM: readonly PreguntaCrm[] = [
   { pregunta: '¿Puede agendar citas?', respuesta: 'Sí, con la agenda del CRM y Google Calendar, que se activan por cliente. Con sistemas de turnos externos se conecta al implementar.' },
   { pregunta: '¿Mide la satisfacción al terminar?', respuesta: 'Sí, y se activa por cliente. Pregunta si quedó resuelto y hace una encuesta con botones y comentario en el mismo canal.' },
   { pregunta: '¿Hace falta programar para cambiar el chatbot?', respuesta: 'No. Flujos, respuestas, plantillas, horarios y permisos se editan desde pantallas, con versiones y registro de cada cambio.' },
+  { pregunta: '¿Sirve para vender, no solo para atender?', respuesta: 'Sí. Tiene pipeline de oportunidades con etapas, contactos con su fuente de captación, formularios y anuncios de Meta que entran solos, mensajes automáticos por etapa y envíos en lote. El cobro por enlace con CardNet o Azul es a medida.', destacada: true },
   { pregunta: '¿Hay supervisión en vivo?', respuesta: 'Sí, y se activa por cliente: monitoreo, mensaje privado al asesor, intervención y análisis de sentimiento.', destacada: true },
   { pregunta: '¿Funciona en otros idiomas?', respuesta: 'Sí, y se activa por cliente. Lo probamos en inglés y francés en el chat web.' },
   { pregunta: '¿Con qué sistemas se integra?', respuesta: 'Con los que publican una API, servicios web o webhooks: CRM y gestión de casos, centros de contacto, ERP, identidad, SIEM, turnos, documentos, pagos y sistemas del Estado dominicano, con el acceso que dé cada institución. Fuera de los canales y la API, se conectan al implementar y todavía no están en operación con clientes.', destacada: true },

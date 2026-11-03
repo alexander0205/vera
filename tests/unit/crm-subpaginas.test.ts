@@ -182,9 +182,9 @@ describe('lo que leen los asistentes de IA', () => {
   });
 });
 
-describe('las tres categorías', () => {
+describe('las cuatro categorías', () => {
   it('toda página es de una categoría, salvo preguntas frecuentes', () => {
-    expect(CATEGORIAS_CRM.map(c => c.nombre)).toEqual(['Atención', 'Operación', 'Plataforma']);
+    expect(CATEGORIAS_CRM.map(c => c.nombre)).toEqual(['Atención', 'Ventas', 'Operación', 'Plataforma']);
     expect(PAGINAS_SIN_CATEGORIA.map(p => p.clave)).toEqual(['preguntas']);
     for (const c of paginasPorCategoria()) expect(c.paginas.length, c.clave).toBeGreaterThan(0);
     expect(paginasPorCategoria().reduce((n, c) => n + c.paginas.length, 0)).toBe(PAGINAS_CRM.length - 1);
@@ -196,7 +196,7 @@ describe('las tres categorías', () => {
     const texto = await llms().text();
     for (const c of CATEGORIAS_CRM) expect(texto).toContain(`- ${c.nombre}:`);
     const json = capacidadesJson();
-    expect(json.categorias.length).toBe(3);
+    expect(json.categorias.length).toBe(4);
     expect(json.paginas.every(p => p.clave === 'preguntas' || p.categoria)).toBe(true);
   });
 });
@@ -228,5 +228,16 @@ describe('el catálogo de integraciones', () => {
 
   it('nada del catálogo se presenta como alianza o en operación', () => {
     for (const s of todos) expect(`${s.nombre} ${s.detalle}`, s.nombre).not.toMatch(/alianza|partner|certificad[oa] por|en operación/i);
+  });
+});
+
+describe('ventas', () => {
+  it('tiene sus cuatro páginas y el cobro por enlace es a medida', () => {
+    const ventas = paginasPorCategoria().find(c => c.clave === 'ventas')!;
+    expect(ventas.paginas.map(p => p.clave)).toEqual(['pipeline', 'contactos', 'captacion', 'automatizaciones']);
+    const cobro = CONTENIDO_CRM.pipeline.grupos.flatMap(g => g.funciones).find(f => f.titulo === 'Cobro por enlace');
+    expect(cobro?.estado).toBe('medida');
+    const pagos = CATALOGO_INTEGRACIONES.find(c => c.clave === 'pagos')!;
+    for (const s of pagos.sistemas) expect(s.estado, s.nombre).toBe('medida');
   });
 });

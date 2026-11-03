@@ -29,6 +29,9 @@ export const FUNCIONES_CRM: readonly { numero: number; nombre: string }[] = [
   'Metas de tiempo de atención', 'Plantillas de respuesta', 'Sentimiento', 'Monitoreo en vivo', 'Citas y turnos',
   'Seguridad', 'Disponibilidad', 'Capacidad', 'Trazabilidad', 'Experiencia y accesibilidad', 'Autenticación',
   'Eventos de seguridad hacia un SIEM',
+  // Ventas
+  'Pipeline de oportunidades', 'Contactos y fuente de captación', 'Formularios y captación de clientes',
+  'Seguimiento automático por etapa', 'Envíos en lote', 'Reservas en línea', 'Cobro por enlace',
 ].map((nombre, i) => ({ numero: i + 1, nombre }));
 
 /** Qué funciones del catálogo cubre cada capacidad, por página y título. */
@@ -62,6 +65,24 @@ const FUNCIONES_DE: Record<ClaveCrm, Record<string, readonly number[]>> = {
     'Confirmar antes de cerrar': [31], 'Plantillas de cierre': [28], 'También cuando cierra una persona': [31],
     'En el mismo canal': [31], Comentario: [31], 'Registro completo': [31, 50], 'En los indicadores': [32],
     'Enviar el resultado': [38], 'Que tu plataforma decida': [39],
+  },
+  pipeline: {
+    'Etapas a tu medida': [54], 'Arrastrar y soltar': [54, 50], 'Tablero armado con IA': [54], 'Responsable, prioridad y fecha': [54],
+    Tareas: [54], 'Archivos e imágenes': [54], 'Contacto desde la tarjeta': [54, 55], 'Enlace directo': [54],
+    'Interés detectado en el chat': [54, 56], Ganados: [54, 32], 'Cobro por enlace': [60],
+  },
+  contactos: {
+    'Fuente de captación': [55], 'Notas y llamadas': [55], Recordatorios: [55, 57], 'Todas sus conversaciones': [55, 41],
+    'Importar y exportar': [55, 36], 'Acciones en lote': [55], 'Visitantes del chat web': [55],
+  },
+  captacion: {
+    'Editor y enlace público': [56], 'Con IA': [56], Archivos: [56, 19], 'Respuestas y estadísticas': [56],
+    'Anuncios de Meta': [56], 'Reservas en línea': [59], 'Interés en el chat': [56],
+  },
+  automatizaciones: {
+    'Al entrar en una etapa': [57], 'Si se estanca o nadie la atiende': [57], 'Por vencer o con las tareas hechas': [57],
+    'Por WhatsApp, correo o SMS': [57], 'Plantillas aprobadas por Meta': [57], 'Con botón para enviar': [57],
+    'Esperar la confirmación': [57], 'Una sola vez': [57], 'Envío en lote': [58],
   },
   bandeja: {
     'Con los datos completos': [15], 'Ficha al lado': [21, 41], 'Horarios y feriados': [30], 'Respuestas sugeridas': [18],

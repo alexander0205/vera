@@ -450,3 +450,95 @@ export function ModuloIdiomas() {
     </div>
   );
 }
+
+// ── Ventas: mover una tarjeta por las etapas del pipeline ─────────────────────
+
+const ETAPAS = [
+  { clave: 'nuevo', nombre: 'Nuevo', regla: 'Al llegar de un formulario o un anuncio, sale el saludo por WhatsApp.' },
+  { clave: 'contactado', nombre: 'Contactado', regla: 'Si pasan 3 días sin moverse, se avisa al responsable.' },
+  { clave: 'propuesta', nombre: 'Propuesta', regla: 'Al entrar, queda lista la plantilla «Propuesta» con su PDF y un botón para enviarla.' },
+  { clave: 'ganado', nombre: 'Ganado', regla: 'Pasa a la vista de ganados con su fecha.' },
+] as const;
+
+type Etapa = (typeof ETAPAS)[number]['clave'];
+
+const TARJETAS_INICIALES: { id: string; nombre: string; interes: string; fuente: string; etapa: Etapa }[] = [
+  { id: 't1', nombre: 'Laura M.', interes: 'Plan para 3 sucursales', fuente: 'Anuncio de Instagram', etapa: 'nuevo' },
+  { id: 't2', nombre: 'Distribuidora Caribe', interes: 'Chatbot para ventas', fuente: 'Formulario web', etapa: 'contactado' },
+  { id: 't3', nombre: 'Pedro A.', interes: 'Cotización de 20 equipos', fuente: 'Chat de WhatsApp', etapa: 'propuesta' },
+];
+
+export function ModuloPipeline() {
+  const [tarjetas, setTarjetas] = useState(TARJETAS_INICIALES);
+  const [arrastrando, setArrastrando] = useState<string | null>(null);
+  const [ultimo, setUltimo] = useState<{ nombre: string; etapa: Etapa } | null>(null);
+
+  function mover(id: string, etapa: Etapa) {
+    const t = tarjetas.find(x => x.id === id);
+    if (!t || t.etapa === etapa) return;
+    setTarjetas(ts => ts.map(x => (x.id === id ? { ...x, etapa } : x)));
+    setUltimo({ nombre: t.nombre, etapa });
+  }
+  const paso = (id: string, delta: number) => {
+    const t = tarjetas.find(x => x.id === id);
+    if (!t) return;
+    const i = ETAPAS.findIndex(e => e.clave === t.etapa) + delta;
+    if (i >= 0 && i < ETAPAS.length) mover(id, ETAPAS[i].clave);
+  };
+  const regla = ultimo ? ETAPAS.find(e => e.clave === ultimo.etapa)!.regla : null;
+
+  return (
+    <div className={`${caja} flex flex-col gap-5`}>
+      <p className="m-0 text-[13px] leading-[1.55] text-[#5c6373]">
+        Arrastra una tarjeta a otra etapa, o usa sus flechas. Cada etapa tiene su regla de seguimiento.
+      </p>
+      <ol className="m-0 grid min-w-0 list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 lg:grid-cols-4">
+        {ETAPAS.map((e, k) => {
+          const propias = tarjetas.filter(t => t.etapa === e.clave);
+          return (
+            <li
+              key={e.clave}
+              onDragOver={ev => { ev.preventDefault(); }}
+              onDrop={ev => { ev.preventDefault(); if (arrastrando) mover(arrastrando, e.clave); setArrastrando(null); }}
+              className={`flex min-h-[180px] min-w-0 flex-col gap-2.5 rounded-[14px] border border-dashed p-3 ${
+                arrastrando ? 'border-zero-300 bg-[#f5f8ff]' : 'border-[#e2e7f3] bg-[#fbfcff]'
+              }`}
+            >
+              <p className="m-0 flex items-center justify-between text-[12.5px] font-semibold text-[#102a72]">
+                {e.nombre}
+                <span className="rounded-full bg-[#edf1fe] px-2 py-0.5 text-[11px] font-semibold text-[#2a45c4]">{propias.length}</span>
+              </p>
+              <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                {propias.map(t => (
+                  <li
+                    key={t.id}
+                    draggable
+                    onDragStart={() => setArrastrando(t.id)}
+                    onDragEnd={() => setArrastrando(null)}
+                    className="min-w-0 cursor-grab rounded-xl border border-[#e7edfb] bg-white p-3 shadow-[0_6px_16px_-12px_rgba(16,42,114,.4)] active:cursor-grabbing"
+                  >
+                    <p className="m-0 text-[13px] font-semibold text-[#102a72]">{t.nombre}</p>
+                    <p className="m-0 mt-0.5 text-[12px] text-[#5c6373]">{t.interes}</p>
+                    <p className="m-0 mt-1.5 text-[11px] text-[#666d80]">Fuente: {t.fuente}</p>
+                    <div className="mt-2 flex gap-1.5">
+                      <button type="button" disabled={k === 0} onClick={() => paso(t.id, -1)} aria-label={`Mover ${t.nombre} a la etapa anterior`}
+                        className={`grid size-9 place-items-center rounded-lg border border-[#e4e8f4] text-[15px] text-[#102a72] ${k === 0 ? 'cursor-not-allowed opacity-40' : 'cursor-pointer bg-white hover:border-zero-200'}`}>←</button>
+                      <button type="button" disabled={k === ETAPAS.length - 1} onClick={() => paso(t.id, 1)} aria-label={`Mover ${t.nombre} a la etapa siguiente`}
+                        className={`grid size-9 place-items-center rounded-lg border border-[#e4e8f4] text-[15px] text-[#102a72] ${k === ETAPAS.length - 1 ? 'cursor-not-allowed opacity-40' : 'cursor-pointer bg-white hover:border-zero-200'}`}>→</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          );
+        })}
+      </ol>
+      <div aria-live="polite" className="rounded-xl bg-[#f5f8ff] px-4 py-3 text-[13px] leading-[1.55] text-[#3b4252]">
+        {ultimo
+          ? <><strong className="text-[#102a72]">{ultimo.nombre}</strong> pasó a {ETAPAS.find(e => e.clave === ultimo.etapa)!.nombre}. {regla}</>
+          : <>Mueve una tarjeta para ver qué hace su nueva etapa.</>}
+      </div>
+      <div><Ficticio /></div>
+    </div>
+  );
+}
