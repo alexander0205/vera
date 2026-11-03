@@ -12,7 +12,7 @@
  * enseña a no usarlo.
  */
 
-import { PAGINAS_CRM, RUTA_CRM, type ClaveCrm } from '@/lib/agentes/crm-rutas';
+import { PAGINAS_CRM, PAGINAS_SIN_CATEGORIA, RUTA_CRM, paginasPorCategoria, type ClaveCrm } from '@/lib/agentes/crm-rutas';
 import { Iconos } from './_piezas';
 
 export type EntradaMenu = {
@@ -64,13 +64,20 @@ const ICONO_CRM: Record<ClaveCrm, EntradaMenu['icono']> = {
   preguntas: Iconos.hoja,
 };
 
-/** Las partes del CRM, cada una con su página. Salen de `lib/agentes/crm-rutas.ts`. */
-export const ENTRADAS_CRM: EntradaMenu[] = PAGINAS_CRM.map(p => ({
+const entradaCrm = (p: (typeof PAGINAS_CRM)[number]): EntradaMenu => ({
   href: p.ruta,
   titulo: p.menu,
   detalle: p.resumen,
   icono: ICONO_CRM[p.clave],
-}));
+});
+
+/** Las partes del CRM, cada una con su página. Salen de `lib/agentes/crm-rutas.ts`. */
+export const ENTRADAS_CRM: EntradaMenu[] = PAGINAS_CRM.map(entradaCrm);
+
+/** Las mismas, en sus tres categorías. Lo que no es de ninguna (preguntas) va aparte, en `ENTRADAS_CRM_SUELTAS`. */
+export const GRUPOS_CRM = paginasPorCategoria().map(c => ({ clave: c.clave, titulo: c.nombre, entradas: c.paginas.map(entradaCrm) }));
+
+export const ENTRADAS_CRM_SUELTAS: EntradaMenu[] = PAGINAS_SIN_CATEGORIA.map(entradaCrm);
 
 /**
  * Las secciones de la portada a las que tiene sentido saltar desde el menú.

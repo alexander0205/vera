@@ -21,7 +21,8 @@
  */
 
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
-import { CRM_ACTUALIZADA, PAGINAS_CRM, RUTA_CRM, RUTA_CRM_MD, RUTA_LLMS_FULL, RUTA_MCP_PUBLICO, type ClaveCrm, paginaCrm } from './crm-rutas';
+import { CRM_ACTUALIZADA, RUTA_CRM, RUTA_CRM_MD, RUTA_LLMS_FULL, RUTA_MCP_PUBLICO, type ClaveCrm, paginaCrm, paginasPorCategoria } from './crm-rutas';
+import { catalogoIntegracionesMarkdown } from './crm-integraciones';
 
 /** Dónde vive la aplicación del CRM: su estado público y su política de privacidad. */
 const APP_CRM = 'https://crm.zero.com.do';
@@ -233,7 +234,7 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
       {
         titulo: 'Con tu sistema de turnos',
         funciones: [
-          { titulo: 'Sistemas de turnos y Microsoft Bookings', detalle: 'Consultar horarios, registrar, confirmar y cancelar la cita en tu sistema.', estado: 'implementar' },
+          { titulo: 'Sistemas de turnos externos', detalle: 'Como Qmatic, Wavetec o Microsoft Bookings: consultar horarios, registrar, confirmar y cancelar la cita en tu sistema.', estado: 'implementar' },
         ],
       },
     ],
@@ -458,10 +459,10 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
 
   integraciones: {
     tituloSeo: 'Integraciones, API y conectores',
-    descripcion: 'API REST, webhooks y conectores por API para CRM y centro de contacto, como Dynamics y uContact, que se enlazan con el sistema del cliente al implementar.',
-    palabras: ['integración de chatbot con CRM', 'conector Dynamics', 'conector uContact', 'Microsoft Bookings', 'API REST WhatsApp', 'webhooks', 'integración SIEM'],
-    encabezado: 'API, webhooks y conectores para enlazarte con tus sistemas.',
-    bajada: 'Lo que ya está en el producto, y lo que se enlaza con tus sistemas durante la implementación. Cada línea dice cuál de las dos es.',
+    descripcion: 'Catálogo de sistemas con los que Zero CRM se conecta: canales, Estado dominicano, CRM, centros de contacto, ERP, identidad, SIEM, pagos y más.',
+    palabras: ['integración de chatbot con CRM', 'integración con sistemas del Estado dominicano', 'API REST WhatsApp', 'webhooks', 'interoperabilidad', 'integración SIEM', 'inicio de sesión único OIDC'],
+    encabezado: 'Se conecta con los sistemas que ya usas.',
+    bajada: 'Por API, servicios web, webhooks o la interfaz que publique cada sistema. Abajo está el catálogo por categoría, y cada línea dice si ya está en el producto o si se conecta al implementar.',
     grupos: [
       {
         titulo: 'Hoy, en el producto',
@@ -471,28 +472,28 @@ export const CONTENIDO_CRM: Record<ClaveCrm, ContenidoCrm> = {
         ],
       },
       {
-        titulo: 'Se conecta al implementar',
-        detalle: 'Conectores por API para CRM y centro de contacto, como Dynamics y uContact, que se conectan al sistema del cliente durante la implementación.',
+        titulo: 'Qué hace un conector',
+        detalle: 'Lo mismo para el sistema que tengas, sea cual sea. Se arma y se prueba con tu instalación durante la implementación.',
         funciones: [
-          { titulo: 'CRM, como Dynamics', detalle: 'Crear, consultar y actualizar casos, evitar duplicados, adjuntar documentos y devolver el número de caso.', estado: 'implementar' },
-          { titulo: 'Centro de contacto, como uContact', detalle: 'Enviar mensajes y eventos, tipificar, y registrar la confirmación o el error.', estado: 'implementar' },
-          { titulo: 'Plataformas de encuestas', detalle: 'Enviar el evento de cierre con el contexto de la interacción.', estado: 'implementar' },
-          { titulo: 'Citas y sistemas de turnos, como Microsoft Bookings', detalle: 'Consultar horarios, registrar la cita y confirmarla.', estado: 'implementar' },
-          { titulo: 'SIEM', detalle: 'Eventos de seguridad en JSON, CEF o syslog con TLS.', estado: 'implementar' },
+          { titulo: 'Casos en tu sistema', detalle: 'Crear, consultar y actualizar casos, evitar duplicados, adjuntar documentos, devolver el número de caso y mantener el estado igual en los dos lados.', estado: 'implementar' },
+          { titulo: 'Conversación hacia tu centro de contacto', detalle: 'Enviar los mensajes en orden y la tipificación al cerrar, con la confirmación o el error de cada envío.', estado: 'implementar' },
+          { titulo: 'Resultado de encuestas', detalle: 'Enviar el evento de cierre y la respuesta a tu plataforma, con el contexto de la interacción.', estado: 'implementar' },
+          { titulo: 'Citas en tu sistema de turnos', detalle: 'Consultar horarios libres, registrar la cita y confirmarla.', estado: 'implementar' },
+          { titulo: 'Eventos de seguridad a tu SIEM', detalle: 'En JSON, CEF o syslog con TLS.', estado: 'implementar' },
           { titulo: 'Si un sistema no responde', detalle: 'Cola con reintentos a los 30 segundos, 2 minutos, 10 minutos y 1 hora. Lo que falla queda en la bitácora.', estado: 'implementar' },
         ],
       },
       {
         titulo: 'Otros sistemas',
         funciones: [
-          { titulo: 'Conectores nuevos', detalle: 'Para un sistema que no esté en esta lista, el conector se define y se cotiza contigo.', estado: 'medida' },
+          { titulo: 'Conectores nuevos', detalle: 'Para un sistema que no esté en el catálogo, el conector se define y se cotiza contigo.', estado: 'medida' },
         ],
       },
     ],
     notas: [
       {
         titulo: 'Lo que debes saber',
-        texto: 'Estos conectores se han probado contra ambientes simulados, no contra instalaciones de clientes. Todavía no están en operación con ningún cliente. La conexión real se ajusta y se prueba con tu sistema, y una instalación dentro de tu red puede requerir VPN o un agente puente. Los nombres de productos son de sus dueños; mencionarlos no implica relación con ellos.',
+        texto: 'Fuera de los canales y la API marcados como Disponibles, los conectores se han probado contra ambientes simulados, no contra instalaciones de clientes. Todavía no están en operación con ningún cliente. La conexión real se ajusta y se prueba con tu sistema; una instalación dentro de tu red puede requerir VPN o un agente puente, y un sistema del Estado requiere el acuerdo o el acceso de la institución que lo opera. Los nombres de productos y de sistemas públicos son de sus dueños; nombrarlos no implica alianza, certificación ni relación con ellos.',
       },
       {
         titulo: 'Para asistentes de IA',
@@ -622,8 +623,8 @@ export const PREGUNTAS_CRM: readonly PreguntaCrm[] = [
   { pregunta: '¿Hace falta programar para cambiar el chatbot?', respuesta: 'No. Flujos, respuestas, plantillas, horarios y permisos se editan desde pantallas, con versiones y registro de cada cambio.' },
   { pregunta: '¿Hay supervisión en vivo?', respuesta: 'Sí, y se activa por cliente: monitoreo, mensaje privado al asesor, intervención y análisis de sentimiento.', destacada: true },
   { pregunta: '¿Funciona en otros idiomas?', respuesta: 'Sí, y se activa por cliente. Lo probamos en inglés y francés en el chat web.' },
-  { pregunta: '¿Se integra con Dynamics o uContact?', respuesta: 'Hay conectores por API que se conectan al sistema del cliente durante la implementación. Se han probado contra ambientes simulados y todavía no están en operación con clientes.', destacada: true },
-  { pregunta: '¿Se conecta con Microsoft Bookings u otros sistemas de turnos?', respuesta: 'Hay un conector para consultar horarios y registrar citas, en el mismo estado: se enlaza al implementar y se ha probado contra ambientes simulados.' },
+  { pregunta: '¿Con qué sistemas se integra?', respuesta: 'Con los que publican una API, servicios web o webhooks: CRM y gestión de casos, centros de contacto, ERP, identidad, SIEM, turnos, documentos, pagos y sistemas del Estado dominicano, con el acceso que dé cada institución. Fuera de los canales y la API, se conectan al implementar y todavía no están en operación con clientes.', destacada: true },
+  { pregunta: '¿Se conecta con sistemas de turnos y agenda?', respuesta: 'Sí: Google Calendar se activa por cliente, y con sistemas de turnos externos el conector se enlaza al implementar. Se ha probado contra ambientes simulados.' },
   { pregunta: '¿Tiene ISO 27001 o SOC 2?', respuesta: 'No propios, y tampoco una prueba de penetración externa. Nuestros proveedores tienen certificaciones, y son de ellos.', destacada: true },
   { pregunta: '¿Qué pasa con los datos personales cuando los ve la IA?', respuesta: 'Para clasificar, sugerir, resumir y recordar, se cambian por una etiqueta antes de llegar al modelo. El agente conversacional, la base de conocimiento, la lectura de documentos y la traducción sí los reciben, porque los necesitan.' },
   { pregunta: '¿Qué disponibilidad ofrece?', respuesta: 'Publicamos la medición en la página de estado del servicio. Un compromiso por contrato se pacta sobre infraestructura dedicada, por ejemplo 99.9 % mensual, junto con objetivos de recuperación.' },
@@ -645,15 +646,19 @@ export function fechaCrm(iso: string = CRM_ACTUALIZADA): string {
 const absoluta = (href: string) => (href.startsWith('/') ? `${SITIO_PUBLICO}${href}` : href);
 
 /** Una subpágina en Markdown: su bajada, sus grupos con el estado de cada función y sus notas. */
-function seccionMarkdown(clave: ClaveCrm, nivel: '#' | '##'): string {
+function seccionMarkdown(clave: ClaveCrm, nivel: '#' | '##' | '###'): string {
   const p = paginaCrm(clave);
   const c = CONTENIDO_CRM[clave];
   const grupos = c.grupos.map(g => {
     const funciones = g.funciones.map(f => `- **${f.titulo}** (${ESTADOS[f.estado].nombre}): ${f.detalle}`).join('\n');
     return `${nivel}# ${g.titulo}\n\n${g.detalle ? `${g.detalle}\n\n` : ''}${funciones}`;
   }).join('\n\n');
+  // La página de integraciones lleva además el catálogo de sistemas, por categoría.
+  const catalogo = clave === 'integraciones'
+    ? `\n\n${nivel}# Catálogo de integraciones\n\n${catalogoIntegracionesMarkdown(`${nivel}##`, e => ESTADOS[e].nombre)}`
+    : '';
   const notas = (c.notas ?? []).map(n => `**${n.titulo}.** ${n.texto}${n.enlace ? ` ${n.enlace.texto}: ${absoluta(n.enlace.href)}` : ''}`).join('\n\n');
-  return `${nivel} ${p.menu}\n\n${c.bajada}\n\nPágina: ${SITIO_PUBLICO}${p.ruta}\n\n${grupos}${notas ? `\n\n${notas}` : ''}`;
+  return `${nivel} ${p.menu}\n\n${c.bajada}\n\nPágina: ${SITIO_PUBLICO}${p.ruta}\n\n${grupos}${catalogo}${notas ? `\n\n${notas}` : ''}`;
 }
 
 function preguntasMarkdown(nivel: '##' | '###'): string {
@@ -683,7 +688,10 @@ Zero CRM. Actualizado el ${fechaCrm()}. Todas las partes: ${SITIO_PUBLICO}${RUTA
 /** `/productos/crm.md`: las subpáginas en texto limpio, con el estado de cada función. */
 export function crmMarkdown(): string {
   const estados = (Object.values(ESTADOS)).map(e => `- **${e.nombre}:** ${e.detalle}`).join('\n');
-  const paginas = PAGINAS_CRM.filter(p => p.clave !== 'preguntas').map(p => seccionMarkdown(p.clave, '##')).join('\n\n');
+  // Por categoría: Atención, Operación y Plataforma, cada una con sus páginas.
+  const paginas = paginasPorCategoria()
+    .map(c => `## ${c.nombre}\n\n${c.resumen}\n\n${c.paginas.map(p => seccionMarkdown(p.clave, '###')).join('\n\n')}`)
+    .join('\n\n');
   const preguntas = preguntasMarkdown('###');
 
   return `# Zero CRM, por partes

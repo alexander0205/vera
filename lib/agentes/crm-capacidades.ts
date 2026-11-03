@@ -9,7 +9,8 @@
 
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
 import { CONTENIDO_CRM, ESTADOS, type EstadoCrm } from './crm';
-import { CRM_ACTUALIZADA, PAGINAS_CRM, RUTA_CRM, type ClaveCrm } from './crm-rutas';
+import { CATEGORIAS_CRM, CRM_ACTUALIZADA, PAGINAS_CRM, RUTA_CRM, type ClaveCrm } from './crm-rutas';
+import { CATALOGO_INTEGRACIONES, REQUIERE_INSTITUCION } from './crm-integraciones';
 
 /** El catálogo de funciones de Zero CRM, numerado. */
 export const FUNCIONES_CRM: readonly { numero: number; nombre: string }[] = [
@@ -55,7 +56,7 @@ const FUNCIONES_DE: Record<ClaveCrm, Record<string, readonly number[]>> = {
   },
   citas: {
     'Horarios libres': [46], 'Registro y confirmación': [46], 'Ligada a la persona': [46], 'Calendario del equipo': [46],
-    'Google Calendar': [46], 'Sistemas de turnos y Microsoft Bookings': [46],
+    'Google Calendar': [46], 'Sistemas de turnos externos': [46],
   },
   encuestas: {
     'Confirmar antes de cerrar': [31], 'Plantillas de cierre': [28], 'También cuando cierra una persona': [31],
@@ -87,8 +88,8 @@ const FUNCIONES_DE: Record<ClaveCrm, Record<string, readonly number[]>> = {
     'Tu identidad visual': [51],
   },
   integraciones: {
-    Mensajería: [4], 'API REST y webhooks': [4], 'CRM, como Dynamics': [16, 22, 23], 'Centro de contacto, como uContact': [17, 24],
-    'Plataformas de encuestas': [38], 'Citas y sistemas de turnos, como Microsoft Bookings': [46], SIEM: [53],
+    Mensajería: [4], 'API REST y webhooks': [4], 'Casos en tu sistema': [16, 22, 23], 'Conversación hacia tu centro de contacto': [17, 24],
+    'Resultado de encuestas': [38], 'Citas en tu sistema de turnos': [46], 'Eventos de seguridad a tu SIEM': [53],
     'Si un sistema no responde': [23, 24], 'Conectores nuevos': [],
   },
   seguridad: {
@@ -111,6 +112,7 @@ export type CapacidadCrm = {
   estado: EstadoCrm;
   estadoNombre: string;
   pagina: ClaveCrm;
+  categoria: string | null;
   url: string;
   funciones: readonly number[];
 };
@@ -128,6 +130,7 @@ export function capacidadesCrm(): CapacidadCrm[] {
     estado: f.estado,
     estadoNombre: ESTADOS[f.estado].nombre,
     pagina: p.clave,
+    categoria: p.categoria,
     url: `${SITIO_PUBLICO}${p.ruta}`,
     funciones: FUNCIONES_DE[p.clave][f.titulo] ?? [],
   }))));
@@ -154,9 +157,14 @@ export function capacidadesJson() {
     sitio: `${SITIO_PUBLICO}${RUTA_CRM}`,
     actualizada: CRM_ACTUALIZADA,
     estados: (Object.keys(ESTADOS) as EstadoCrm[]).map(e => ({ clave: e, nombre: ESTADOS[e].nombre, detalle: ESTADOS[e].detalle })),
-    paginas: PAGINAS_CRM.map(p => ({ clave: p.clave, titulo: p.menu, resumen: p.resumen, url: `${SITIO_PUBLICO}${p.ruta}`, markdown: `${SITIO_PUBLICO}${p.ruta}.md` })),
+    categorias: CATEGORIAS_CRM,
+    paginas: PAGINAS_CRM.map(p => ({ clave: p.clave, categoria: p.categoria, titulo: p.menu, resumen: p.resumen, url: `${SITIO_PUBLICO}${p.ruta}`, markdown: `${SITIO_PUBLICO}${p.ruta}.md` })),
     funciones: FUNCIONES_CRM,
     capacidades: capacidadesCrm(),
+    integraciones: {
+      nota: `Catálogo de sistemas con los que Zero CRM se conecta. Salvo los marcados como disponibles, se conectan al implementar y no están en operación con clientes. Los sistemas del Estado: ${REQUIERE_INSTITUCION} Nombrar un sistema no implica alianza ni certificación.`,
+      categorias: CATALOGO_INTEGRACIONES.map(c => ({ clave: c.clave, titulo: c.titulo, como: c.como, sistemas: c.sistemas.map(x => ({ ...x, estadoNombre: ESTADOS[x.estado].nombre })) })),
+    },
   };
 }
 
@@ -167,7 +175,7 @@ export const ESQUEMA_CAPACIDADES = {
   title: 'Capacidades de Zero CRM',
   description: 'Cada capacidad publicada en las subpáginas de Zero CRM, con su estado, su página y las funciones del catálogo que cubre.',
   type: 'object',
-  required: ['producto', 'actualizada', 'estados', 'paginas', 'funciones', 'capacidades'],
+  required: ['producto', 'actualizada', 'estados', 'categorias', 'paginas', 'funciones', 'capacidades', 'integraciones'],
   properties: {
     producto: { type: 'string' },
     sitio: { type: 'string', format: 'uri' },
@@ -176,9 +184,31 @@ export const ESQUEMA_CAPACIDADES = {
       type: 'array',
       items: { type: 'object', required: ['clave', 'nombre', 'detalle'], properties: { clave: { enum: Object.keys(ESTADOS) }, nombre: { type: 'string' }, detalle: { type: 'string' } } },
     },
+    categorias: {
+      type: 'array',
+      items: { type: 'object', required: ['clave', 'nombre'], properties: { clave: { type: 'string' }, nombre: { type: 'string' }, resumen: { type: 'string' } } },
+    },
     paginas: {
       type: 'array',
-      items: { type: 'object', required: ['clave', 'titulo', 'url', 'markdown'], properties: { clave: { type: 'string' }, titulo: { type: 'string' }, resumen: { type: 'string' }, url: { type: 'string', format: 'uri' }, markdown: { type: 'string', format: 'uri' } } },
+      items: { type: 'object', required: ['clave', 'titulo', 'url', 'markdown'], properties: { clave: { type: 'string' }, categoria: { type: ['string', 'null'] }, titulo: { type: 'string' }, resumen: { type: 'string' }, url: { type: 'string', format: 'uri' }, markdown: { type: 'string', format: 'uri' } } },
+    },
+    integraciones: {
+      type: 'object',
+      required: ['categorias'],
+      properties: {
+        nota: { type: 'string' },
+        categorias: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['clave', 'titulo', 'sistemas'],
+            properties: {
+              clave: { type: 'string' }, titulo: { type: 'string' }, como: { type: 'string' },
+              sistemas: { type: 'array', items: { type: 'object', required: ['nombre', 'detalle', 'estado'], properties: { nombre: { type: 'string' }, detalle: { type: 'string' }, estado: { enum: Object.keys(ESTADOS) }, estadoNombre: { type: 'string' }, fuente: { type: 'string', format: 'uri' } } } },
+            },
+          },
+        },
+      },
     },
     funciones: {
       description: 'Catálogo numerado de funciones de Zero CRM.',
@@ -198,6 +228,7 @@ export const ESQUEMA_CAPACIDADES = {
           estado: { enum: Object.keys(ESTADOS) },
           estadoNombre: { type: 'string' },
           pagina: { type: 'string' },
+          categoria: { type: ['string', 'null'] },
           url: { type: 'string', format: 'uri' },
           funciones: { description: 'Números del catálogo `funciones` que cubre.', type: 'array', items: { type: 'integer', minimum: 1 } },
         },

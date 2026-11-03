@@ -19,6 +19,7 @@ import { SITIO_PUBLICO } from '@/lib/config/enlaces';
 import { ESTADOS, crmMarkdown, subpaginaMarkdown, type EstadoCrm } from '@/lib/agentes/crm';
 import { PAGINAS_CRM, RUTA_MCP_PUBLICO, type ClaveCrm } from '@/lib/agentes/crm-rutas';
 import { FUNCIONES_CRM, buscarCapacidades } from '@/lib/agentes/crm-capacidades';
+import { CATALOGO_INTEGRACIONES, REQUIERE_INSTITUCION, sistemasIntegrables } from '@/lib/agentes/crm-integraciones';
 import { preciosAdicionales, preciosDeLineas } from '@/lib/agentes/precios';
 
 const POR_MINUTO = 60;
@@ -36,7 +37,7 @@ const handler = createMcpHandler(server => {
       description: 'Las partes de Zero CRM publicadas en zero.com.do, con su resumen, su dirección y su versión en texto.',
       inputSchema: z.object({}),
     },
-    async () => json(PAGINAS_CRM.map(p => ({ pagina: p.clave, titulo: p.menu, resumen: p.resumen, url: `${SITIO_PUBLICO}${p.ruta}`, markdown: `${SITIO_PUBLICO}${p.ruta}.md` }))),
+    async () => json(PAGINAS_CRM.map(p => ({ pagina: p.clave, categoria: p.categoria, titulo: p.menu, resumen: p.resumen, url: `${SITIO_PUBLICO}${p.ruta}`, markdown: `${SITIO_PUBLICO}${p.ruta}.md` }))),
   );
 
   server.registerTool(
@@ -85,6 +86,27 @@ const handler = createMcpHandler(server => {
       inputSchema: z.object({}),
     },
     async () => json(FUNCIONES_CRM),
+  );
+
+  server.registerTool(
+    'catalogo_integraciones',
+    {
+      title: 'Catálogo de integraciones',
+      description: 'Sistemas con los que Zero CRM se puede conectar, por categoría, con su estado. Salvo los canales disponibles, se conectan al implementar y no están en operación con clientes; nombrar un sistema no implica alianza.',
+      inputSchema: z.object({
+        texto: z.string().max(200).optional().describe('Nombre o tipo de sistema, por ejemplo «DGII», «SIEM» o «Salesforce».'),
+        categoria: z.enum(CATALOGO_INTEGRACIONES.map(c => c.clave) as [string, ...string[]]).optional(),
+      }),
+    },
+    async ({ texto: t, categoria }) => {
+      const sin = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const palabras = sin(t ?? '').split(/\s+/).filter(w => w.length > 1);
+      const hallados = sistemasIntegrables()
+        .filter(x => !categoria || x.categoria === categoria)
+        .filter(x => palabras.every(w => sin(`${x.nombre} ${x.detalle} ${x.categoriaTitulo}`).includes(w)))
+        .map(x => ({ sistema: x.nombre, categoria: x.categoriaTitulo, estado: ESTADOS[x.estado].nombre, detalle: x.detalle, ...(x.fuente ? { fuente: x.fuente, requiere: REQUIERE_INSTITUCION } : {}) }));
+      return json(hallados);
+    },
   );
 
   server.registerTool(
