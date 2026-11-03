@@ -22,11 +22,12 @@ export const RUTA_LLMS_FULL = '/llms-full.txt';
 export const CRM_ACTUALIZADA = '2026-11-03';
 
 /**
- * Las tres partes en que se agrupan las páginas. Preguntas frecuentes queda
+ * Las cuatro partes en que se agrupan las páginas. Preguntas frecuentes queda
  * fuera de las tres: no es una parte del producto.
  */
 export const CATEGORIAS_CRM = [
   { clave: 'atencion', nombre: 'Atención', resumen: 'Por dónde te escribe la gente y cómo se le contesta.' },
+  { clave: 'ventas', nombre: 'Ventas', resumen: 'Cómo se capta, se sigue y se cierra cada oportunidad.' },
   { clave: 'operacion', nombre: 'Operación', resumen: 'Cómo trabaja tu equipo cada conversación y cada solicitud.' },
   { clave: 'plataforma', nombre: 'Plataforma', resumen: 'Cómo se administra, se conecta, se protege y se mantiene en pie.' },
 ] as const;
@@ -39,6 +40,10 @@ export const PAGINAS_CRM = [
   { clave: 'chat-web', categoria: 'atencion', ruta: `${RUTA_CRM}/chat-web`, menu: 'Chat web', resumen: 'Una ventana en tu página, con tu marca y tu horario.' },
   { clave: 'documentos', categoria: 'atencion', ruta: `${RUTA_CRM}/documentos`, menu: 'Documentos y OCR', resumen: 'Recibe, lee y revisa documentos, y responde desde los tuyos.' },
   { clave: 'idiomas', categoria: 'atencion', ruta: `${RUTA_CRM}/idiomas`, menu: 'Idiomas y accesibilidad', resumen: 'Responde en el idioma de quien escribe y se usa con teclado.' },
+  { clave: 'pipeline', categoria: 'ventas', ruta: `${RUTA_CRM}/pipeline`, menu: 'Pipeline de oportunidades', resumen: 'Etapas, tarjetas que se arrastran, tareas y ganados.' },
+  { clave: 'contactos', categoria: 'ventas', ruta: `${RUTA_CRM}/contactos`, menu: 'Contactos y prospectos', resumen: 'Ficha con su fuente, notas, llamadas, importar y exportar.' },
+  { clave: 'captacion', categoria: 'ventas', ruta: `${RUTA_CRM}/captacion`, menu: 'Captación de clientes', resumen: 'Formularios, anuncios de Meta y reservas que entran solos.' },
+  { clave: 'automatizaciones', categoria: 'ventas', ruta: `${RUTA_CRM}/automatizaciones`, menu: 'Seguimiento automático', resumen: 'Mensajes por etapa, plantillas, envíos masivos y recordatorios.' },
   { clave: 'bandeja', categoria: 'operacion', ruta: `${RUTA_CRM}/bandeja`, menu: 'Bandeja de asesores', resumen: 'Reparto, prioridad, plantillas y ayuda de la IA.' },
   { clave: 'supervision', categoria: 'operacion', ruta: `${RUTA_CRM}/supervision`, menu: 'Supervisión', resumen: 'Indicadores, tiempos de atención y monitoreo en vivo.' },
   { clave: 'seguimiento', categoria: 'operacion', ruta: `${RUTA_CRM}/seguimiento`, menu: 'Solicitudes y seguimiento', resumen: 'Número propio, consulta segura del estado y avisos de cada cambio.' },

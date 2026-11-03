@@ -283,7 +283,7 @@ export function CabeceraMarketing() {
               {crm.abierto && (
                 <div
                   id="menu-crm"
-                  className="absolute left-[-22px] top-[62px] w-[780px] rounded-[18px] border border-[#e7eaf4] bg-white p-[18px] shadow-[0_34px_70px_-30px_rgba(16,42,114,.34)]"
+                  className="absolute left-[-22px] top-[62px] w-[960px] rounded-[18px] border border-[#e7eaf4] bg-white p-[18px] shadow-[0_34px_70px_-30px_rgba(16,42,114,.34)]"
                 >
                   <Link
                     href={ENLACE_CRM}
@@ -300,8 +300,8 @@ export function CabeceraMarketing() {
                     <Flecha tamano={13} className="ml-auto shrink-0 text-zero-600" />
                   </Link>
 
-                  {/* Las tres categorías, una por columna; preguntas frecuentes va abajo, fuera de ellas. */}
-                  <div className="mt-3 grid grid-cols-3 gap-3">
+                  {/* Las categorías, una por columna; preguntas frecuentes va abajo, fuera de ellas. */}
+                  <div className="mt-3 grid grid-cols-4 gap-3">
                     {GRUPOS_CRM.map(g => (
                       <div key={g.clave} className="min-w-0">
                         <p className="m-0 px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#666d80]">

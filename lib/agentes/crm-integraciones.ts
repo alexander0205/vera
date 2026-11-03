@@ -55,6 +55,14 @@ export const CATALOGO_INTEGRACIONES: readonly CategoriaIntegracion[] = [
     ],
   },
   {
+    clave: 'anuncios',
+    titulo: 'Anuncios y captación',
+    como: 'Los contactos que dejan sus datos en un anuncio entran al pipeline, en la columna que elijas.',
+    sistemas: [
+      { nombre: 'Anuncios de Meta (Instagram y Facebook)', detalle: 'Formularios de anuncios, conectados con la cuenta de cada negocio.', estado: 'activa' },
+    ],
+  },
+  {
     clave: 'estado-dominicano',
     titulo: 'Sistemas del Estado dominicano',
     como: `Por servicios web, la Plataforma Única de Interoperabilidad o la interfaz que publique cada institución. ${REQUIERE_INSTITUCION}`,
@@ -124,8 +132,8 @@ export const CATALOGO_INTEGRACIONES: readonly CategoriaIntegracion[] = [
   {
     clave: 'pagos',
     titulo: 'Pagos en República Dominicana',
-    como: 'Enlace de pago generado en la conversación, con las credenciales de comercio de cada negocio.',
-    sistemas: varios('Enlace de pago con tus credenciales de comercio.', 'CardNet', 'Azul'),
+    como: 'Enlace de pago generado en la conversación. Es a medida: se activa con las credenciales de comercio de cada negocio.',
+    sistemas: ['CardNet', 'Azul'].map(nombre => ({ nombre, detalle: 'Enlace de pago con tus credenciales de comercio.', estado: 'medida' as const })),
   },
   {
     clave: 'bi',
