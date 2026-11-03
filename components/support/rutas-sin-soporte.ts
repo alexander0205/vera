@@ -45,8 +45,8 @@ export const RUTAS_SIN_SOPORTE = [
   // Quien fotografía una factura de proveedor con el enlace de la empresa.
   '/subir-factura/',
   /*
-    La web pública: portada, productos, precios, colegios, guías, contacto y lo
-    legal. Quien las abre es un desconocido que llegó por Google, y el
+    La web pública: portada, productos, precios, colegios, guías, contacto,
+    distribuidores y lo legal. Quien las abre es un desconocido que llegó por Google, y el
     `LlamadaGlobalProvider` vive en el layout RAÍZ —encima de `(marketing)`—,
     así que sin esto cada visitante anónimo sondea `/llamada` cada 3 segundos y
     se lleva un 401 hasta que cierre la pestaña. Es el mismo fallo del enlace de
@@ -57,7 +57,7 @@ export const RUTAS_SIN_SOPORTE = [
     entero y apaga el soporte también dentro de la aplicación.
   */
   '/productos/', '/precios', '/colegios', '/guias', '/contacto',
-  '/terminos', '/privacidad',
+  '/distribuidores', '/terminos', '/privacidad',
 ];
 
 /** La portada. Se compara COMPLETA, nunca como prefijo. */
