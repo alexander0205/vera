@@ -77,7 +77,11 @@ function EnlaceDelPie({ enlace: l }: { enlace: EnlacePie }) {
 
 export function PieMarketing() {
   return (
-    <footer className="bg-[#0f1118] pt-12">
+    // `relative` para que el pie pinte ENCIMA del lazo de fondo de la página.
+    // El lazo es `absolute` y mide por ancho (140vw); en una página corta como
+    // `/distribuidores` baja más que el contenido y, sin esto, se dibujaba
+    // sobre el pie como arcos claros que se salían del marco.
+    <footer className="relative bg-[#0f1118] pt-12">
       <Contenedor>
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1.1fr]">
           <div>
