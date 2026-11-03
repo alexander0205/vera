@@ -89,6 +89,7 @@ ${paginasCrm()}
 - [Precios](${SITIO_PUBLICO}/precios): los planes con sus topes.
 - [Guías](${SITIO_PUBLICO}/guias): los trámites fiscales y laborales dominicanos explicados.
 - [Contacto](${SITIO_PUBLICO}/contacto).
+- [Distribuidores autorizados](${SITIO_PUBLICO}/distribuidores): quién vende, implementa y da soporte local a Zero en República Dominicana.
 
 ## Guías
 

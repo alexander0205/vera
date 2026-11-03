@@ -29,6 +29,7 @@ const RUTAS = [
   { ruta: '/funciones', prioridad: 0.9 },
   { ruta: '/agentes', prioridad: 0.7 },
   { ruta: '/contacto', prioridad: 0.6 },
+  { ruta: '/distribuidores', prioridad: 0.5 },
   { ruta: '/terminos', prioridad: 0.2 },
   { ruta: '/privacidad', prioridad: 0.2 },
 ] as const;

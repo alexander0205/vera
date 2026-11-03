@@ -33,6 +33,7 @@ const COLUMNAS: readonly ColumnaPie[] = [
       { texto: 'Inicio', href: '/' },
       { texto: 'Precios', href: '/precios' },
       { texto: 'Contacto', href: '/contacto' },
+      { texto: 'Distribuidores', href: '/distribuidores' },
       { texto: 'Iniciar sesión', href: '/sign-in' },
     ],
   },
