@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import type { LineaPlan } from '@/components/administracion-escolar/PlanCobroSelector';
 import type { TutorVinculo } from '@/components/administracion-escolar/TutoresPanel';
-import { cuentaDe, type BecaAlumno } from '@/lib/administracion-escolar/matricular-sigerd-plan';
+import { aplicarPreciosPropios } from '@/components/administracion-escolar/PlanCobroSelector';
+import { conBeca, cuentaDe, type BecaAlumno } from '@/lib/administracion-escolar/matricular-sigerd-plan';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { esMatriculado, precioDeLinea, type Ajuste, type Alumno, type PasoAlumno } from './_compartido';
 
@@ -32,7 +33,7 @@ export function RevisarAlumno({ alumno, periodoId, lineas, conceptos, precios, b
   lineas: LineaPlan[] | null;
   conceptos: number[];
   precios: Ajuste['precios'];
-  /** La beca que se le pone al matricularlo (la del matriculado está en su matrícula). */
+  /** La beca que se le pone al matricularlo. La del ya matriculado se lee de su matrícula. */
   beca?: BecaAlumno | null;
   corte: string;
   /** En «Cargos del año» hay cambios sin «Guardar». */
@@ -46,6 +47,8 @@ export function RevisarAlumno({ alumno, periodoId, lineas, conceptos, precios, b
   const [cargos, setCargos] = useState<Cargo[] | null>(null);
   const [debe, setDebe] = useState<Set<number>>(new Set());
   const [moraPrevia, setMoraPrevia] = useState<Record<string, number>>({});
+  /** La beca guardada en su matrícula (solo ya matriculados). */
+  const [becaMatricula, setBecaMatricula] = useState<{ tipo: 'porcentaje' | 'monto'; valor: number; motivo: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -57,7 +60,10 @@ export function RevisarAlumno({ alumno, periodoId, lineas, conceptos, precios, b
       esMatriculado(alumno) ? fetch(`${base}/cargos`).then((r) => r.json()) : Promise.resolve(null),
       fetch(`/api/administracion-escolar/matriculas/desde-sigerd/completados?periodoId=${periodoId}`)
         .then((r) => (r.ok ? r.json() : { debe: [] })).catch(() => ({ debe: [] })),
-    ]).then(([e, t, c, d]) => {
+      esMatriculado(alumno) && alumno.matriculaId
+        ? fetch(`/api/administracion-escolar/matriculas/${alumno.matriculaId}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+        : Promise.resolve(null),
+    ]).then(([e, t, c, d, m]) => {
       if (!vigente) return;
       const r = e.estudiante?.responsable;
       setResponsable(r ? { nombre: r.razonSocial, rnc: r.rnc } : null);
@@ -65,15 +71,25 @@ export function RevisarAlumno({ alumno, periodoId, lineas, conceptos, precios, b
       setCargos(c ? ((c.cargos ?? []) as Cargo[]).filter((x) => x.matriculaId === alumno.matriculaId) : null);
       setDebe(new Set((d.debe ?? []) as number[]));
       setMoraPrevia((d.moraPrevia ?? {}) as Record<string, number>);
+      const mat = m?.matricula;
+      setBecaMatricula((mat?.becaTipo === 'porcentaje' || mat?.becaTipo === 'monto') && Number(mat.becaValor) > 0
+        ? { tipo: mat.becaTipo, valor: Number(mat.becaValor), motivo: mat.becaMotivo ?? null } : null);
     }).catch(() => { if (vigente) setError('No se pudo leer la cuenta del alumno'); });
     return () => { vigente = false; };
   }, [alumno, periodoId]);
 
+  // La beca que vale aquí: la que se le va a poner, o la que ya tiene su matrícula.
+  // Solo la de porcentaje cambia el precio de cada línea; la de monto se dice aparte.
+  const porcentajeBeca = esMatriculado(alumno)
+    ? (becaMatricula?.tipo === 'porcentaje' ? becaMatricula.valor : null)
+    : beca?.porcentaje ?? null;
   const elegidas = useMemo(() => {
     const propios = new Map(precios.map((p) => [p.conceptoId, p.montoCentavos]));
-    return (lineas ?? []).filter((l) => conceptos.includes(l.conceptoId))
-      .map((l) => ({ l, propio: propios.get(l.conceptoId) }));
-  }, [lineas, conceptos, precios]);
+    // Como en el plan del paso anterior y en sus cargos: precio propio y, encima, la beca.
+    const conTodo = conBeca(aplicarPreciosPropios(lineas ?? [], propios), porcentajeBeca ? { porcentaje: porcentajeBeca } : null);
+    return conTodo.filter((l) => conceptos.includes(l.conceptoId))
+      .map((l) => ({ l, propio: propios.has(l.conceptoId), conBeca: l.origen === 'beca' }));
+  }, [lineas, conceptos, precios, porcentajeBeca]);
   const cuenta = lineas && !esMatriculado(alumno) ? cuentaDe(lineas, conceptos, precios, corte, beca) : null;
 
   const pagos = useMemo(() => {
@@ -167,14 +183,15 @@ export function RevisarAlumno({ alumno, periodoId, lineas, conceptos, precios, b
           <p className="text-sm text-gray-500">Ningún concepto.</p>
         ) : (
           <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200">
-            {elegidas.map(({ l, propio }) => (
+            {elegidas.map(({ l, propio, conBeca: becada }) => (
               <li key={l.conceptoId} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                 <span className="min-w-0 truncate text-gray-900">
                   {l.nombre}
                   {l.fueraDeSeccion && <span className="ml-1.5 rounded bg-zero-50 px-1.5 py-0.5 text-[11px] text-zero-700">de otros grados</span>}
-                  {propio != null && <span className="ml-1.5 rounded bg-violet-50 px-1.5 py-0.5 text-[11px] text-violet-700">precio propio</span>}
+                  {propio && <span className="ml-1.5 rounded bg-violet-50 px-1.5 py-0.5 text-[11px] text-violet-700">precio propio</span>}
+                  {becada && <span className="ml-1.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] text-emerald-700">con beca</span>}
                 </span>
-                <span className="shrink-0 tabular-nums text-gray-600">{precioDeLinea(l, propio ?? l.montoCentavos)}</span>
+                <span className="shrink-0 tabular-nums text-gray-600">{precioDeLinea(l)}</span>
               </li>
             ))}
           </ul>
@@ -182,6 +199,14 @@ export function RevisarAlumno({ alumno, periodoId, lineas, conceptos, precios, b
         {beca && !esMatriculado(alumno) && (
           <p className="mt-1.5 text-xs font-medium text-zero-700">
             Con beca del {beca.porcentaje} %{beca.motivo ? ` (${beca.motivo})` : ''}: se descuenta de lo que admite beca.
+          </p>
+        )}
+        {becaMatricula && esMatriculado(alumno) && (
+          <p className="mt-1.5 text-xs font-medium text-zero-700">
+            {becaMatricula.tipo === 'porcentaje'
+              ? `Su matrícula tiene beca del ${becaMatricula.valor} %: los precios de arriba ya la descuentan.`
+              : `Su matrícula tiene una beca de ${fmtDOP(becaMatricula.valor)} en la mensualidad.`}
+            {becaMatricula.motivo ? ` (${becaMatricula.motivo})` : ''}
           </p>
         )}
         {cuenta && (
