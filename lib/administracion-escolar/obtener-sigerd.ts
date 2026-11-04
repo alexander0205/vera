@@ -36,6 +36,14 @@ import { SigerdError } from '@/lib/sigerd/types';
 /** Fila `corriendo` más vieja que esto se considera muerta (crash) y se reclama. */
 const LOCK_TTL_MIN = 15;
 
+/**
+ * ¿Esta fila `corriendo` ya no puede estar viva? Sin `iniciadoEn` no hay forma
+ * de saber cuándo empezó: se da por muerta, como hacía ya el candado.
+ */
+export function candadoVencido(iniciadoEn: Date | null, ahora: number): boolean {
+  return !iniciadoEn || ahora - iniciadoEn.getTime() >= LOCK_TTL_MIN * 60_000;
+}
+
 export type MotivoRechazo = 'ya-corriendo' | 'otra-en-curso';
 
 export class SyncOcupadoError extends Error {
@@ -76,6 +84,7 @@ export async function estadoObtencion(teamId: number): Promise<EstadoObtencion> 
       nSecciones: sigerdImportaciones.nSecciones,
       nEmpleados: sigerdImportaciones.nEmpleados,
       completadoEn: sigerdImportaciones.completadoEn,
+      iniciadoEn: sigerdImportaciones.iniciadoEn,
     })
     .from(sigerdImportaciones)
     .where(eq(sigerdImportaciones.teamId, teamId))
@@ -85,10 +94,16 @@ export async function estadoObtencion(teamId: number): Promise<EstadoObtencion> 
   if (!row) {
     return { estado: 'ninguno', conDescarga: false, mensaje: null, anoAcademico: null, nEstudiantes: null, nSecciones: null, nEmpleados: null, completadoEn: null };
   }
+
+  // Una fila `corriendo` más vieja que el candado es una descarga muerta: Vercel
+  // la cortó por tiempo y no llegó a marcar `error`. El candado ya la da por
+  // muerta; la pantalla también tiene que hacerlo, o enseña «Sincronizando…»
+  // con el botón deshabilitado para siempre y el colegio no puede reintentar.
+  const muerta = row.estado === 'corriendo' && candadoVencido(row.iniciadoEn, Date.now());
   return {
-    estado: row.estado as EstadoObtencion['estado'],
+    estado: muerta ? 'error' : (row.estado as EstadoObtencion['estado']),
     conDescarga: row.conDescarga === true,
-    mensaje: row.mensaje,
+    mensaje: muerta ? 'La descarga anterior se interrumpió. Vuelve a intentarlo.' : row.mensaje,
     anoAcademico: row.anoAcademico,
     nEstudiantes: row.nEstudiantes,
     nSecciones: row.nSecciones,
@@ -116,9 +131,7 @@ async function reclamarCandado(teamId: number, anoAcademico: number): Promise<nu
       .for('update');
 
     const ahora = Date.now();
-    const vivas = corriendo.filter(
-      (c) => c.iniciadoEn && ahora - c.iniciadoEn.getTime() < LOCK_TTL_MIN * 60_000,
-    );
+    const vivas = corriendo.filter((c) => !candadoVencido(c.iniciadoEn, ahora));
 
     if (vivas.some((c) => c.teamId === teamId)) {
       throw new SyncOcupadoError('ya-corriendo', 'Este colegio ya tiene una sincronización en curso.');
@@ -193,9 +206,10 @@ export async function obtenerInformacion(
       conCondicionFinal: true,
       conFichaPersonal: true,
       conFichaEstudiante: true,
-      // Responsables (padre/madre/tutor) al dump. OJO: +3 peticiones por
-      // estudiante (~1400) → obtener tarda mucho y en prod pasa el maxDuration.
-      conParientes: true,
+      // Sin responsables: +3 peticiones por estudiante pasaban el maxDuration
+      // (300 s) de Vercel. La función moría sin llegar al `catch` y la fila se
+      // quedaba en «corriendo» para siempre. Además en prod no traían nada:
+      // las últimas descargas buenas llegaron sin ningún responsable.
     });
 
     // 3) proyección + snapshot en una transacción

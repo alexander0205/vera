@@ -31,6 +31,7 @@ export type SigerdErrorCodigo =
   | 'rechazado'                // CargarInformacion devolvió 0 (vuelve al login)
   | 'sesion-expirada'          // una consulta autenticada rebotó al formulario de login
   | 'perfil-invalido'          // SessionCreateRole no devolvió 1
+  | 'perfil-requerido'         // la cuenta tiene varios perfiles y no se sabe cuál es el del colegio
   | 'token-no-encontrado'      // no se pudo leer __RequestVerificationToken
   | 'respuesta-inesperada'     // el portal contestó algo que no sabemos interpretar
   | 'red';                     // fallo de transporte / timeout
@@ -45,6 +46,31 @@ export class SigerdError extends Error {
     this.name = 'SigerdError';
     this.codigo = codigo;
     this.status = status;
+  }
+}
+
+/** Lo que se enseña de un perfil para que el colegio elija. Sin ids internos de sesión. */
+export interface PerfilElegible {
+  idCentro: number;
+  nombreCentro: string | null;
+  nombreRol: string;
+}
+
+/**
+ * La cuenta entra a varios centros o roles y no hay uno guardado (o el guardado
+ * ya no está entre los que ofrece el portal). Lleva la lista para que la
+ * pantalla pregunte: adivinar es justo lo que bajó los datos de otro colegio.
+ */
+export class PerfilRequeridoError extends SigerdError {
+  readonly perfiles: PerfilElegible[];
+
+  constructor(perfiles: PerfilElegible[], mensaje?: string) {
+    super(
+      'perfil-requerido',
+      mensaje ?? 'Tu cuenta de SIGERD tiene varios perfiles. En Conectar, elige el de tu centro.',
+    );
+    this.name = 'PerfilRequeridoError';
+    this.perfiles = perfiles;
   }
 }
 

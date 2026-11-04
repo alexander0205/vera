@@ -5,7 +5,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { SigerdError, type SigerdErrorCodigo } from './types';
+import { PerfilRequeridoError, SigerdError, type SigerdErrorCodigo } from './types';
 
 const STATUS: Record<SigerdErrorCodigo, number> = {
   'credenciales-invalidas': 401,
@@ -13,6 +13,7 @@ const STATUS: Record<SigerdErrorCodigo, number> = {
   rechazado: 401,
   'sesion-expirada': 401,
   'perfil-invalido': 400,
+  'perfil-requerido': 409,
   'token-no-encontrado': 502,
   'respuesta-inesperada': 502,
   red: 504,
@@ -20,7 +21,15 @@ const STATUS: Record<SigerdErrorCodigo, number> = {
 
 export function respuestaError(e: unknown): NextResponse {
   if (e instanceof SigerdError) {
-    return NextResponse.json({ error: e.message, codigo: e.codigo }, { status: STATUS[e.codigo] ?? 500 });
+    return NextResponse.json(
+      {
+        error: e.message,
+        codigo: e.codigo,
+        // Sin la lista la pantalla no tendría qué ofrecer para elegir.
+        ...(e instanceof PerfilRequeridoError ? { perfiles: e.perfiles } : {}),
+      },
+      { status: STATUS[e.codigo] ?? 500 },
+    );
   }
 
   console.error('[sigerd] error no controlado:', e);
