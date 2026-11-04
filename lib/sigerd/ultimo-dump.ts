@@ -16,7 +16,7 @@
  * dejara al colegio sin su descarga buena hasta que SIGERD volviera.
  */
 import 'server-only';
-import { desc, isNotNull, eq, and, sql } from 'drizzle-orm';
+import { desc, eq, and, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { sigerdImportaciones } from '@/lib/db/schema';
 
@@ -32,14 +32,18 @@ export interface UltimoDump {
 }
 
 export async function ultimoDumpSigerd(teamId: number): Promise<UltimoDump | null> {
+  // Sin `__parcial`: es el avance de una descarga por tandas en curso, que
+  // viaja al lado del volcado bueno (ver obtener-sigerd.ts). Y solo filas con
+  // `estructura`: la primera descarga de un colegio, a medias, ya tiene volcado
+  // pero todavía nada que leer.
   const [imp] = await db.select({
-    dump: sigerdImportaciones.dump,
+    dump: sql<Record<string, unknown> | null>`${sigerdImportaciones.dump} - '__parcial'`,
     anoAcademico: sigerdImportaciones.anoAcademico,
     completadoEn: sigerdImportaciones.completadoEn,
     updatedAt: sigerdImportaciones.updatedAt,
   })
     .from(sigerdImportaciones)
-    .where(and(eq(sigerdImportaciones.teamId, teamId), isNotNull(sigerdImportaciones.dump)))
+    .where(and(eq(sigerdImportaciones.teamId, teamId), sql`${sigerdImportaciones.dump} -> 'estructura' IS NOT NULL`))
     .orderBy(
       sql`${sigerdImportaciones.completadoEn} DESC NULLS LAST`,
       desc(sigerdImportaciones.updatedAt),

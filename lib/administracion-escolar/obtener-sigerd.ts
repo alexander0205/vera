@@ -20,8 +20,17 @@
  *    "continuaremos cuando vuelva SIGERD"; el colegio reintenta luego.
  *
  * El candado es la fila de `sigerd_importaciones` en estado `corriendo`. Una
- * fila `corriendo` más vieja que `LOCK_TTL_MIN` se considera muerta (crash) y se
- * puede reclamar.
+ * fila `corriendo` sin señal de vida (`updated_at`) en `LOCK_TTL_MIN` se
+ * considera muerta (crash) y se puede reclamar.
+ *
+ * POR TANDAS. Un centro grande no cabe en una llamada de Vercel (300 s): cada
+ * ficha es una petición. La primera llamada (`obtenerInformacion`) trae la
+ * estructura y el personal y avanza fichas hasta `PRESUPUESTO_MS`; si quedan,
+ * responde `corriendo` con el avance y la pantalla llama a
+ * `continuarObtencion` hasta terminar. Lo ya traído viaja en
+ * `dump.__parcial`, AL LADO del volcado anterior: los lectores leen las claves
+ * de siempre (`estructura`, `puestos`…) y siguen viendo la descarga buena
+ * hasta que `guardarMirror` reemplaza el volcado entero al final.
  */
 import 'server-only';
 import { and, eq, sql } from 'drizzle-orm';
@@ -29,22 +38,54 @@ import { db } from '@/lib/db/drizzle';
 import { sigerdImportaciones, sigerdPersonal } from '@/lib/db/schema';
 import { invalidarSigerd } from '@/lib/cache/escolar';
 import type { DumpCentro } from '@/lib/sigerd/descargar';
-import { descargarTodo } from '@/lib/sigerd/descargar';
+import { armarDump, avanzarDescarga, iniciarDescarga, type DescargaParcial } from '@/lib/sigerd/descargar';
 import type { SigerdClient } from '@/lib/sigerd/client';
 import { SigerdError } from '@/lib/sigerd/types';
 
-/** Fila `corriendo` más vieja que esto se considera muerta (crash) y se reclama. */
+/** Fila `corriendo` sin señal de vida en este tiempo se considera muerta (crash) y se reclama. */
 const LOCK_TTL_MIN = 15;
 
 /**
- * ¿Esta fila `corriendo` ya no puede estar viva? Sin `iniciadoEn` no hay forma
- * de saber cuándo empezó: se da por muerta, como hacía ya el candado.
+ * Tiempo de cada llamada para pedir fichas. Una petición al portal puede tardar
+ * hasta 30 s y se reintenta 3 veces (~90 s en el peor caso): con 180 s de
+ * presupuesto la llamada termina antes de los 300 s de Vercel aunque la última
+ * ficha sea la peor.
  */
-export function candadoVencido(iniciadoEn: Date | null, ahora: number): boolean {
-  return !iniciadoEn || ahora - iniciadoEn.getTime() >= LOCK_TTL_MIN * 60_000;
+const PRESUPUESTO_MS = 180_000;
+
+/** Cada cuánto se guarda lo traído dentro de una tanda: si Vercel la corta, se pierde poco. */
+const GUARDAR_CADA_MS = 45_000;
+
+/**
+ * Una tanda reclamada sin terminar en este tiempo se da por muerta (la función
+ * dura como mucho 300 s) y otra llamada puede retomarla.
+ */
+const TANDA_TTL_MIN = 6;
+
+/**
+ * ¿Esta fila `corriendo` ya no puede estar viva? Se mide desde su última señal
+ * (`updated_at`, que cada tanda renueva): una descarga por tandas de un centro
+ * grande dura más que el TTL, pero nunca pasa tanto sin escribir. Sin fecha se
+ * da por muerta, como hacía ya el candado.
+ */
+export function candadoVencido(ultimaSenal: Date | null, ahora: number): boolean {
+  return !ultimaSenal || ahora - ultimaSenal.getTime() >= LOCK_TTL_MIN * 60_000;
 }
 
 export type MotivoRechazo = 'ya-corriendo' | 'otra-en-curso';
+
+/**
+ * `continuarObtencion` sin nada que continuar (`nada-en-curso`), o con la tanda
+ * ya tomada por otra llamada —otra pestaña— (`tanda-en-curso`).
+ */
+export class SinTandaError extends Error {
+  readonly motivo: 'nada-en-curso' | 'tanda-en-curso';
+  constructor(motivo: 'nada-en-curso' | 'tanda-en-curso', mensaje: string) {
+    super(mensaje);
+    this.name = 'SinTandaError';
+    this.motivo = motivo;
+  }
+}
 
 export class SyncOcupadoError extends Error {
   readonly motivo: MotivoRechazo;
@@ -68,6 +109,8 @@ export interface EstadoObtencion {
   nSecciones: number | null;
   nEmpleados: number | null;
   completadoEn: string | null;
+  /** Mientras corre por tandas: cuántas fichas van de cuántas. */
+  progreso: { hechos: number; total: number } | null;
 }
 
 /** Estado de la última obtención del colegio, para la UI. */
@@ -77,14 +120,18 @@ export async function estadoObtencion(teamId: number): Promise<EstadoObtencion> 
   const [row] = await db
     .select({
       estado: sigerdImportaciones.estado,
-      conDescarga: sql<boolean>`${sigerdImportaciones.dump} IS NOT NULL`,
+      // `estructura` y no `dump IS NOT NULL`: la primera descarga, a medias,
+      // ya tiene volcado (solo `__parcial`) y no hay nada bueno guardado.
+      conDescarga: sql<boolean>`${sigerdImportaciones.dump} -> 'estructura' IS NOT NULL`,
       mensaje: sigerdImportaciones.mensaje,
       anoAcademico: sigerdImportaciones.anoAcademico,
       nEstudiantes: sigerdImportaciones.nEstudiantes,
       nSecciones: sigerdImportaciones.nSecciones,
       nEmpleados: sigerdImportaciones.nEmpleados,
       completadoEn: sigerdImportaciones.completadoEn,
-      iniciadoEn: sigerdImportaciones.iniciadoEn,
+      ultimaSenal: sigerdImportaciones.updatedAt,
+      total: sql<number | null>`(${sigerdImportaciones.dump} #>> '{__parcial,total}')::int`,
+      pendientes: sql<number | null>`jsonb_array_length(${sigerdImportaciones.dump} #> '{__parcial,pendientes}')`,
     })
     .from(sigerdImportaciones)
     .where(eq(sigerdImportaciones.teamId, teamId))
@@ -92,14 +139,14 @@ export async function estadoObtencion(teamId: number): Promise<EstadoObtencion> 
     .limit(1);
 
   if (!row) {
-    return { estado: 'ninguno', conDescarga: false, mensaje: null, anoAcademico: null, nEstudiantes: null, nSecciones: null, nEmpleados: null, completadoEn: null };
+    return { estado: 'ninguno', conDescarga: false, mensaje: null, anoAcademico: null, nEstudiantes: null, nSecciones: null, nEmpleados: null, completadoEn: null, progreso: null };
   }
 
   // Una fila `corriendo` más vieja que el candado es una descarga muerta: Vercel
   // la cortó por tiempo y no llegó a marcar `error`. El candado ya la da por
   // muerta; la pantalla también tiene que hacerlo, o enseña «Sincronizando…»
   // con el botón deshabilitado para siempre y el colegio no puede reintentar.
-  const muerta = row.estado === 'corriendo' && candadoVencido(row.iniciadoEn, Date.now());
+  const muerta = row.estado === 'corriendo' && candadoVencido(row.ultimaSenal, Date.now());
   return {
     estado: muerta ? 'error' : (row.estado as EstadoObtencion['estado']),
     conDescarga: row.conDescarga === true,
@@ -109,6 +156,9 @@ export async function estadoObtencion(teamId: number): Promise<EstadoObtencion> 
     nSecciones: row.nSecciones,
     nEmpleados: row.nEmpleados,
     completadoEn: row.completadoEn?.toISOString() ?? null,
+    progreso: row.estado === 'corriendo' && !muerta && row.total != null && row.pendientes != null
+      ? { hechos: Number(row.total) - Number(row.pendientes), total: Number(row.total) }
+      : null,
   };
 }
 
@@ -124,14 +174,14 @@ async function reclamarCandado(teamId: number, anoAcademico: number): Promise<nu
       .select({
         id: sigerdImportaciones.id,
         teamId: sigerdImportaciones.teamId,
-        iniciadoEn: sigerdImportaciones.iniciadoEn,
+        ultimaSenal: sigerdImportaciones.updatedAt,
       })
       .from(sigerdImportaciones)
       .where(eq(sigerdImportaciones.estado, 'corriendo'))
       .for('update');
 
     const ahora = Date.now();
-    const vivas = corriendo.filter((c) => !candadoVencido(c.iniciadoEn, ahora));
+    const vivas = corriendo.filter((c) => !candadoVencido(c.ultimaSenal, ahora));
 
     if (vivas.some((c) => c.teamId === teamId)) {
       throw new SyncOcupadoError('ya-corriendo', 'Este colegio ya tiene una sincronización en curso.');
@@ -180,27 +230,47 @@ export interface ResultadoObtencion {
   nEmpleados: number;
 }
 
+/** Quedan fichas: la pantalla vuelve a llamar a `continuarObtencion`. */
+export interface ObtencionEnCurso {
+  estado: 'corriendo';
+  hechos: number;
+  total: number;
+}
+
+export type RespuestaObtencion = ResultadoObtencion | ObtencionEnCurso | { estado: 'error'; mensaje: string };
+
+/** Lo que se guarda en `dump.__parcial` entre tandas. */
+interface ParcialGuardado extends DescargaParcial {
+  idRegional: number;
+  idDistrito: number;
+  /** Cuándo la tomó la tanda que la está avanzando (ISO); null = libre. */
+  tandaDesde: string | null;
+}
+
 /**
- * Obtiene TODO el centro y lo guarda. Reclama el candado, descarga, proyecta a
- * las tablas del app y guarda el snapshot fiel. Marca `error` (sin lanzar) si
- * SIGERD falla, con mensaje amable para reintentar.
+ * Empieza a obtener TODO el centro. Reclama el candado, trae la estructura y el
+ * personal, y avanza fichas hasta el presupuesto. Si caben todas, guarda el
+ * mirror y responde `completado`, como antes; si no, guarda el avance y
+ * responde `corriendo`. Marca `error` (sin lanzar) si SIGERD falla, con mensaje
+ * amable para reintentar.
  */
 export async function obtenerInformacion(
   cli: SigerdClient,
   params: { teamId: number; anoAcademico: number },
-): Promise<ResultadoObtencion | { estado: 'error'; mensaje: string }> {
+): Promise<RespuestaObtencion> {
   const { teamId, anoAcademico } = params;
+  const hasta = Date.now() + PRESUPUESTO_MS;
 
   // 1) CANDADO PRIMERO — antes de tocar SIGERD. Así dos flujos concurrentes no
   //    corrompen la sesión compartida del portal. (puede lanzar SyncOcupadoError)
   const importacionId = await reclamarCandado(teamId, anoAcademico);
 
   try {
-    // 2) contexto del centro + descarga completa
+    // 2) contexto del centro + estructura y personal (pocas peticiones)
     const { contextoCentroSesion } = await import('@/lib/sigerd/personal');
     const ctx = await contextoCentroSesion(cli);
 
-    const dump = await descargarTodo(cli, {
+    const base = await iniciarDescarga(cli, {
       anoAcademico,
       conPersonal: true,
       conCondicionFinal: true,
@@ -211,36 +281,146 @@ export async function obtenerInformacion(
       // quedaba en «corriendo» para siempre. Además en prod no traían nada:
       // las últimas descargas buenas llegaron sin ningún responsable.
     });
-
-    // 3) proyección + snapshot en una transacción
-    await guardarMirror(teamId, importacionId, ctx.idRegional, ctx.idDistrito, dump);
-
-    // 4) El plan del asistente (`/api/sigerd/plan`) se sirve de caché por
-    //    etiqueta y solo el cruce la invalidaba. Sin esto, una descarga recién
-    //    terminada seguía viéndose como «Todavía no hay nada descargado».
-    invalidarSigerd(teamId);
-
-    return {
-      estado: 'completado',
-      anoAcademico,
-      nEstudiantes: dump.totales.estudiantes,
-      nSecciones: dump.totales.secciones,
-      nEmpleados: dump.totales.empleados,
+    const parcial: ParcialGuardado = {
+      ...base,
+      idRegional: ctx.idRegional,
+      idDistrito: ctx.idDistrito,
+      tandaDesde: new Date().toISOString(),
     };
+    await guardarParcial(importacionId, parcial);
+
+    // 3) fichas hasta el presupuesto
+    return await avanzarYGuardar(cli, teamId, importacionId, parcial, hasta);
   } catch (e) {
-    console.error('[obtener-sigerd] fallo al guardar:', e);
-    const mensaje =
-      e instanceof SigerdError
-        ? 'SIGERD no está disponible ahora. Continuaremos automáticamente cuando vuelva; intenta de nuevo en unos minutos.'
-        : 'Ocurrió un error guardando la información. Intenta de nuevo.';
-
-    await db
-      .update(sigerdImportaciones)
-      .set({ estado: 'error', mensaje, updatedAt: new Date() })
-      .where(eq(sigerdImportaciones.id, importacionId));
-
-    return { estado: 'error', mensaje };
+    return await marcarError(importacionId, e);
   }
+}
+
+/**
+ * Sigue una obtención por tandas donde quedó. Toma la tanda de forma atómica:
+ * dos pestañas con la pantalla abierta no piden las mismas fichas a la vez.
+ * Lanza `SinTandaError` si no hay nada que seguir o si otra llamada la tiene.
+ */
+export async function continuarObtencion(
+  cli: SigerdClient,
+  params: { teamId: number },
+): Promise<RespuestaObtencion> {
+  const hasta = Date.now() + PRESUPUESTO_MS;
+  const { teamId } = params;
+
+  const tomadas = await db.execute(sql`
+    UPDATE sigerd_importaciones
+       SET dump = jsonb_set(dump, '{__parcial,tandaDesde}', to_jsonb(now()::text)),
+           updated_at = now()
+     WHERE team_id = ${teamId}
+       AND estado = 'corriendo'
+       AND dump -> '__parcial' IS NOT NULL
+       AND (
+         dump #>> '{__parcial,tandaDesde}' IS NULL
+         OR (dump #>> '{__parcial,tandaDesde}')::timestamptz < now() - make_interval(mins => ${TANDA_TTL_MIN})
+       )
+    RETURNING id, dump -> '__parcial' AS parcial
+  `);
+  const fila = (tomadas as unknown as { id: number; parcial: ParcialGuardado | string }[])[0];
+
+  if (!fila) {
+    const [enCurso] = await db
+      .select({ id: sigerdImportaciones.id })
+      .from(sigerdImportaciones)
+      .where(and(
+        eq(sigerdImportaciones.teamId, teamId),
+        eq(sigerdImportaciones.estado, 'corriendo'),
+        sql`${sigerdImportaciones.dump} -> '__parcial' IS NOT NULL`,
+      ))
+      .limit(1);
+    throw enCurso
+      ? new SinTandaError('tanda-en-curso', 'La descarga ya está avanzando en otra pestaña.')
+      : new SinTandaError('nada-en-curso', 'No hay ninguna descarga de SIGERD a medias.');
+  }
+
+  const parcial = (typeof fila.parcial === 'string' ? JSON.parse(fila.parcial) : fila.parcial) as ParcialGuardado;
+  try {
+    return await avanzarYGuardar(cli, teamId, fila.id, parcial, hasta);
+  } catch (e) {
+    return await marcarError(fila.id, e);
+  }
+}
+
+/**
+ * Avanza fichas hasta `hasta`, guardando cada `GUARDAR_CADA_MS` (si Vercel corta
+ * la llamada, lo ya guardado no se repite). Sin pendientes, cierra la descarga.
+ */
+async function avanzarYGuardar(
+  cli: SigerdClient,
+  teamId: number,
+  importacionId: number,
+  parcial: ParcialGuardado,
+  hasta: number,
+): Promise<RespuestaObtencion> {
+  while (parcial.pendientes.length > 0 && Date.now() < hasta) {
+    await avanzarDescarga(cli, parcial, Math.min(hasta, Date.now() + GUARDAR_CADA_MS));
+    if (parcial.pendientes.length > 0) await guardarParcial(importacionId, parcial);
+  }
+
+  if (parcial.pendientes.length > 0) {
+    await guardarParcial(importacionId, { ...parcial, tandaDesde: null });
+    return { estado: 'corriendo', hechos: parcial.total - parcial.pendientes.length, total: parcial.total };
+  }
+
+  // Proyección + snapshot en una transacción. Reemplaza el volcado entero:
+  // el `__parcial` desaparece con él.
+  const dump = armarDump(parcial);
+  await guardarMirror(teamId, importacionId, parcial.idRegional, parcial.idDistrito, dump);
+
+  // El plan del asistente (`/api/sigerd/plan`) se sirve de caché por etiqueta y
+  // solo el cruce la invalidaba. Sin esto, una descarga recién terminada seguía
+  // viéndose como «Todavía no hay nada descargado».
+  invalidarSigerd(teamId);
+
+  return {
+    estado: 'completado',
+    anoAcademico: parcial.anoAcademico,
+    nEstudiantes: dump.totales.estudiantes,
+    nSecciones: dump.totales.secciones,
+    nEmpleados: dump.totales.empleados,
+  };
+}
+
+/**
+ * Guarda el avance en `dump.__parcial`, sin tocar las demás claves: ahí sigue el
+ * volcado de la descarga anterior, que es el que leen las pantallas hasta que
+ * esta termine. Renueva `updated_at`, que es la señal de vida del candado.
+ */
+async function guardarParcial(importacionId: number, parcial: ParcialGuardado): Promise<void> {
+  const hechos = parcial.total - parcial.pendientes.length;
+  await db.execute(sql`
+    UPDATE sigerd_importaciones
+       SET dump = (coalesce(dump, '{}'::jsonb) - '__parcial') || jsonb_build_object('__parcial', ${JSON.stringify(parcial)}::jsonb),
+           mensaje = ${`Descargando fichas: ${hechos} de ${parcial.total}…`},
+           updated_at = now()
+     WHERE id = ${importacionId}
+  `);
+}
+
+/** Error de SIGERD o de guardado: la fila queda en `error` con la descarga anterior intacta. */
+async function marcarError(importacionId: number, e: unknown): Promise<{ estado: 'error'; mensaje: string }> {
+  console.error('[obtener-sigerd] fallo al guardar:', e);
+  const mensaje =
+    e instanceof SigerdError
+      ? 'SIGERD no está disponible ahora. Continuaremos automáticamente cuando vuelva; intenta de nuevo en unos minutos.'
+      : 'Ocurrió un error guardando la información. Intenta de nuevo.';
+
+  await db.execute(sql`
+    UPDATE sigerd_importaciones
+       SET estado = 'error', mensaje = ${mensaje},
+           dump = CASE WHEN dump IS NULL THEN NULL
+                       WHEN (dump - '__parcial') = '{}'::jsonb THEN NULL
+                       ELSE dump - '__parcial' END,
+           updated_at = now()
+     WHERE id = ${importacionId}
+  `);
+
+  return { estado: 'error', mensaje };
 }
 
 /**

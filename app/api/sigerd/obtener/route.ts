@@ -33,6 +33,7 @@ export async function GET() {
  *
  * Respuestas:
  *   200 `{ estado:'completado', … }`
+ *   200 `{ estado:'corriendo', hechos, total }` (quedan fichas: seguir con `obtener/continuar`)
  *   200 `{ estado:'error', mensaje }`           (SIGERD caído — reintentar luego)
  *   409 `{ codigo:'ya-corriendo' | 'otra-en-curso', error }`  (candado)
  *   401 sin sesión SIGERD ni credenciales guardadas (`codigo: 'sin-credenciales'`)
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
 
     // Si entró con lo guardado y terminó, las credenciales quedan probadas: no
     // tiene sentido que el paso «Conectar» siga diciendo «sin probar».
-    if (r.origen === 'credenciales' && r.datos.estado === 'completado') {
+    if (r.origen === 'credenciales' && r.datos.estado !== 'error') {
       await marcarVerificadas(auth.teamId);
     }
     return NextResponse.json(r.datos);

@@ -239,8 +239,16 @@ export function asegurarAccionesEscolares() {
         : 'Descargar de SIGERD la estructura, los estudiantes y el personal del centro (primera vez).' };
     },
     ejecutar: async (ctx, _u, a) => {
-      const r = await ctx.api.enviar<{ estado: string; mensaje?: string; nEstudiantes?: number; nSecciones?: number }>('POST', '/api/sigerd/obtener', a.anoAcademico ? { anoAcademico: a.anoAcademico } : {});
+      const r = await ctx.api.enviar<{ estado: string; mensaje?: string; nEstudiantes?: number; nSecciones?: number; hechos?: number; total?: number }>('POST', '/api/sigerd/obtener', a.anoAcademico ? { anoAcademico: a.anoAcademico } : {});
       if (r.estado === 'error') throw falla(r.mensaje ?? 'SIGERD no respondió.');
+      // Un centro grande no cabe en una llamada: el resto de las fichas lo pide
+      // la pantalla de SIGERD por tandas, y sigue sola al abrirla.
+      if (r.estado === 'corriendo') {
+        return {
+          mensaje: `La descarga empezó: van ${r.hechos ?? 0} de ${r.total ?? 0} fichas. Abre la pantalla de SIGERD y déjala abierta para que termine.`,
+          enlace: '/escolar/configuracion/sigerd',
+        };
+      }
       return { mensaje: `Descarga lista: ${r.nEstudiantes ?? 0} estudiantes en ${r.nSecciones ?? 0} secciones.`, enlace: '/escolar/configuracion/sigerd' };
     },
   });
