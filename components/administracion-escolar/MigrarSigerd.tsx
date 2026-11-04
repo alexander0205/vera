@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { EstadoFila, PlanMigracion } from '@/lib/sigerd/plan-migracion';
+import type { PerfilElegible } from '@/lib/sigerd/types';
 import { ObtenerSigerd } from '@/components/administracion-escolar/ObtenerSigerd';
 import { CompletarDatosSigerd } from '@/components/administracion-escolar/CompletarDatosSigerd';
 import type { ResultadoCompletar } from '@/lib/administracion-escolar/completar-datos-sigerd';
@@ -190,19 +191,36 @@ function PasoConectar({ cred, onCambio, onSeguir }: {
   const [guardando, setGuardando] = useState(false);
   const [probando, setProbando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Perfiles entre los que elegir cuando la cuenta entra a varios centros. El
+   * servidor ya no toma el primero: pregunta, porque el primero puede ser otro
+   * colegio donde la misma persona es digitadora.
+   */
+  const [perfiles, setPerfiles] = useState<PerfilElegible[] | null>(null);
 
   /**
    * Prueba lo guardado contra el portal. El resultado —aceptadas y de qué
    * centro, o por qué no— lo anota el servidor en la ficha, así que basta con
    * recargarla: la caja y el ✓ del paso se actualizan solos.
+   *
+   * Con `idCentro` es la respuesta a «¿cuál es tu centro?»: queda guardado.
    */
-  async function probar() {
+  async function probar(idCentro?: number) {
     setProbando(true);
     setError(null);
     try {
-      const r = await fetch('/api/sigerd/credenciales/probar', { method: 'POST' });
+      const r = await fetch('/api/sigerd/credenciales/probar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(idCentro ? { idCentro } : {}),
+      });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) setError(j.error ?? 'El portal no aceptó las credenciales.');
+      if (j.codigo === 'perfil-requerido' && Array.isArray(j.perfiles)) {
+        setPerfiles(j.perfiles);
+      } else {
+        setPerfiles(null);
+        if (!r.ok) setError(j.error ?? 'El portal no aceptó las credenciales.');
+      }
       onCambio();
     } catch {
       setError('No se pudo hablar con el portal. Vuelve a intentarlo en unos minutos.');
@@ -303,6 +321,30 @@ function PasoConectar({ cred, onCambio, onSeguir }: {
 
       {error && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      )}
+
+      {perfiles && (
+        <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm font-medium text-amber-900">
+            El portal aceptó la cuenta, pero tiene varios perfiles. ¿Cuál es el de tu centro?
+          </p>
+          <p className="text-xs text-amber-800">
+            Es la misma lista que enseña SIGERD al entrar. Los datos se bajarán de ese centro.
+          </p>
+          <div className="flex flex-col gap-2">
+            {perfiles.map((p) => (
+              <Button key={`${p.idCentro}-${p.nombreRol}`} variant="outline" size="sm"
+                className="h-auto justify-start whitespace-normal py-2 text-left"
+                disabled={probando} onClick={() => void probar(p.idCentro)}>
+                <span>
+                  <b>{String(p.idCentro).padStart(5, '0')}</b>
+                  {p.nombreCentro ? ` · ${p.nombreCentro}` : ''}
+                  <span className="text-muted-foreground"> · {p.nombreRol}</span>
+                </span>
+              </Button>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Se dice antes de guardar, no en la letra pequeña de después. */}

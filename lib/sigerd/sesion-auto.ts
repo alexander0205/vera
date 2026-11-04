@@ -3,7 +3,7 @@ import { SigerdClient } from './client';
 import { respuestaError } from './api-errores';
 import { borrarSesion, guardarSesion, leerSesion } from './sesion-cookie';
 import { conCredenciales, marcarVerificadas, marcarFallo } from './credenciales';
-import { SigerdError, type SigerdPerfil } from './types';
+import { PerfilRequeridoError, SigerdError, type SigerdPerfil } from './types';
 
 /**
  * Un cliente de SIGERD con sesión, venga de donde venga.
@@ -47,6 +47,11 @@ export async function conClienteSigerd<T>(
      * esto, una cookie caducada nunca llegaría a probar con las credenciales.
      */
     verificarCookie?: boolean;
+    /**
+     * Centro que el colegio ACABA de elegir en «Conectar», cuando su cuenta
+     * tiene varios perfiles. Manda sobre el guardado: es justo para cambiarlo.
+     */
+    idCentro?: number;
   } = {},
 ): Promise<{ datos: T; origen: 'cookie' | 'credenciales'; perfil: SigerdPerfil | null } | null> {
   // 1 · La cookie del usuario, si sigue viva.
@@ -77,20 +82,15 @@ export async function conClienteSigerd<T>(
 
   // 2 · Entrar con lo guardado. El resultado va envuelto para distinguir «no hay
   // credenciales» (null) de una operación que devuelve null por sí misma.
-  const envuelto = await conCredenciales(teamId, async (usuario, clave) => {
+  const envuelto = await conCredenciales(teamId, async (usuario, clave, centro) => {
     const cli = new SigerdClient();
     const login = await cli.iniciarSesion(usuario, clave);
 
-    // El portal puede pedir perfil cuando la cuenta tiene varios roles. Se toma
-    // el primero: en una cuenta de centro es el del propio centro. Si algún
-    // colegio tuviera varios, habrá que dejar elegir y guardar la elección —
-    // adivinar en silencio sería peor que preguntar.
+    // El portal pide perfil cuando la cuenta entra a varios centros o roles.
+    // Antes se tomaba el primero a ciegas: una cuenta que además era digitadora
+    // de otro centro bajaba los datos de ESE otro centro (Yomalia, 04-nov).
     if (login.estado === 'seleccion-perfil') {
-      const elegido = login.perfiles[0];
-      if (!elegido) {
-        throw new SigerdError('sesion-expirada', 'El portal no ofreció ningún perfil para esta cuenta.');
-      }
-      await cli.seleccionarPerfil(elegido);
+      await cli.seleccionarPerfil(elegirPerfil(login.perfiles, opts.idCentro ?? centro?.idCentro ?? null));
     }
 
     const datos = await fn(cli);
@@ -102,6 +102,35 @@ export async function conClienteSigerd<T>(
   // 3 · No hay credenciales guardadas.
   if (envuelto === null) return null;
   return { datos: envuelto.datos, origen: 'credenciales', perfil: envuelto.perfil };
+}
+
+/**
+ * Qué perfil usar cuando la cuenta tiene varios.
+ *
+ *  - Con un centro elegido (o guardado): el perfil de ese centro. Si el mismo
+ *    centro sale con varios roles, el primero: lo que se baja son los datos del
+ *    centro, no los del rol.
+ *  - Sin centro y un solo perfil: ese, no hay nada que preguntar.
+ *  - En otro caso se pregunta (`PerfilRequeridoError`). También si el centro
+ *    guardado ya no está entre los que ofrece el portal: seguir con otro sería
+ *    volver a adivinar.
+ */
+export function elegirPerfil(perfiles: SigerdPerfil[], idCentro: number | null): SigerdPerfil {
+  if (perfiles.length === 0) {
+    throw new SigerdError('sesion-expirada', 'El portal no ofreció ningún perfil para esta cuenta.');
+  }
+  if (idCentro != null) {
+    const delCentro = perfiles.find((p) => p.idCentro === idCentro);
+    if (delCentro) return delCentro;
+  } else if (perfiles.length === 1) {
+    return perfiles[0];
+  }
+  throw new PerfilRequeridoError(
+    perfiles.map((p) => ({ idCentro: p.idCentro, nombreCentro: p.nombreCentro, nombreRol: p.nombreRol })),
+    idCentro != null
+      ? `Tu cuenta de SIGERD ya no tiene el centro ${idCentro}. En Conectar, elige el de tu centro.`
+      : undefined,
+  );
 }
 
 /** Respuesta estándar cuando no hay ni cookie ni credenciales. */
@@ -156,10 +185,12 @@ export async function conSesionSigerdAuto<T>(
  */
 export async function probarCredencialesSigerd(
   teamId: number,
+  /** Centro elegido en la pantalla cuando la cuenta tiene varios perfiles. */
+  idCentro?: number,
 ): Promise<{ idCentro: number; nombreCentro: string | null } | null> {
   const { contextoCentroSesion } = await import('./personal');
   try {
-    const r = await conClienteSigerd(teamId, (cli) => contextoCentroSesion(cli), { soloCredenciales: true });
+    const r = await conClienteSigerd(teamId, (cli) => contextoCentroSesion(cli), { soloCredenciales: true, idCentro });
     if (r === null) return null;
 
     const centro = {
@@ -169,10 +200,15 @@ export async function probarCredencialesSigerd(
     await marcarVerificadas(teamId, { idCentro: centro.idCentro, nombre: centro.nombreCentro });
     return centro;
   } catch (e) {
-    await marcarFallo(
-      teamId,
-      e instanceof SigerdError ? e.message : 'No se pudo hablar con el portal.',
-    );
+    // Que falte elegir perfil no es un fallo de las credenciales: el portal las
+    // aceptó. Anotarlo como «último error» haría decir a la pantalla que no
+    // entran, cuando lo que falta es una elección.
+    if (!(e instanceof PerfilRequeridoError)) {
+      await marcarFallo(
+        teamId,
+        e instanceof SigerdError ? e.message : 'No se pudo hablar con el portal.',
+      );
+    }
     throw e;
   }
 }
