@@ -138,6 +138,14 @@ export function PagoModal({
   const [adjuntos, setAdjuntos] = useState<AdjuntoSubido[]>([]);
 
   /**
+   * Observación libre del cobro (p. ej. «Recibo de caja 4537, aplicado en
+   * Alegra el 02-nov»). La columna `pagos_recibidos.notas` y el endpoint la
+   * aceptaban desde siempre y el detalle de la factura ya la enseña; lo que
+   * faltaba era dónde escribirla. Va en cada fila del cobro.
+   */
+  const [nota, setNota] = useState('');
+
+  /**
    * Métodos que la empresa marcó como «exige comprobante».
    *
    * Hasta ahora este modal no los miraba y tampoco dejaba adjuntar nada, así
@@ -180,6 +188,7 @@ export function PagoModal({
           cuenta:        l.cuenta?.trim() || undefined,
           cuentaBancoId: l.cuentaBancoId ?? undefined,
           notaCreditoId: l.notaCreditoId ?? undefined,
+          notas:         nota.trim() || undefined,
         }));
 
       const res = await fetch(`/api/cuentas-por-cobrar/${cuenta.id}/pagos`, {
@@ -304,6 +313,18 @@ export function PagoModal({
             showCuenta
             showReferencia
             notasCredito={notasCredito}
+          />
+
+          <TextField
+            label="Nota (opcional)"
+            placeholder="Ej.: recibo de caja 4537, pagó la tía"
+            value={nota}
+            onChange={e => setNota(e.target.value)}
+            size="small" fullWidth multiline minRows={2}
+            disabled={guardando}
+            slotProps={{ htmlInput: { maxLength: 500 } }}
+            helperText="Queda guardada con el pago y se ve en el detalle de la factura."
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
           />
 
           <ComprobantesUploader

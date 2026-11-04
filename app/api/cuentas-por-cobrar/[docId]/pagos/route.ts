@@ -217,7 +217,11 @@ export async function POST(
         if (!docDgii) {
           return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
         }
-        const emitida = ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL'].includes(docDgii.estado);
+        // HISTORICA = factura traída de otro sistema (Alegra, el Excel del
+        // colegio) con el comprobante fiscal que ese sistema ya le dio. No se
+        // puede «emitir» otra vez, así que exigirlo dejaba sin forma de cobrar
+        // nada de lo migrado (CEMM tiene los seis métodos marcados).
+        const emitida = ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'HISTORICA'].includes(docDgii.estado);
         if (!emitida) {
           return NextResponse.json(
             {
