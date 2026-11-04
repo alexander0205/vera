@@ -11,12 +11,18 @@
  *
  * Si la factura ya existe en Zero (vino de Alegra, por ejemplo), no se crea
  * otra: se dice cuál es para vincularla.
+ *
+ * Factura y pago nacen con la FECHA DEL PAGO también en `created_at`, no con
+ * la de la migración. Varias pantallas leen `created_at` (Facturas «Emisión»,
+ * «Ingresos del mes» y la gráfica del panel, reportes, pagos de la ficha), y
+ * con la fecha de carga todo lo migrado salía cobrado el día que se migró.
+ * Pasó con lo traído de Alegra en CEMM (ver tmp/cemm/14-fechas-originales.sql).
  */
 
 import { and, eq, inArray, ne } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
-  adminEscolarCargos, adminEscolarConceptosPago, adminEscolarEstudiantes, clients, ecfDocuments,
+  adminEscolarCargos, adminEscolarConceptosPago, adminEscolarEstudiantes, clients, ecfDocuments, pagosRecibidos,
 } from '@/lib/db/schema';
 import { registrarPago } from '@/lib/db/queries';
 import { METODOS_PAGO_SET } from '@/lib/pagos/metodos';
@@ -108,12 +114,13 @@ export async function registrarPagoAnterior(teamId: number, userId: number, carg
     tipoPago: 2,
     // Mediodía: `new Date('YYYY-MM-DD')` es medianoche UTC y en RD sale el día antes.
     fechaEmision: new Date(`${fechaPago}T12:00:00`),
+    createdAt: new Date(`${fechaPago}T12:00:00`),
     fechaLimitePago: cargo.fechaVencimiento ?? fechaPago,
     notas: `Pago anterior a Zero: ${cargo.concepto}${mes ? ` de ${mes}` : ''} (${cargo.alumno}). Anotado en la migración.`,
   }).returning({ id: ecfDocuments.id, encf: ecfDocuments.encf });
 
   try {
-    await registrarPago({
+    const { pago } = await registrarPago({
       teamId,
       ecfDocumentId: doc.id,
       montoCentavos: pagadoCentavos,
@@ -122,6 +129,11 @@ export async function registrarPagoAnterior(teamId: number, userId: number, carg
       notas: 'Pago anterior a Zero (migración)',
       createdBy: userId,
     });
+    // El pago con su fecha, como la factura (ver arriba).
+    if (pago?.id) {
+      await db.update(pagosRecibidos).set({ createdAt: new Date(`${fechaPago}T12:00:00`) })
+        .where(and(eq(pagosRecibidos.id, pago.id), eq(pagosRecibidos.teamId, teamId)));
+    }
     await db.update(adminEscolarCargos)
       .set({ ecfDocumentId: doc.id, updatedAt: new Date() })
       .where(and(eq(adminEscolarCargos.id, cargo.id), eq(adminEscolarCargos.teamId, teamId)));
