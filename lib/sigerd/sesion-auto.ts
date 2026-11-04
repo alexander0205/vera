@@ -88,7 +88,7 @@ export async function conClienteSigerd<T>(
 
     // El portal pide perfil cuando la cuenta entra a varios centros o roles.
     // Antes se tomaba el primero a ciegas: una cuenta que además era digitadora
-    // de otro centro bajaba los datos de ESE otro centro (Yomalia, 04-nov).
+    // de otro centro bajaba los datos de ESE otro centro.
     if (login.estado === 'seleccion-perfil') {
       await cli.seleccionarPerfil(elegirPerfil(login.perfiles, opts.idCentro ?? centro?.idCentro ?? null));
     }

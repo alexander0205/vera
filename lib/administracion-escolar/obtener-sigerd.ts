@@ -208,8 +208,8 @@ export async function obtenerInformacion(
       conFichaEstudiante: true,
       // Sin responsables: +3 peticiones por estudiante pasaban el maxDuration
       // (300 s) de Vercel. La función moría sin llegar al `catch` y la fila se
-      // quedaba en «corriendo» para siempre (Yomalia, 04-nov-2026). Además en
-      // prod no traían nada: la última descarga buena (70 alumnos) dio 0.
+      // quedaba en «corriendo» para siempre. Además en prod no traían nada:
+      // las últimas descargas buenas llegaron sin ningún responsable.
     });
 
     // 3) proyección + snapshot en una transacción

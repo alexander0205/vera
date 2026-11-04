@@ -64,7 +64,7 @@ vi.mock('@/lib/sigerd/credenciales', () => ({
 }));
 
 vi.mock('@/lib/sigerd/personal', () => ({
-  contextoCentroSesion: async () => ({ idRegional: 10, idDistrito: 3, idCentro: 4521, usuario: null, nivel: null }),
+  contextoCentroSesion: async () => ({ idRegional: 10, idDistrito: 3, idCentro: 3003, usuario: null, nivel: null }),
 }));
 
 beforeEach(() => {
@@ -162,8 +162,8 @@ describe('conClienteSigerd', () => {
 
   // La misma cédula: digitadora en un centro y directora en el suyo. El portal
   // pone primero el ajeno; tomarlo a ciegas bajó los datos de otro colegio.
-  const ajeno = { idCentro: 6246, idRol: 3, idRegional: 10, nombreRol: 'Digitador', nombreCentro: null, id: '6246-3-10' };
-  const propio = { idCentro: 11895, idRol: 1, idRegional: 10, nombreRol: 'Director de Centro', nombreCentro: null, id: '11895-1-10' };
+  const ajeno = { idCentro: 1001, idRol: 3, idRegional: 10, nombreRol: 'Digitador', nombreCentro: null, id: '1001-3-10' };
+  const propio = { idCentro: 2002, idRol: 1, idRegional: 10, nombreRol: 'Director de Centro', nombreCentro: null, id: '2002-1-10' };
 
   it('con varios perfiles y nada guardado NO adivina: pide elegir y da la lista', async () => {
     const { conClienteSigerd } = await import('@/lib/sigerd/sesion-auto');
@@ -173,8 +173,8 @@ describe('conClienteSigerd', () => {
     await expect(conClienteSigerd(2, quien)).rejects.toMatchObject({
       codigo: 'perfil-requerido',
       perfiles: [
-        { idCentro: 6246, nombreRol: 'Digitador', nombreCentro: null },
-        { idCentro: 11895, nombreRol: 'Director de Centro', nombreCentro: null },
+        { idCentro: 1001, nombreRol: 'Digitador', nombreCentro: null },
+        { idCentro: 2002, nombreRol: 'Director de Centro', nombreCentro: null },
       ],
     });
     expect(estado.perfilElegido).toBeNull();
@@ -183,7 +183,7 @@ describe('conClienteSigerd', () => {
   it('con el centro guardado entra a ESE perfil, aunque no sea el primero', async () => {
     const { conClienteSigerd } = await import('@/lib/sigerd/sesion-auto');
     estado.credenciales = { usuario: '001', clave: 'x' };
-    estado.centroGuardado = 11895;
+    estado.centroGuardado = 2002;
     estado.login = { estado: 'seleccion-perfil', perfiles: [ajeno, propio] };
 
     const r = await conClienteSigerd(2, quien);
@@ -194,10 +194,10 @@ describe('conClienteSigerd', () => {
   it('el centro recién elegido manda sobre el guardado', async () => {
     const { conClienteSigerd } = await import('@/lib/sigerd/sesion-auto');
     estado.credenciales = { usuario: '001', clave: 'x' };
-    estado.centroGuardado = 6246;
+    estado.centroGuardado = 1001;
     estado.login = { estado: 'seleccion-perfil', perfiles: [ajeno, propio] };
 
-    await conClienteSigerd(2, quien, { idCentro: 11895 });
+    await conClienteSigerd(2, quien, { idCentro: 2002 });
     expect(estado.perfilElegido).toBe(propio);
   });
 });
@@ -208,7 +208,7 @@ describe('elegirPerfil', () => {
 
   it('un solo perfil y nada guardado: ese', async () => {
     const { elegirPerfil } = await import('@/lib/sigerd/sesion-auto');
-    const solo = p(4521);
+    const solo = p(3003);
     expect(elegirPerfil([solo], null)).toBe(solo);
   });
 
@@ -250,8 +250,8 @@ describe('probarCredencialesSigerd', () => {
     estado.credenciales = { usuario: '00100000001', clave: 'x' };
 
     const r = await probarCredencialesSigerd(22);
-    expect(r).toEqual({ idCentro: 4521, nombreCentro: null });
-    expect(estado.verificadas).toEqual([{ idCentro: 4521, nombre: null }]);
+    expect(r).toEqual({ idCentro: 3003, nombreCentro: null });
+    expect(estado.verificadas).toEqual([{ idCentro: 3003, nombre: null }]);
   });
 
   it('prueba LO GUARDADO aunque haya una cookie viva', async () => {
