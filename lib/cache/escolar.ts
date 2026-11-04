@@ -77,10 +77,15 @@ export function invalidarTarifas(teamId: number): void {
   invalidar(tagTarifas(teamId));
 }
 
-/** Tras bajar datos nuevos de Sigerd. */
+/**
+ * Tras bajar datos nuevos de Sigerd, o tras cruzarlos. Caduca en el acto: con
+ * 'max' la pantalla, que pide el plan justo al terminar la descarga, recibía
+ * todavía el «no hay nada descargado» de antes y no dejaba pasar a los pasos
+ * siguientes (Yomalia, 04-nov) — el mismo fallo que ya tuvo la estructura.
+ */
 export function invalidarSigerd(teamId: number): void {
-  invalidar(tagSigerd(teamId));
-  invalidar(tagEstructura(teamId));
+  invalidar(tagSigerd(teamId), { expire: 0 });
+  invalidar(tagEstructura(teamId), { expire: 0 });
 }
 
 /**
