@@ -11,6 +11,7 @@
  *   POST { periodoId, estudianteId, completado }
  *   POST { periodoId, cargoId, debe }
  *   POST { periodoId, cargoId, moraPrevia }   (centavos; null o 0 la quita)
+ *   POST { periodoId, cargoId, debe: true, moraPrevia }   («Guardar» de «Debe todo»: las dos a la vez)
  *
  * Al completar un alumno se facturan sus meses «Debe todo» (borrador, con el
  * vencimiento del mes) y se pone al día su mora: la que calcula el sistema o la
@@ -85,21 +86,24 @@ export async function POST(req: NextRequest) {
     const cargoId = Number(body.cargoId);
     const mora = body.moraPrevia === undefined ? undefined
       : body.moraPrevia === null ? 0 : Math.round(Number(body.moraPrevia));
-    if (!Number.isInteger(cargoId) || cargoId <= 0
-      || (mora === undefined ? typeof body.debe !== 'boolean' : !Number.isFinite(mora) || mora < 0)) {
+    const debeMal = body.debe !== undefined && typeof body.debe !== 'boolean';
+    if (!Number.isInteger(cargoId) || cargoId <= 0 || debeMal
+      || (mora === undefined ? body.debe === undefined : !Number.isFinite(mora) || mora < 0)) {
       return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 });
     }
     const [cargo] = await db.select({ id: adminEscolarCargos.id }).from(adminEscolarCargos)
       .where(and(eq(adminEscolarCargos.id, cargoId), eq(adminEscolarCargos.teamId, auth.teamId))).limit(1);
     if (!cargo) return NextResponse.json({ error: 'Cargo no encontrado' }, { status: 404 });
-    const debe = body.debe;
-    cambio = mora !== undefined
-      ? (d) => { if (mora > 0) d.moraPrevia[String(cargoId)] = mora; else delete d.moraPrevia[String(cargoId)]; }
-      : (d) => {
+    const debe = body.debe as boolean | undefined;
+    // «Guardar» de «Debe todo» manda las dos cosas juntas: la marca y su mora.
+    cambio = (d) => {
+      if (debe !== undefined) {
         d.debe = debe ? [...new Set([...d.debe, cargoId])] : d.debe.filter((id) => id !== cargoId);
-        // Sin «Debe todo» no hay mora que traer.
-        if (!debe) delete d.moraPrevia[String(cargoId)];
-      };
+      }
+      // Sin «Debe todo» no hay mora que traer.
+      if (debe === false || mora === 0) delete d.moraPrevia[String(cargoId)];
+      else if (mora !== undefined) d.moraPrevia[String(cargoId)] = mora;
+    };
   } else {
     const estudianteId = Number(body?.estudianteId);
     if (!Number.isInteger(estudianteId) || estudianteId <= 0 || typeof body?.completado !== 'boolean') {

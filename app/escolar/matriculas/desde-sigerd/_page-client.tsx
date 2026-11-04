@@ -282,11 +282,15 @@ export default function MatricularDesdeSigerd() {
   /** Las secciones de verdad: sin «Sin curso», que no tiene plan ni se matricula. */
   const secciones = useMemo(() => grupos.filter((g) => !esSinCurso(g)), [grupos]);
   // Al elegirle curso al alumno abierto, su panel pasa a ese curso (y a su plan).
+  // Y si se acaba de matricular, a su matrícula: sus pagos ya se pueden anotar.
   useEffect(() => {
     setEditando((x) => {
       if (!x) return x;
       const g = grupos.find((y) => y.estudiantes.some((e) => e.id === x.alumno.id));
-      return g && g.cursoId !== x.grupo.cursoId ? { ...x, grupo: g } : x;
+      const e = g?.estudiantes.find((y) => y.id === x.alumno.id);
+      if (!g || !e) return x;
+      if (e.matriculaId !== x.alumno.matriculaId) return { alumno: e, grupo: g };
+      return g.cursoId !== x.grupo.cursoId ? { ...x, grupo: g } : x;
     });
   }, [grupos]);
 
@@ -945,6 +949,49 @@ export default function MatricularDesdeSigerd() {
       .catch(() => null);
   }
 
+  /**
+   * Matricular solo al alumno abierto, sin salir del formulario: lo mismo que
+   * hace la barra de abajo con su sección, pero con él solo. Al volver, su
+   * panel ya es el de un matriculado y se siguen anotando sus pagos.
+   */
+  async function matricularUno(alumno: Alumno, grupo: Grupo) {
+    const res = await fetch('/api/administracion-escolar/matriculas/desde-sigerd', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cursoId: grupo.cursoId,
+        fechaInscripcion: fecha,
+        alumnos: [{
+          estudianteId: alumno.id,
+          conceptos: conceptosDe(alumno.id, grupo.cursoId) ?? [],
+          precios: ajustes.get(alumno.id)?.precios ?? [],
+          beca: ajustes.get(alumno.id)?.beca ?? null,
+        }],
+      }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error ?? 'No se pudo matricular');
+    const r = ((d.resultados ?? []) as ResultadoAlumno[]).find((x) => x.estudianteId === alumno.id);
+    if (r && r.resultado !== 'creada' && r.resultado !== 'conflicto') {
+      throw new Error(r.motivo ?? 'No se pudo matricular');
+    }
+    // Ya tiene matrícula: lo decidido para él aquí quedó en ella.
+    setAjustes((m) => { if (!m.has(alumno.id)) return m; const n = new Map(m); n.delete(alumno.id); return n; });
+    setFuera((s) => { if (!s.has(alumno.id)) return s; const n = new Set(s); n.delete(alumno.id); return n; });
+    await cargar();
+    setPaso('pagos');
+    toast.success(`${alumno.nombre}: matriculado`, { description: 'Ya puedes anotar sus pagos.' });
+  }
+
+  /** Tras matricular con la barra de abajo: de vuelta al formulario, con lo nuevo. */
+  async function seguirTrasMatricular() {
+    // Su borrador ya se borró al matricular: lo de aquí se descarta igual.
+    descartarBorrador();
+    await cargar();
+    setAvance(null);
+    if (editando && vista === 'formulario') setPaso('pagos');
+  }
+
   // ── Estados de la página ──────────────────────────────────────────────
   const volver = (
     <Link href="/escolar/matriculas"
@@ -978,7 +1025,10 @@ export default function MatricularDesdeSigerd() {
     );
   }
 
-  if (avance) return <Progreso avance={avance} corriendo={corriendo} volver={volver} periodo={datos.periodo?.nombre ?? ''} />;
+  if (avance) {
+    return <Progreso avance={avance} corriendo={corriendo} volver={volver} periodo={datos.periodo?.nombre ?? ''}
+      onSeguir={seguirTrasMatricular} />;
+  }
 
   if (!datos.disponible || (datos.porMatricular === 0 && !datos.enMatricula && datos.sinCurso.length === 0)) {
     return (
@@ -1054,7 +1104,8 @@ export default function MatricularDesdeSigerd() {
   const editorDelAlumno = editando && datos.periodo ? (
     <EditorAlumno
       // Otro curso es otro plan: el panel se arma de nuevo con el de ese curso.
-      key={`${editando.alumno.id}-${editando.grupo.cursoId}`}
+      // Y matricularlo, otro panel: el de un matriculado, con sus cargos ya hechos.
+      key={`${editando.alumno.id}-${editando.grupo.cursoId}-${editando.alumno.matriculaId ?? 'nueva'}`}
       alumno={editando.alumno}
       grupo={editando.grupo}
       periodoId={datos.periodo.id}
@@ -1090,6 +1141,9 @@ export default function MatricularDesdeSigerd() {
           return p?.estado === 'listo' ? [...p.lineas, ...p.otros] : null;
         })(),
         completado: completados.has(editando.alumno.id),
+        onMatricular: !esMatriculado(editando.alumno) && !esSinCurso(editando.grupo)
+          && planes.get(editando.grupo.cursoId)?.estado === 'listo'
+          ? () => matricularUno(editando.alumno, editando.grupo) : undefined,
         onCompletar: async (si) => {
           const f = await marcarCompletado(editando.alumno.id, si);
           if (f?.facturas.length) {
@@ -1803,6 +1857,8 @@ function EditorAlumno({
     /** Lo de su sección y lo de otros grados, para nombrar sus conceptos al revisar. */
     lineas: LineaPlan[] | null;
     completado: boolean;
+    /** Matricularlo ya, solo a él, para anotar sus pagos sin salir del formulario. */
+    onMatricular?: () => Promise<void>;
     /** Devuelve lo que se facturó de «Debe todo» al guardarlo, y lo que no. */
     onCompletar: (si: boolean) => Promise<ResultadoFacturarDebe | null>;
   };
@@ -1976,9 +2032,8 @@ function EditorAlumno({
           {alumno.matriculaId != null ? (
             <PagosDelAlumno estudianteId={alumno.id} matriculaId={alumno.matriculaId} periodoId={periodoId} hasta={hasta} />
           ) : (
-            <p className="text-sm text-gray-500">
-              Sus cargos nacen al matricularlo. Matricúlalo y vuelve aquí para anotar lo que ya pagó.
-            </p>
+            <MatricularParaPagos nombre={alumno.nombre} sucio={sucio} sinResponsable={alumno.sinResponsable}
+              onMatricular={formulario?.onMatricular} onCargos={() => onPaso('conceptos')} />
           )}
         </div>
       )}
@@ -2120,10 +2175,78 @@ function EditorAlumno({
   );
 }
 
-/** Mientras se matricula, y cuando termina: sección por sección. */
-function Progreso({ avance, corriendo, volver, periodo }: {
-  avance: Avance[]; corriendo: boolean; volver: ReactNode; periodo: string;
+/**
+ * «Pagos» de un alumno que aún no tiene matrícula: sus cargos nacen al
+ * matricularlo. Se le matricula aquí mismo, solo a él, y se sigue.
+ */
+function MatricularParaPagos({ nombre, sucio, sinResponsable, onMatricular, onCargos }: {
+  nombre: string;
+  /** Cambios en «Cargos del año» sin guardar: primero hay que guardarlos. */
+  sucio: boolean;
+  sinResponsable: boolean;
+  onMatricular?: () => Promise<void>;
+  onCargos: () => void;
 }) {
+  const [confirmar, setConfirmar] = useState(false);
+  const [matriculando, setMatriculando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function matricular() {
+    if (!onMatricular) return;
+    setMatriculando(true); setError(null);
+    try {
+      await onMatricular();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo matricular');
+      setMatriculando(false);
+      setConfirmar(false);
+    }
+  }
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-600">
+        Todavía no está matriculado: sus cargos nacen al matricularlo. Matricúlalo aquí y sigue anotando lo que ya pagó,
+        sin salir del formulario.
+      </p>
+      {sucio && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          Tienes cambios sin guardar en{' '}
+          <button type="button" onClick={onCargos} className="font-medium underline">Cargos del año</button>:
+          guárdalos antes de matricularlo.
+        </p>
+      )}
+      {sinResponsable && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          No tiene responsable de pago: se puede matricular, pero para anotar pagos hace falta ponérselo en «Familia».
+        </p>
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      {onMatricular ? (
+        <Button className="bg-zero-600 hover:bg-zero-700" disabled={sucio || matriculando} onClick={() => setConfirmar(true)}>
+          <UserCheck className="mr-1.5 h-4 w-4" />Matricular a {nombre} y seguir
+        </Button>
+      ) : (
+        <p className="text-xs text-gray-500">Para matricularlo, elige su curso y espera a que cargue su plan en «Cargos del año».</p>
+      )}
+      <ConfirmDialog
+        open={confirmar}
+        onOpenChange={(o) => { if (!o && !matriculando) setConfirmar(false); }}
+        title={`¿Matricular a ${nombre}?`}
+        description="Se matricula solo a este alumno, con lo que se le eligió en «Cargos del año» (conceptos, precio propio y beca). Se le crean sus cargos y te quedas en «Pagos» para anotar lo que ya pagó. Los demás siguen como estaban."
+        confirmLabel="Sí, matricular"
+        loading={matriculando}
+        onConfirm={() => void matricular()}
+      />
+    </div>
+  );
+}
+
+/** Mientras se matricula, y cuando termina: sección por sección. */
+function Progreso({ avance, corriendo, volver, periodo, onSeguir }: {
+  avance: Avance[]; corriendo: boolean; volver: ReactNode; periodo: string;
+  /** Volver al formulario (al alumno que estaba abierto), ya con lo matriculado. */
+  onSeguir: () => Promise<void>;
+}) {
+  const [volviendo, setVolviendo] = useState(false);
   const hechas = avance.filter((a) => a.estado === 'hecho' || a.estado === 'fallo').length;
   const secciones = avance.filter((a) => a.cursoId !== CAMBIOS);
   const creadas = secciones.reduce((n, a) => n + (a.creadas ?? 0), 0);
@@ -2195,9 +2318,14 @@ function Progreso({ avance, corriendo, volver, periodo }: {
       </ul>
 
       {!corriendo && (
-        <div className="flex justify-end">
-          <Button className="bg-zero-600 hover:bg-zero-700" asChild>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="outline" asChild>
             <Link href="/escolar/matriculas">Ver matrículas</Link>
+          </Button>
+          <Button className="bg-zero-600 hover:bg-zero-700" disabled={volviendo}
+            onClick={() => { setVolviendo(true); void onSeguir().finally(() => setVolviendo(false)); }}>
+            {volviendo ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ArrowLeft className="mr-1.5 h-4 w-4" />}
+            Seguir con el formulario
           </Button>
         </div>
       )}

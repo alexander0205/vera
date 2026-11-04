@@ -101,6 +101,8 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
   const [noCobrar, setNoCobrar] = useState<CargoFicha | null>(null);
   const [anulando, setAnulando] = useState(false);
   const [debe, setDebe] = useState<Set<number>>(new Set());
+  /** El mes cuyo panel de «Debe todo» está abierto, sin guardar todavía. */
+  const [decidiendo, setDecidiendo] = useState<number | null>(null);
   /** La mora que un mes «Debe todo» ya traía de otro sistema, en centavos. */
   const [moraPrevia, setMoraPrevia] = useState<Map<number, number>>(new Map());
   // Si ya se anotó algún NCF, lo normal es que los pagos lo lleven.
@@ -152,20 +154,24 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
   const hechos = visibles.filter((c) => indicado(c, debe)).length;
   useEffect(() => { if (cargos) onIndicados?.(hechos, visibles.length); }, [cargos, hechos, visibles.length, onIndicados]);
 
-  async function marcarDebe(c: CargoFicha) {
-    if (!periodoId) return;
-    const si = !debe.has(c.id);
-    setDebe((s) => { const n = new Set(s); if (si) n.add(c.id); else n.delete(c.id); return n; });
+  /**
+   * «Guardar» del panel de «Debe todo»: la marca y la mora que ya traía, de
+   * una vez. `si=false` la quita (y con ella la mora). Hasta aquí no se guarda
+   * nada: pulsar «Debe todo» solo abre el panel.
+   */
+  async function guardarDebe(c: CargoFicha, si: boolean, moraCentavos: number | null): Promise<boolean> {
+    if (!periodoId) return false;
     const r = await fetch('/api/administracion-escolar/matriculas/desde-sigerd/completados', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ periodoId, cargoId: c.id, debe: si }),
+      body: JSON.stringify(si
+        ? { periodoId, cargoId: c.id, debe: true, moraPrevia: moraCentavos }
+        : { periodoId, cargoId: c.id, debe: false }),
     }).catch(() => null);
-    if (!r?.ok) {
-      setDebe((s) => { const n = new Set(s); if (si) n.delete(c.id); else n.add(c.id); return n; });
-      setError('No se pudo guardar «Debe todo»');
-    } else if (!si) {
-      setMoraPrevia((m) => { const n = new Map(m); n.delete(c.id); return n; });
-    }
+    if (!r?.ok) return false;
+    setDebe((s) => { const n = new Set(s); if (si) n.add(c.id); else n.delete(c.id); return n; });
+    setMoraPrevia((m) => { const n = new Map(m); if (si && moraCentavos) n.set(c.id, moraCentavos); else n.delete(c.id); return n; });
+    setDecidiendo(null);
+    return true;
   }
 
   /** Al mes se le anotó un pago, se vinculó o se anuló: ya no «debe todo». */
@@ -178,16 +184,6 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ periodoId, cargoId, debe: false }),
     }).catch(() => null)));
-  }
-
-  async function guardarMoraPrevia(c: CargoFicha, centavos: number | null) {
-    if (!periodoId) return;
-    const r = await fetch('/api/administracion-escolar/matriculas/desde-sigerd/completados', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ periodoId, cargoId: c.id, moraPrevia: centavos }),
-    }).catch(() => null);
-    if (!r?.ok) { setError('No se pudo guardar la mora que traía'); return; }
-    setMoraPrevia((m) => { const n = new Map(m); if (centavos) n.set(c.id, centavos); else n.delete(c.id); return n; });
   }
 
   async function anular() {
@@ -267,7 +263,8 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
               <dd className="inline">anota lo que el padre pagó (no lo que debe). Queda una factura histórica con ese
                 pago; lo que falta sigue vencido desde el vencimiento del mes y, si el concepto cobra mora, la pone el sistema.</dd></div>
             <div><dt className="inline font-semibold text-orange-700">Debe todo · </dt>
-              <dd className="inline">no pagó nada. El cargo ya existe, pero no se factura solo: al pulsar «Guardar
+              <dd className="inline">no pagó nada. Se abre un recuadro: escribe la mora que traía, si venía con
+                ella, y guarda la decisión con su botón. El cargo ya existe, pero no se factura solo: al pulsar «Guardar
                 estudiante» se factura el mes (borrador sin NCF, con su vencimiento) y se le pone de una vez la mora ya
                 vencida, si el concepto la cobra. Si venía de otro sistema con mora, anótala en «Mora que ya traía» y se
                 usa esa. Necesita responsable de pago.</dd></div>
@@ -369,20 +366,21 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
                                   className="inline-flex overflow-hidden rounded-md border border-gray-200">
                                   <button type="button" disabled={!clienteId} aria-pressed={anotando?.id === c.id && !anotando.abono}
                                     title="Pagó el mes entero: queda una factura histórica pagada"
-                                    onClick={() => setAnotando({ id: c.id, abono: false })}
+                                    onClick={() => { setDecidiendo(null); setAnotando({ id: c.id, abono: false }); }}
                                     className={`${seg} ${anotando?.id === c.id && !anotando.abono ? 'bg-emerald-600 text-white' : 'text-gray-700 hover:bg-emerald-50'}`}>
                                     Pagó todo
                                   </button>
                                   <button type="button" disabled={!clienteId} aria-pressed={anotando?.id === c.id && anotando.abono}
                                     title="Pagó una parte: se anota lo que pagó y lo demás sigue debiéndose (con mora, si el concepto la cobra)"
-                                    onClick={() => setAnotando({ id: c.id, abono: true })}
+                                    onClick={() => { setDecidiendo(null); setAnotando({ id: c.id, abono: true }); }}
                                     className={`${seg} border-l border-gray-200 ${anotando?.id === c.id && anotando.abono ? 'bg-amber-500 text-white' : 'text-gray-700 hover:bg-amber-50'}`}>
                                     Abonó
                                   </button>
-                                  <button type="button" disabled={!periodoId} aria-pressed={marcadoDebe}
+                                  <button type="button" disabled={!periodoId} aria-pressed={marcadoDebe || decidiendo === c.id}
                                     title={periodoId ? 'No pagó nada: se factura al guardar el estudiante y desde su vencimiento corre la mora (si el concepto la cobra)' : undefined}
-                                    onClick={() => { setAnotando(null); void marcarDebe(c); }}
-                                    className={`${seg} border-l border-gray-200 ${marcadoDebe ? 'bg-orange-600 text-white' : 'text-gray-700 hover:bg-orange-50'}`}>
+                                    onClick={() => { setAnotando(null); setDecidiendo(decidiendo === c.id ? null : c.id); }}
+                                    className={`${seg} border-l border-gray-200 ${marcadoDebe ? 'bg-orange-600 text-white'
+                                      : decidiendo === c.id ? 'bg-orange-100 text-orange-900' : 'text-gray-700 hover:bg-orange-50'}`}>
                                     Debe todo
                                   </button>
                                 </div>
@@ -400,21 +398,32 @@ export function PagosDelAlumno({ estudianteId, matriculaId, periodoId, hasta, on
                             )}
                           </td>
                         </tr>
-                        {marcadoDebe && anotando?.id !== c.id && (
+                        {decidiendo === c.id && anotable(c) && (
+                          <tr className="border-b border-gray-100 bg-orange-50/40">
+                            <td colSpan={4} className="px-3 pb-3 pt-1">
+                              <DecidirDebe cargo={c} conResponsable={!!clienteId} marcado={marcadoDebe}
+                                moraCentavos={moraPrevia.get(c.id) ?? null}
+                                onGuardar={(si, mora) => guardarDebe(c, si, mora)}
+                                onCancelar={() => setDecidiendo(null)} />
+                            </td>
+                          </tr>
+                        )}
+                        {marcadoDebe && decidiendo !== c.id && anotando?.id !== c.id && (
                           <tr className="border-b border-gray-50">
                             <td colSpan={4} className="px-3 pb-2 pt-0">
-                              <p className={`rounded-md px-2.5 py-1.5 text-[11px] ${clienteId ? 'bg-orange-50 text-orange-900' : 'bg-amber-50 text-amber-900'}`}>
-                                {clienteId
-                                  ? <>Su cargo ya existe, pero <b>no se factura solo</b>. Se factura al pulsar «Guardar estudiante»
-                                    (borrador sin NCF{c.fechaVencimiento ? <>, vence {fmtFechaCorta(c.fechaVencimiento)}</> : null}) y se
-                                    le pone de una vez la mora ya vencida, si el concepto la cobra.</>
-                                  : <>Sin responsable de pago <b>no se podrá facturar</b>: el mes se quedaría como cargo pendiente,
-                                    sin factura y sin mora. Ponle el responsable en «Familia».</>}
+                              <p className={`flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md px-2.5 py-1.5 text-[11px] ${clienteId ? 'bg-orange-50 text-orange-900' : 'bg-amber-50 text-amber-900'}`}>
+                                <Check className="h-3.5 w-3.5 shrink-0" />
+                                <span className="min-w-0 flex-1">
+                                  {clienteId
+                                    ? <><b>Guardado «Debe todo».</b> Se factura al pulsar «Guardar estudiante»
+                                      {c.fechaVencimiento ? <> (vence {fmtFechaCorta(c.fechaVencimiento)})</> : null}
+                                      {moraPrevia.get(c.id) ? <> · mora que traía {fmtDOP(moraPrevia.get(c.id)!)}</> : ' · mora la calcula el sistema'}.</>
+                                    : <><b>Guardado «Debe todo»</b>, pero sin responsable de pago <b>no se podrá facturar</b>.
+                                      Ponle el responsable en «Familia».</>}
+                                </span>
+                                <button type="button" onClick={() => setDecidiendo(c.id)}
+                                  className="shrink-0 font-medium underline hover:no-underline">Cambiar</button>
                               </p>
-                              {clienteId && (
-                                <MoraQueTraia key={moraPrevia.get(c.id) ?? 0} centavos={moraPrevia.get(c.id) ?? null}
-                                  onGuardar={(v) => void guardarMoraPrevia(c, v)} />
-                              )}
                             </td>
                           </tr>
                         )}
@@ -601,26 +610,65 @@ function AnotarPago({ cargo, abono, conNcf, forma, onCancelar, onHecho }: {
 }
 
 /**
- * La mora que un mes ya traía de otro sistema (Alegra, la libreta del colegio).
- * Vacío = la calcula el sistema. Se guarda al salir del campo.
+ * «Debe todo» de un mes, antes de guardarlo: qué va a pasar, la mora que ya
+ * traía de otro sistema (Alegra, la libreta del colegio) y el botón que guarda
+ * la decisión. Mora vacía = la calcula el sistema.
  */
-function MoraQueTraia({ centavos, onGuardar }: { centavos: number | null; onGuardar: (centavos: number | null) => void }) {
-  const [texto, setTexto] = useState(centavos ? (centavos / 100).toFixed(2) : '');
-  const guardar = () => {
-    const v = texto.trim() ? parseDOPaCentavos(texto) : null;
-    if (texto.trim() && (v == null || v < 0)) return;
-    if ((v || null) !== (centavos || null)) onGuardar(v || null);
-  };
+function DecidirDebe({ cargo, conResponsable, marcado, moraCentavos, onGuardar, onCancelar }: {
+  cargo: CargoFicha;
+  conResponsable: boolean;
+  /** Ya estaba guardado: se cambia la mora o se quita. */
+  marcado: boolean;
+  moraCentavos: number | null;
+  onGuardar: (si: boolean, moraCentavos: number | null) => Promise<boolean>;
+  onCancelar: () => void;
+}) {
+  const [texto, setTexto] = useState(moraCentavos ? (moraCentavos / 100).toFixed(2) : '');
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const mora = texto.trim() ? parseDOPaCentavos(texto) : null;
+  const moraMal = !!texto.trim() && (mora == null || mora < 0);
+
+  async function guardar(si: boolean) {
+    if (si && moraMal) { setError('La mora que traía tiene que ser un monto, o déjala vacía.'); return; }
+    setGuardando(true); setError(null);
+    const ok = await onGuardar(si, si ? (mora || null) : null);
+    if (!ok) { setError(si ? 'No se pudo guardar «Debe todo»' : 'No se pudo quitar «Debe todo»'); setGuardando(false); }
+  }
+
   return (
-    <label className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-gray-600">
-      Mora que ya traía (opcional)
-      <input value={texto} onChange={(e) => setTexto(e.target.value)} onBlur={guardar} inputMode="decimal"
-        placeholder="RD$" aria-label="Mora que ya traía"
-        className="h-7 w-28 rounded-md border border-gray-300 bg-white px-2 text-xs tabular-nums focus:border-zero-500 focus:outline-none" />
-      <span className="text-gray-500">
-        {centavos ? 'Se usa esta en vez de la que calcula el sistema, repartida entre los periodos vencidos.'
-          : 'Vacío: la calcula el sistema. Llénalo solo si venía de otro sistema con mora ya cobrada.'}
-      </span>
-    </label>
+    <div className="space-y-2">
+      <p className={`rounded-md px-2.5 py-1.5 text-[11px] ${conResponsable ? 'bg-orange-50 text-orange-900' : 'bg-amber-50 text-amber-900'}`}>
+        {conResponsable
+          ? <>No pagó nada de este mes. Su cargo ya existe, pero <b>no se factura solo</b>: al pulsar «Guardar estudiante»
+            se factura (borrador sin NCF{cargo.fechaVencimiento ? <>, vence {fmtFechaCorta(cargo.fechaVencimiento)}</> : null}) y
+            se le pone de una vez la mora ya vencida, si el concepto la cobra.</>
+          : <>Sin responsable de pago <b>no se podrá facturar</b>: el mes se quedaría como cargo pendiente,
+            sin factura y sin mora. Ponle el responsable en «Familia».</>}
+      </p>
+      {conResponsable && (
+        <label className="flex flex-wrap items-center gap-2 text-[11px] text-gray-600">
+          Mora que ya traía (opcional)
+          <input value={texto} onChange={(e) => setTexto(e.target.value)} inputMode="decimal"
+            placeholder="RD$" aria-label="Mora que ya traía"
+            className={`h-7 w-28 rounded-md border bg-white px-2 text-xs tabular-nums focus:border-zero-500 focus:outline-none ${moraMal ? 'border-red-400' : 'border-gray-300'}`} />
+          <span className="text-gray-500">
+            {mora ? 'Se cobra esta en vez de la que calcula el sistema, repartida entre los periodos vencidos.'
+              : 'Vacío: la calcula el sistema. Llénalo solo si venía de otro sistema con mora ya cobrada.'}
+          </span>
+        </label>
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" className="bg-orange-600 hover:bg-orange-700" disabled={guardando} onClick={() => void guardar(true)}>
+          {guardando && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+          {marcado ? 'Guardar cambios' : 'Guardar «Debe todo»'}
+        </Button>
+        {marcado && (
+          <Button size="sm" variant="outline" disabled={guardando} onClick={() => void guardar(false)}>Quitar «Debe todo»</Button>
+        )}
+        <Button size="sm" variant="outline" disabled={guardando} onClick={onCancelar}>Cancelar</Button>
+      </div>
+    </div>
   );
 }
