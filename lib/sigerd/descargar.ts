@@ -95,27 +95,208 @@ export interface DumpCentro {
   };
 }
 
+interface OpcionesDescarga {
+  anoAcademico: number;
+  conPersonal?: boolean;
+  /** Añade la condición final a cada sección (+1 petición por sección). */
+  conCondicionFinal?: boolean;
+  /** Añade la ficha detallada de cada empleado (+1 petición por empleado). */
+  conFichaPersonal?: boolean;
+  /**
+   * Añade la ficha de 29 campos de cada estudiante único del árbol (dedup por
+   * id; +1 petición por estudiante, ~465 para un centro típico). Es lo que más
+   * pesa: con ella la descarga pasa de ~1 min a varios.
+   */
+  conFichaEstudiante?: boolean;
+}
+
 /**
- * Descarga el centro completo (nivel estructura + roster + personal).
+ * Una petición de las que se hacen DESPUÉS de la estructura: la condición final
+ * de una sección (por índices del árbol, para escribirla en su sitio) o la ficha
+ * de un empleado o de un estudiante.
+ */
+export type TareaDescarga =
+  | { tipo: 'condicion'; s: number; g: number; sec: number }
+  | { tipo: 'ficha-personal'; id: number }
+  | { tipo: 'ficha-estudiante'; id: number };
+
+/**
+ * Una descarga a medias: lo ya traído y lo que falta pedir.
+ *
+ * Existe porque un centro grande no cabe en una llamada de Vercel (300 s): son
+ * una petición por estudiante, otra por empleado y otra por sección. Cada
+ * llamada avanza lo que le dé tiempo y guarda esto; la siguiente sigue donde
+ * quedó. Es JSON plano a propósito: se guarda tal cual en la base.
+ */
+export interface DescargaParcial {
+  anoAcademico: number;
+  estructura: ArbolCentro;
+  personal: EmpleadoSigerd[];
+  puestos: PuestoSigerd[];
+  personalFichas: FichaPersonalSigerd[];
+  estudianteFichas: FichaEstudianteSigerd[];
+  /** Lo que falta por pedir, en orden: condiciones, fichas de personal, de estudiantes. */
+  pendientes: TareaDescarga[];
+  /** Cuántas tareas tenía la descarga al empezar (para decir «N de M»). */
+  total: number;
+}
+
+/**
+ * Primera parte: la estructura (servicios, grados, secciones y alumnos), el
+ * personal y el catálogo de cargos, que son pocas peticiones, y la lista de lo
+ * que falta. No pide ninguna ficha.
+ */
+export async function iniciarDescarga(
+  cli: SigerdClient,
+  params: OpcionesDescarga,
+  onProgreso?: ProgresoSync,
+): Promise<DescargaParcial> {
+  const estructura = await recopilarCentro(cli, { anoAcademico: params.anoAcademico }, onProgreso);
+
+  let personal: EmpleadoSigerd[] = [];
+  let puestos: PuestoSigerd[] = [];
+  if (params.conPersonal !== false) {
+    onProgreso?.('personal', 0, 1);
+    const ctx = await contextoCentroSesion(cli);
+    personal = await personalDeCentro(cli, ctx);
+    puestos = await catalogoPuestos(cli);
+    onProgreso?.('personal', 1, 1);
+  }
+
+  const pendientes: TareaDescarga[] = [];
+  if (params.conCondicionFinal) {
+    estructura.servicios.forEach((s, si) => s.grados.forEach((g, gi) => g.secciones.forEach((_, ki) => {
+      pendientes.push({ tipo: 'condicion', s: si, g: gi, sec: ki });
+    })));
+  }
+  // El grid de personal da una fila por (persona, puesto): el mismo Id puede
+  // venir repetido. Su ficha es una sola.
+  if (params.conPersonal !== false && params.conFichaPersonal) {
+    for (const id of new Set(personal.map((e) => e.Id))) pendientes.push({ tipo: 'ficha-personal', id });
+  }
+  // Un estudiante no debería repetirse entre secciones, pero si pasara no se
+  // pide su ficha dos veces.
+  if (params.conFichaEstudiante) {
+    for (const id of idsEstudiantes(estructura)) pendientes.push({ tipo: 'ficha-estudiante', id });
+  }
+
+  return {
+    anoAcademico: params.anoAcademico,
+    estructura,
+    personal,
+    puestos,
+    personalFichas: [],
+    estudianteFichas: [],
+    pendientes,
+    total: pendientes.length,
+  };
+}
+
+function idsEstudiantes(estructura: ArbolCentro): number[] {
+  const ids = new Set<number>();
+  for (const s of estructura.servicios)
+    for (const g of s.grados)
+      for (const sec of g.secciones)
+        for (const e of sec.estudiantes) ids.add(e.id);
+  return [...ids];
+}
+
+/**
+ * Pide tareas pendientes, en orden, hasta que se acaben o se pase `hasta` (ms
+ * desde epoch; `Infinity` = todas). Escribe lo traído en `parcial` y quita cada
+ * tarea de `pendientes` al terminarla, así que se puede retomar en otra llamada
+ * con otra sesión. Una ficha que falla tras los reintentos se salta, como
+ * siempre hizo la descarga completa.
+ *
+ * La primera ficha de cada tipo en cada llamada abre su módulo del portal
+ * (`precargar`); las siguientes reusan esa página.
+ */
+export async function avanzarDescarga(
+  cli: SigerdClient,
+  parcial: DescargaParcial,
+  hasta: number,
+  onProgreso?: ProgresoSync,
+): Promise<number> {
+  const abiertos = new Set<TareaDescarga['tipo']>();
+  let hechas = 0;
+  while (parcial.pendientes.length > 0 && Date.now() < hasta) {
+    const t = parcial.pendientes[0];
+    const precargar = !abiertos.has(t.tipo);
+    abiertos.add(t.tipo);
+
+    if (t.tipo === 'condicion') {
+      const s = parcial.estructura.servicios[t.s];
+      const g = s?.grados[t.g];
+      const sec = g?.secciones[t.sec];
+      if (s && g && sec) {
+        const r = await conReintento(() =>
+          condicionFinalPorSeccion(cli, {
+            idServicioCentro: s.idServicio,
+            idGrado: g.idGrado,
+            idSeccion: sec.idSeccion,
+            idAnoLectivo: parcial.anoAcademico,
+          }),
+        );
+        if (r) sec.condicionFinal = r.rows ?? [];
+      }
+    } else if (t.tipo === 'ficha-personal') {
+      const ficha = await conReintento(() => traerFichaPersonal(cli, t.id, { precargar }));
+      if (ficha) parcial.personalFichas.push(ficha);
+    } else {
+      const ficha = await conReintento(() => traerFichaEstudiante(cli, t.id, { precargar }));
+      if (ficha) parcial.estudianteFichas.push(ficha);
+    }
+
+    parcial.pendientes.shift();
+    hechas++;
+    onProgreso?.(t.tipo, parcial.total - parcial.pendientes.length, parcial.total);
+  }
+  return hechas;
+}
+
+/** El volcado final a partir de una descarga ya sin pendientes. */
+export function armarDump(
+  parcial: DescargaParcial,
+  estudianteParientes: { idEstudiante: number; parientes: ParienteSigerd[] }[] = [],
+): DumpCentro {
+  const { estructura } = parcial;
+  return {
+    anoAcademico: parcial.anoAcademico,
+    contexto: {
+      idRegional: estructura.idRegional,
+      idDistrito: estructura.idDistrito,
+      idCentro: estructura.idCentro,
+    },
+    estructura,
+    personal: parcial.personal,
+    personalFichas: parcial.personalFichas,
+    puestos: parcial.puestos,
+    estudianteFichas: parcial.estudianteFichas,
+    estudianteParientes,
+    totales: {
+      servicios: estructura.totales.servicios,
+      grados: estructura.totales.grados,
+      secciones: estructura.totales.secciones,
+      estudiantes: estructura.totales.estudiantes,
+      empleados: parcial.personal.length,
+      seccionesConError: estructura.totales.seccionesConError,
+      nFichasEstudiante: parcial.estudianteFichas.length,
+      nParientes: estudianteParientes.reduce((n, e) => n + e.parientes.length, 0),
+    },
+  };
+}
+
+/**
+ * Descarga el centro completo de una vez (estructura + roster + personal y, si
+ * se piden, condiciones y fichas). Para la ruta de desarrollo y la consola; la
+ * pantalla del colegio va por tandas (`iniciarDescarga` + `avanzarDescarga`).
  *
  * `conPersonal` por defecto true — el usuario lo pidió explícitamente. El centro
  * NO se recibe del cliente: sale de la sesión del portal.
  */
 export async function descargarTodo(
   cli: SigerdClient,
-  params: {
-    anoAcademico: number;
-    conPersonal?: boolean;
-    /** Añade la condición final a cada sección (+1 petición por sección). */
-    conCondicionFinal?: boolean;
-    /** Añade la ficha detallada de cada empleado (+1 petición por empleado). */
-    conFichaPersonal?: boolean;
-    /**
-     * Añade la ficha de 29 campos de cada estudiante único del árbol (dedup por
-     * id; +1 petición por estudiante, ~465 para un centro típico). El flujo pasa
-     * de ~1 min a ~4-5 min — esperado, no es un bug.
-     */
-    conFichaEstudiante?: boolean;
+  params: OpcionesDescarga & {
     /**
      * Añade los responsables (padre/madre/tutor) de cada estudiante (+3
      * peticiones por estudiante, ~1400 en un centro típico). MUY pesado: para
@@ -126,63 +307,14 @@ export async function descargarTodo(
   },
   onProgreso?: ProgresoSync,
 ): Promise<DumpCentro> {
-  const estructura = await recopilarCentro(cli, { anoAcademico: params.anoAcademico }, onProgreso);
-
-  // Condición final por sección: recorre el árbol ya recopilado y añade a cada
-  // sección la lista de estudiantes con su condición (Promovido/Reprobado/…).
-  if (params.conCondicionFinal) {
-    let hechas = 0;
-    for (const s of estructura.servicios) {
-      for (const g of s.grados) {
-        for (const sec of g.secciones) {
-          const r = await conReintento(() =>
-            condicionFinalPorSeccion(cli, {
-              idServicioCentro: s.idServicio,
-              idGrado: g.idGrado,
-              idSeccion: sec.idSeccion,
-              idAnoLectivo: params.anoAcademico,
-            }),
-          );
-          if (r) sec.condicionFinal = r.rows ?? [];
-          onProgreso?.('condicion', ++hechas, estructura.totales.secciones);
-        }
-      }
-    }
-  }
-
-  // Ficha de 29 campos por estudiante: recorre el árbol ya recopilado, dedup
-  // por id (un estudiante no debería repetirse entre secciones, pero si pasara
-  // no queremos pedir su ficha dos veces) y trae una por una.
-  let estudianteFichas: FichaEstudianteSigerd[] = [];
-  if (params.conFichaEstudiante) {
-    const idsUnicos = new Set<number>();
-    for (const s of estructura.servicios) {
-      for (const g of s.grados) {
-        for (const sec of g.secciones) {
-          for (const e of sec.estudiantes) idsUnicos.add(e.id);
-        }
-      }
-    }
-
-    const ids = [...idsUnicos];
-    for (const [i, idEstudiante] of ids.entries()) {
-      const ficha = await conReintento(() => traerFichaEstudiante(cli, idEstudiante, { precargar: i === 0 }));
-      if (ficha) estudianteFichas.push(ficha);
-      onProgreso?.('ficha-estudiante', i + 1, ids.length);
-    }
-  }
+  const parcial = await iniciarDescarga(cli, params, onProgreso);
+  await avanzarDescarga(cli, parcial, Infinity, onProgreso);
 
   // Responsables (padre/madre/tutor) por estudiante — 3 peticiones cada uno.
   // Solo se guardan los estudiantes con al menos un responsable.
   const estudianteParientes: { idEstudiante: number; parientes: ParienteSigerd[] }[] = [];
   if (params.conParientes) {
-    const ids = new Set<number>();
-    for (const s of estructura.servicios)
-      for (const g of s.grados)
-        for (const sec of g.secciones)
-          for (const e of sec.estudiantes) ids.add(e.id);
-
-    const lista = [...ids];
+    const lista = idsEstudiantes(parcial.estructura);
     for (const [i, idEstudiante] of lista.entries()) {
       const parientes = await conReintento(() =>
         traerParientesEstudiante(cli, idEstudiante, { precargar: i === 0 }),
@@ -192,48 +324,5 @@ export async function descargarTodo(
     }
   }
 
-  let personal: EmpleadoSigerd[] = [];
-  let personalFichas: FichaPersonalSigerd[] = [];
-  let puestos: PuestoSigerd[] = [];
-
-  if (params.conPersonal !== false) {
-    onProgreso?.('personal', 0, 1);
-    const ctx = await contextoCentroSesion(cli);
-    personal = await personalDeCentro(cli, ctx);
-    puestos = await catalogoPuestos(cli);
-    onProgreso?.('personal', 1, 1);
-
-    if (params.conFichaPersonal) {
-      for (const [i, emp] of personal.entries()) {
-        const ficha = await conReintento(() => traerFichaPersonal(cli, emp.Id, { precargar: i === 0 }));
-        if (ficha) personalFichas.push(ficha);
-        onProgreso?.('ficha-personal', i + 1, personal.length);
-      }
-    }
-  }
-
-  return {
-    anoAcademico: params.anoAcademico,
-    contexto: {
-      idRegional: estructura.idRegional,
-      idDistrito: estructura.idDistrito,
-      idCentro: estructura.idCentro,
-    },
-    estructura,
-    personal,
-    personalFichas,
-    puestos,
-    estudianteFichas,
-    estudianteParientes,
-    totales: {
-      servicios: estructura.totales.servicios,
-      grados: estructura.totales.grados,
-      secciones: estructura.totales.secciones,
-      estudiantes: estructura.totales.estudiantes,
-      empleados: personal.length,
-      seccionesConError: estructura.totales.seccionesConError,
-      nFichasEstudiante: estudianteFichas.length,
-      nParientes: estudianteParientes.reduce((n, e) => n + e.parientes.length, 0),
-    },
-  };
+  return armarDump(parcial, estudianteParientes);
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
 import {
@@ -32,7 +32,24 @@ export interface EstadoObtener {
   nSecciones: number | null;
   nEmpleados: number | null;
   completadoEn: string | null;
+  /** Mientras corre por tandas: cuántas fichas van de cuántas. */
+  progreso: { hechos: number; total: number } | null;
 }
+
+/** Lo que responden `POST /api/sigerd/obtener` y `/obtener/continuar`. */
+interface RespuestaObtener {
+  estado?: 'completado' | 'corriendo' | 'error';
+  mensaje?: string;
+  error?: string;
+  codigo?: string;
+  hechos?: number;
+  total?: number;
+  nEstudiantes?: number;
+  nSecciones?: number;
+  nEmpleados?: number;
+}
+
+const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Años de reserva, SOLO para cuando el portal no contesta.
@@ -105,46 +122,99 @@ export function ObtenerSigerd({ onCompletado }: {
 
   const cargarEstado = useCallback(() => refrescarEstado(), [refrescarEstado]);
   const corriendo = lanzando || estado?.estado === 'corriendo';
+  /** Fichas traídas de cuántas, mientras la descarga va por tandas. */
+  const [avance, setAvance] = useState<{ hechos: number; total: number } | null>(null);
+  const progreso = avance ?? estado?.progreso ?? null;
+  /** Hay un bucle de tandas vivo en ESTA pestaña: no se arranca otro. */
+  const enBucle = useRef(false);
   // Con una descarga ya guardada el botón no «obtiene»: la REPITE. Antes de
   // esto quedaba el mismo texto, y sobre todo, el colegio no tenía forma de ver
   // lo que SIGERD cambió después (alumnos nuevos, cambios de sección).
   const yaHayDescarga = estado?.estado === 'completado' || estado?.conDescarga === true;
   const setCorriendo = setLanzando;
 
-  async function obtener() {
+  /**
+   * Cierra una respuesta del servidor. `true` si hay que pedir otra tanda.
+   * Un centro grande no cabe en una llamada (300 s en Vercel): el servidor
+   * responde `corriendo` con el avance y aquí se sigue pidiendo.
+   */
+  async function atender(r: Response, d: RespuestaObtener): Promise<boolean> {
+    if (r.status === 409 && d.codigo === 'tanda-en-curso') {
+      // Otra pestaña la está avanzando; esta solo espera a que termine.
+      await esperar(5000);
+      return true;
+    }
+    if (r.status === 409) {
+      // otra en curso / ya corriendo / nada que seguir
+      if (d.codigo !== 'nada-en-curso') setError(d.error ?? 'Hay otra sincronización en curso. Espera.');
+      return false;
+    }
+    if (!r.ok) {
+      setError(d.error ?? 'No se pudo obtener la información.');
+      return false;
+    }
+    if (d.estado === 'error') {
+      setError(d.mensaje ?? 'SIGERD no disponible. Continuaremos cuando vuelva.');
+      return false;
+    }
+    if (d.estado === 'corriendo') {
+      if (d.total != null) setAvance({ hechos: d.hechos ?? 0, total: d.total });
+      return true;
+    }
+    setOk(`Información guardada: ${d.nEstudiantes} estudiantes · ${d.nSecciones} secciones · ${d.nEmpleados} empleados.`);
+    return false;
+  }
+
+  /** Pide tandas hasta que el servidor diga que terminó (o falle). */
+  async function seguirTandas() {
+    while (true) {
+      const r = await fetch('/api/sigerd/obtener/continuar', { method: 'POST' });
+      const d: RespuestaObtener = await r.json().catch(() => ({}));
+      if (!(await atender(r, d))) break;
+    }
+  }
+
+  async function correr(primera: () => Promise<boolean>) {
+    if (enBucle.current) return;
+    enBucle.current = true;
     setCorriendo(true);
     setError(null);
     setOk(null);
     try {
+      if (await primera()) await seguirTandas();
+      await cargarEstado();
+      onCompletado?.();
+    } catch {
+      setError('Se interrumpió la conexión. Lo ya descargado se guarda: vuelve a abrir esta pantalla para seguir.');
+    } finally {
+      enBucle.current = false;
+      setAvance(null);
+      setCorriendo(false);
+    }
+  }
+
+  function obtener() {
+    void correr(async () => {
       const r = await fetch('/api/sigerd/obtener', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ anoAcademico: Number(elegido) }),
       });
-      const d = await r.json();
-
-      if (r.status === 409) {
-        // otra en curso / ya corriendo → hay que esperar
-        setError(d.error ?? 'Hay otra sincronización en curso. Espera.');
-        return;
-      }
-      if (!r.ok) {
-        setError(d.error ?? 'No se pudo obtener la información.');
-        return;
-      }
-      if (d.estado === 'error') {
-        setError(d.mensaje ?? 'SIGERD no disponible. Continuaremos cuando vuelva.');
-        return;
-      }
-      setOk(`Información guardada: ${d.nEstudiantes} estudiantes · ${d.nSecciones} secciones · ${d.nEmpleados} empleados.`);
-      await cargarEstado();
-      onCompletado?.();
-    } catch {
-      setError('Se interrumpió la conexión. Vuelve a intentarlo.');
-    } finally {
-      setCorriendo(false);
-    }
+      const d: RespuestaObtener = await r.json().catch(() => ({}));
+      return atender(r, d);
+    });
   }
+
+  // Al volver a la pantalla con una descarga a medias, se sigue sola: sin
+  // esto quedaba esperando una pestaña que ya no existe hasta que el candado
+  // venciera. Si otra pestaña la está llevando, el servidor responde
+  // `tanda-en-curso` y esta solo espera.
+  const aMedias = estado?.estado === 'corriendo' && estado.progreso != null;
+  useEffect(() => {
+    if (aMedias && !enBucle.current) void correr(async () => true);
+    // `correr` cambia en cada render; lo que decide es si hay una a medias.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aMedias]);
 
   return (
     <div className="space-y-3">
@@ -184,7 +254,9 @@ export function ObtenerSigerd({ onCompletado }: {
 
       {corriendo && (
         <p className="text-sm text-muted-foreground">
-          Sincronizando con SIGERD… puede tardar cerca de un minuto. No cierres la página.
+          {progreso
+            ? `Descargando las fichas de SIGERD: ${progreso.hechos} de ${progreso.total}. Deja esta pantalla abierta hasta que termine.`
+            : 'Sincronizando con SIGERD… puede tardar unos minutos. Deja esta pantalla abierta.'}
         </p>
       )}
 
