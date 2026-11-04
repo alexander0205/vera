@@ -12,7 +12,7 @@
  */
 
 import Link from 'next/link';
-import { PAGINAS_SIN_CATEGORIA, RUTA_CRM, paginasPorCategoria } from '@/lib/agentes/crm-rutas';
+import { RUTA_CRM, paginaCrm, type ClaveCrm } from '@/lib/agentes/crm-rutas';
 import { CONTACTO, Contenedor } from './_piezas';
 
 /**
@@ -24,7 +24,15 @@ import { CONTACTO, Contenedor } from './_piezas';
  * no hay ancla por producto a la que apuntar.
  */
 type EnlacePie = { texto: string; href: string };
-type ColumnaPie = { titulo: string; enlaces: readonly EnlacePie[]; secciones?: readonly { titulo: string; enlaces: readonly EnlacePie[] }[] };
+type ColumnaPie = { titulo: string; enlaces: readonly EnlacePie[] };
+
+/**
+ * Del CRM, el pie lleva el resumen y una página por categoría, no las diecinueve.
+ * Con todas, la columna medía el triple que las demás y estiraba el pie entero.
+ * Las demás siguen enlazadas: el menú de cada subpágina lista el CRM completo y
+ * el sitemap las declara una por una.
+ */
+const CRM_EN_EL_PIE: readonly ClaveCrm[] = ['chatbot-whatsapp', 'pipeline', 'bandeja', 'integraciones', 'preguntas'];
 
 const COLUMNAS: readonly ColumnaPie[] = [
   {
@@ -55,11 +63,12 @@ const COLUMNAS: readonly ColumnaPie[] = [
     // Aquí salen en el HTML de todas las páginas: es el enlace interno que un
     // buscador sigue aunque el desplegable de la cabecera esté cerrado.
     titulo: 'Zero CRM',
-    enlaces: [{ texto: 'Resumen', href: RUTA_CRM }],
-    // Por categoría, con su nombre encima; preguntas frecuentes va al final, sin categoría.
-    secciones: [
-      ...paginasPorCategoria().map(c => ({ titulo: c.nombre, enlaces: c.paginas.map(p => ({ texto: p.menu, href: p.ruta })) })),
-      { titulo: '', enlaces: PAGINAS_SIN_CATEGORIA.map(p => ({ texto: p.menu, href: p.ruta })) },
+    enlaces: [
+      { texto: 'Resumen', href: RUTA_CRM },
+      ...CRM_EN_EL_PIE.map(clave => {
+        const p = paginaCrm(clave);
+        return { texto: p.menu, href: p.ruta };
+      }),
     ],
   },
 ];
@@ -101,12 +110,6 @@ export function PieMarketing() {
               <p className="text-[12.5px] font-semibold text-white">{col.titulo}</p>
               <div className="mt-4 flex flex-col gap-2.5">
                 {col.enlaces.map(l => <EnlaceDelPie key={l.texto} enlace={l} />)}
-                {col.secciones?.map(sec => (
-                  <div key={sec.titulo || 'sin-titulo'} className="mt-1.5 flex flex-col gap-2.5">
-                    {sec.titulo && <p className="m-0 text-[10.5px] font-semibold uppercase tracking-[.16em] text-white/65">{sec.titulo}</p>}
-                    {sec.enlaces.map(l => <EnlaceDelPie key={l.texto} enlace={l} />)}
-                  </div>
-                ))}
               </div>
             </div>
           ))}
