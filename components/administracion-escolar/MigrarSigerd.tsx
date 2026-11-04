@@ -273,7 +273,10 @@ function PasoConectar({ cred, onCambio, onSeguir }: {
               {verificadas
                 ? <Lock className="h-4 w-4 shrink-0 text-emerald-700" />
                 : <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" />}
-              <div className="min-w-0 flex-1 text-sm">
+              {/* `basis-56`: con `flex-1` a secas la base era 0 y, en pantalla
+                  estrecha, el texto se encogía a una columna de una palabra
+                  montada sobre los botones en vez de mandarlos a otra línea. */}
+              <div className="min-w-0 flex-1 basis-56 text-sm">
                 <p className={`font-medium ${verificadas ? 'text-emerald-900' : 'text-amber-900'}`}>
                   {verificadas ? 'Conectadas con el portal' : 'Guardadas, pero todavía sin probar'}
                 </p>
@@ -289,7 +292,7 @@ function PasoConectar({ cred, onCambio, onSeguir }: {
                   <p className="mt-1 text-xs text-red-700">Último intento: {cred.ultimoError}</p>
                 )}
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="flex shrink-0 flex-wrap gap-2">
                 <Button variant={verificadas ? 'outline' : 'default'} size="sm"
                   onClick={() => void probar()} disabled={probando || guardando}
                   className={verificadas ? '' : 'bg-zero-600 hover:bg-zero-700'}>
