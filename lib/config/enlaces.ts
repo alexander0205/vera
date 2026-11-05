@@ -53,6 +53,10 @@ export const BASE_PUBLICA = 'https://app.zero.com.do';
  */
 export const SITIO_PUBLICO = 'https://www.zero.com.do';
 
+/** El chat de la web pública lo sirve el CRM. La clave es pública: sale en el HTML del sitio. */
+export const ZERO_CHAT_ORIGEN = 'https://crm.zero.com.do';
+export const ZERO_CHAT_CLAVE = process.env.NEXT_PUBLIC_ZERO_CHAT_CLAVE ?? '';
+
 /** Una ruta del sitio público, absoluta. Para metadatos y datos estructurados. */
 export function urlDelSitio(ruta: string): string {
   return new URL(ruta, SITIO_PUBLICO).toString();

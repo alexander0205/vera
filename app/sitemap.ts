@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
 import { GUIAS } from '@/app/(marketing)/guias/page';
+import { CRM_ACTUALIZADA, PAGINAS_CRM } from '@/lib/agentes/crm-rutas';
 
 /**
  * El mapa del sitio público.
@@ -28,6 +29,7 @@ const RUTAS = [
   { ruta: '/funciones', prioridad: 0.9 },
   { ruta: '/agentes', prioridad: 0.7 },
   { ruta: '/contacto', prioridad: 0.6 },
+  { ruta: '/distribuidores', prioridad: 0.5 },
   { ruta: '/terminos', prioridad: 0.2 },
   { ruta: '/privacidad', prioridad: 0.2 },
 ] as const;
@@ -39,10 +41,19 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...RUTAS,
     ...GUIAS.map(g => ({ ruta: `/guias/${g.slug}`, prioridad: 0.7 })),
   ];
-  return todas.map(({ ruta, prioridad }) => ({
+  const generales: MetadataRoute.Sitemap = todas.map(({ ruta, prioridad }) => ({
     url: new URL(ruta, SITIO_PUBLICO).toString(),
     lastModified: cuando,
     changeFrequency: 'weekly',
     priority: prioridad,
   }));
+  // Las subpáginas del CRM sí dicen en pantalla cuándo se actualizaron, y esa es
+  // la fecha que va aquí: si el mapa dijera otra, la página y él se contradicen.
+  const crm: MetadataRoute.Sitemap = PAGINAS_CRM.map(p => ({
+    url: new URL(p.ruta, SITIO_PUBLICO).toString(),
+    lastModified: new Date(`${CRM_ACTUALIZADA}T12:00:00-04:00`),
+    changeFrequency: 'monthly',
+    priority: 0.8,
+  }));
+  return [...generales, ...crm];
 }

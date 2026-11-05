@@ -4,7 +4,7 @@ import { MODULOS_CONTABLES } from '@/lib/contabilidad/panorama';
 
 // Las columnas de contarPendientesPorOrigen.
 const CLAVES_PENDIENTES = [
-  'ventas', 'notas', 'cobros', 'anulaciones', 'compras', 'compras_anuladas', 'pagos_proveedor', 'gastos_caja', 'gastos_doc',
+  'ventas', 'saldos_iniciales', 'notas', 'cobros', 'anulaciones', 'compras', 'compras_anuladas', 'pagos_proveedor', 'gastos_caja', 'gastos_doc',
   'nomina_devengo', 'nomina_provision', 'nomina_pagados_sin_pago', 'nomina_pagos_sueldos', 'nomina_obligaciones',
 ];
 

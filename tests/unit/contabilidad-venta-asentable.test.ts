@@ -42,3 +42,14 @@ describe('esVentaAsentable — e-CF fiscal', () => {
     assert.equal(esVentaAsentable('ANULADO', '31'), false);
   });
 });
+
+describe('esVentaAsentable — factura histórica (traída de otro sistema)', () => {
+  // Su ingreso ya está en los libros de allá: entra como saldo inicial
+  // (generarAsientoSaldoInicial), nunca como venta del período.
+  test('HISTORICA sin-ncf NO se asienta como venta', () => {
+    assert.equal(esVentaAsentable('HISTORICA', 'sin-ncf'), false);
+  });
+  test("HISTORICA '00' NO se asienta como venta", () => {
+    assert.equal(esVentaAsentable('HISTORICA', '00'), false);
+  });
+});

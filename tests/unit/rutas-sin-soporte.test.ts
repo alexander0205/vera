@@ -78,6 +78,7 @@ describe('soporteAplica', () => {
       '/guias',
       '/guias/itbis-it1',
       '/contacto',
+      '/distribuidores',
       '/terminos',
       '/privacidad',
     ]) {

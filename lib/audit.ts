@@ -100,6 +100,16 @@ export type AuditAction =
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
   // clasifica todo lo que viene después. Se traza quién y cuánto.
   | 'CONTABILIDAD_CATALOGO_IMPORTADO'
+  // Nómina: una carga masiva de empleados cambia salarios y cuentas de banco de golpe.
+  | 'NOMINA_EMPLEADOS_IMPORTADOS'
+  // Nómina: una liquidación da de baja al empleado y genera un pago grande.
+  | 'NOMINA_LIQUIDACION_CREADA'
+  // Nómina: un cambio en «Avanzado» (divisor, faltas, regalía, vacaciones) cambia cómo se calcula todo lo que sigue.
+  | 'NOMINA_AVANZADO_CAMBIADO'
+  // Contabilidad: transferencias, cargos, depósitos y retiros de banco, y la conciliación.
+  | 'CONTABILIDAD_MOVIMIENTO_BANCARIO'
+  // Contabilidad: la baja de un activo fijo (saca costo y depreciación del libro).
+  | 'CONTABILIDAD_ACTIVO_BAJA'
   // Un correo de suscripción ya enviado (cuenta activada, prueba por vencer,
   // pago recibido). Su `resource` es la llave que evita mandarlo dos veces:
   // ver `claveAviso` en lib/suscripcion/datos-aviso.ts.
@@ -111,7 +121,18 @@ export type AuditAction =
   // a otro porque la descarga de SIGERD lo pone en el segundo. Cambia lo que se
   // le cobra de ahí en adelante, así que cada movimiento deja su fila: el
   // `resource` es `matricula:<id>` y el meta lleva curso de origen y de destino.
-  | 'ESCOLAR_MATRICULA_MOVIDA_SIGERD';
+  | 'ESCOLAR_MATRICULA_MOVIDA_SIGERD'
+  // Equipo de Zero (/admin/equipo): un administrador de la plataforma se agrega,
+  // se invita con una cuenta nueva, se quita, o se le manda un enlace de acceso
+  // nuevo. Es de la plataforma, no de una empresa: va con team_id vacío, el
+  // `actor` es quien lo hizo y el `resource` es `user:<id>` de a quién. Se
+  // escribe en la misma transacción que el cambio (lib/auth/equipo-zero.ts).
+  // `ADMIN_PLATAFORMA_PERFIL`: cambió la foto o el cargo de alguien del equipo.
+  | 'ADMIN_PLATAFORMA_AGREGADO'
+  | 'ADMIN_PLATAFORMA_INVITADO'
+  | 'ADMIN_PLATAFORMA_QUITADO'
+  | 'ADMIN_PLATAFORMA_ENLACE'
+  | 'ADMIN_PLATAFORMA_PERFIL';
 
 export interface AuditParams {
   teamId:    number;

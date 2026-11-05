@@ -153,7 +153,7 @@ export function SeccionProducto({
  * bajar.
  */
 export function SeccionConImagen({
-  id, antetitulo, titulo, detalle, lineas, captura, alt, invertida = false,
+  id, antetitulo, titulo, detalle, lineas, captura, alt, invertida = false, enlace,
 }: {
   id?: string;
   antetitulo: string;
@@ -163,6 +163,8 @@ export function SeccionConImagen({
   captura: string;
   alt: string;
   invertida?: boolean;
+  /** Lleva a la página donde este tema se cuenta entero. */
+  enlace?: { texto: string; href: string };
 }) {
   return (
     <section id={id} className="scroll-mt-20">
@@ -183,6 +185,15 @@ export function SeccionConImagen({
                   </li>
                 ))}
               </ul>
+            )}
+            {enlace && (
+              <Link
+                href={enlace.href}
+                className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-zero-600 transition hover:text-[#102a72]"
+              >
+                {enlace.texto}
+                <Flecha tamano={14} />
+              </Link>
             )}
           </div>
           <Image
@@ -314,16 +325,18 @@ export function PrecioProducto({ texto }: { texto: React.ReactNode }) {
  * respuestas en el HTML aunque estén plegadas, así que un robot las ve.
  */
 export function PreguntasProducto({
-  preguntas, titulo = 'Lo que siempre preguntan',
+  preguntas, titulo = 'Lo que siempre preguntan', enlace,
 }: {
   preguntas: readonly Pregunta[];
   titulo?: string;
+  /** A dónde seguir leyendo, si estas son solo algunas. */
+  enlace?: { texto: string; href: string };
 }) {
   return (
     <section id="preguntas" className="scroll-mt-20">
       <Contenedor className="pt-16 sm:pt-[82px]">
         <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.72fr)_minmax(0,1.5fr)] lg:gap-12">
-          <Encabezado antetitulo="Preguntas frecuentes" titulo={titulo} />
+          <Encabezado antetitulo="Preguntas frecuentes" titulo={titulo} enlace={enlace} />
           <div className="min-w-0">
             <Acordeon preguntas={preguntas} />
           </div>

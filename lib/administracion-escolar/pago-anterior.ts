@@ -128,6 +128,8 @@ export async function registrarPagoAnterior(teamId: number, userId: number, carg
       fechaPago,
       notas: 'Pago anterior a Zero (migración)',
       createdBy: userId,
+      // Dinero cobrado en el sistema anterior: ya está en sus libros, contabilidad no lo asienta (0217).
+      deMigracion: true,
     });
     // El pago con su fecha, como la factura (ver arriba).
     if (pago?.id) {

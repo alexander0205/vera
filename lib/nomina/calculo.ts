@@ -37,17 +37,24 @@ function salarioCotizable(salarioCents: number, smcCents: number, topeEnSalarios
  */
 export function isrMensualCents(baseImponibleMensualCents: number, escala: TramoISR[]): number {
   if (baseImponibleMensualCents <= 0) return 0;
-  const anual = baseImponibleMensualCents * 12;
+  return redondear(isrAnualCents(baseImponibleMensualCents * 12, escala) / 12);
+}
 
+/**
+ * ISR de un año sobre una renta ANUAL (sin redondear a centavos: quien lo usa
+ * redondea al final). Es la escala misma; `isrMensualCents` la aplica al mes
+ * anualizado. La regalía y otros pagos de una sola vez se gravan con la renta
+ * del año, no como si se repitieran doce veces.
+ */
+export function isrAnualCents(rentaAnualCents: number, escala: TramoISR[]): number {
+  if (rentaAnualCents <= 0) return 0;
   // El tramo aplicable es el de mayor `desdeCents` que no supere la renta.
   let tramo: TramoISR = escala[0];
   for (const t of escala) {
-    if (anual >= t.desdeCents) tramo = t;
+    if (rentaAnualCents >= t.desdeCents) tramo = t;
     else break;
   }
-
-  const impuestoAnual = tramo.fijoCents + (anual - tramo.desdeCents) * tramo.tasa;
-  return redondear(impuestoAnual / 12);
+  return tramo.fijoCents + (rentaAnualCents - tramo.desdeCents) * tramo.tasa;
 }
 
 /** Por qué el ISR de un mes da lo que da, para enseñarlo en pantalla. */

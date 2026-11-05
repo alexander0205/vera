@@ -1,7 +1,6 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useRutaNomina } from '@/lib/nomina/rutas';
 import useSWR from 'swr';
 import { Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,8 +14,7 @@ import { Empleado, fetcher, nombreCompleto } from '../../shared';
  */
 export default function EditarEmpleadoClient({ id }: { id: string }) {
   const router = useRouter();
-  const ruta = useRutaNomina();
-  const volver = () => router.push(ruta('/empleados'));
+  const volver = () => router.push('/nomina/empleados');
   const { data, isLoading } = useSWR<{ empleado?: Empleado; error?: string }>(
     `/api/nomina/empleados/${id}`, fetcher,
   );

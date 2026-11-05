@@ -3,6 +3,7 @@ import { db } from '@/lib/db/drizzle';
 import { adminEscolarTutores, clients } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, and } from 'drizzle-orm';
+import { textoLimpio } from '@/lib/utils/format';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
@@ -10,6 +11,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { teamId } = auth;
   const { id } = await params;
   const { nombre, documento, telefono, whatsapp, email, direccion, clientId, imagen } = await req.json();
+  const nombreLimpio = textoLimpio(nombre);
+  if (nombre !== undefined && !nombreLimpio) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
 
   // clientId: null desvincula; si viene un id, debe pertenecer al team.
   if (clientId !== undefined && clientId !== null) {
@@ -21,14 +24,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const [row] = await db.update(adminEscolarTutores)
     .set({
-      ...(nombre !== undefined ? { nombre: nombre.trim() } : {}),
-      ...(documento !== undefined ? { documento: documento?.trim() || null } : {}),
-      ...(telefono !== undefined ? { telefono: telefono?.trim() || null } : {}),
+      // Todo sin invisibles (ver `textoLimpio`). Editar al tutor y volver a
+      // escribir la cédula es como se arregla uno que ya entró sucio.
+      ...(nombreLimpio ? { nombre: nombreLimpio } : {}),
+      ...(documento !== undefined ? { documento: textoLimpio(documento) } : {}),
+      ...(telefono !== undefined ? { telefono: textoLimpio(telefono) } : {}),
       // Por donde se le escribe de verdad. Se perdia: el formulario lo mandaba
       // y aqui no se leia, asi que editar un tutor nunca guardaba su WhatsApp.
-      ...(whatsapp !== undefined ? { whatsapp: whatsapp?.trim() || null } : {}),
-      ...(email !== undefined ? { email: email?.trim() || null } : {}),
-      ...(direccion !== undefined ? { direccion: direccion?.trim() || null } : {}),
+      ...(whatsapp !== undefined ? { whatsapp: textoLimpio(whatsapp) } : {}),
+      ...(email !== undefined ? { email: textoLimpio(email) } : {}),
+      ...(direccion !== undefined ? { direccion: textoLimpio(direccion) } : {}),
       ...(clientId !== undefined ? { clientId } : {}),
       ...(imagen !== undefined ? { imagen: imagen || null } : {}),
       updatedAt: new Date(),

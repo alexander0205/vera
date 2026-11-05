@@ -28,6 +28,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import Link from 'next/link';
+import { resumenDeTareas } from '@/lib/admin/tablas';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,6 +90,8 @@ export default async function AdminDashboard() {
     recentUsers,
     recentActivity,
     certsExpiring,
+    tareasResumen,
+    adminsActivos,
   ] = await Promise.all([
     // Usuarios: total, verificados, con 2FA
     db
@@ -204,6 +207,10 @@ export default async function AdminDashboard() {
       .where(and(sql`${teams.certVencimiento} is not null`, sql`${teams.certVencimiento} <= ${in60Days.toISOString()}`))
       .orderBy(teams.certVencimiento)
       .limit(8),
+
+    // Operación: lo que le toca al equipo hoy (ver /admin/tareas y /admin/equipo).
+    resumenDeTareas().catch(() => null),
+    db.select({ n: count() }).from(users).where(and(eq(users.platformRole, 'admin'), sql`${users.deletedAt} is null`)),
   ]);
 
   const u = usersAgg[0];
@@ -246,11 +253,35 @@ export default async function AdminDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Panel de control</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Resumen</h1>
           <p className="text-sm text-gray-500">
             Vista global de todas las empresas · {fecha(now)}
           </p>
         </div>
+      </div>
+
+      {/* Operación: lo que le toca al equipo hoy */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Link href="/admin/tareas?asignada=soporte" className="rounded-xl border border-zero-200 bg-zero-50 p-4 hover:shadow-sm transition-shadow">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zero-700">Le tocan a Soporte</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-zero-700">{tareasResumen?.deSoporte ?? '—'}</p>
+          <p className="text-xs text-gray-500">tareas de colegios por responder</p>
+        </Link>
+        <Link href="/admin/tareas?vence=vencidas" className={`rounded-xl border p-4 hover:shadow-sm transition-shadow ${tareasResumen?.vencidas ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}`}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Tareas vencidas</p>
+          <p className={`mt-1 text-2xl font-bold tabular-nums ${tareasResumen?.vencidas ? 'text-red-700' : 'text-gray-900'}`}>{tareasResumen?.vencidas ?? '—'}</p>
+          <p className="text-xs text-gray-500">{tareasResumen ? `${tareasResumen.pendientes} pendientes en total` : 'sin datos'}</p>
+        </Link>
+        <Link href="/admin/tareas" className={`rounded-xl border p-4 hover:shadow-sm transition-shadow ${tareasResumen?.sinMover24h ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-white'}`}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Sin mover 24 h+</p>
+          <p className={`mt-1 text-2xl font-bold tabular-nums ${tareasResumen?.sinMover24h ? 'text-amber-700' : 'text-gray-900'}`}>{tareasResumen?.sinMover24h ?? '—'}</p>
+          <p className="text-xs text-gray-500">pendientes sin respuesta</p>
+        </Link>
+        <Link href="/admin/equipo" className="rounded-xl border border-gray-200 bg-white p-4 hover:shadow-sm transition-shadow">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Equipo Zero</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-gray-900">{n(adminsActivos[0]?.n)}</p>
+          <p className="text-xs text-gray-500">{n(adminsActivos[0]?.n) === 1 ? 'administrador' : 'administradores'}</p>
+        </Link>
       </div>
 
       {/* KPIs principales */}

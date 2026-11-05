@@ -94,12 +94,13 @@ export async function POST(req: NextRequest) {
       naturaleza: b.naturaleza as never,
       cuentaPadreId: typeof b.cuentaPadreId === 'number' ? b.cuentaPadreId : null,
       imputable: typeof b.imputable === 'boolean' ? b.imputable : undefined,
+      convertirPadre: b.convertirPadre === true,
     }, user.id);
 
     return NextResponse.json({ cuenta }, { status: 201 });
   } catch (e) {
     if (e instanceof CuentaError) {
-      return NextResponse.json({ error: e.message }, { status: e.status });
+      return NextResponse.json({ error: e.message, codigo: e.codigo }, { status: e.status });
     }
     throw e;
   }

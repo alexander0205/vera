@@ -3,7 +3,6 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useRutaNomina } from '@/lib/nomina/rutas';
 import useSWR, { mutate as mutarCache } from 'swr';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,12 +12,12 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { FORMATOS_BANCO, FORMATO_POR_DEFECTO } from '@/lib/nomina/formatos-banco';
 import { provisionesDeLineas } from '@/lib/nomina/provisiones';
-import { LABEL_TIPO_CORRIDA } from '@/lib/nomina/corrida';
+import { esCorridaEspecial, LABEL_TIPO_CORRIDA } from '@/lib/nomina/corrida';
 import { rangoLegible } from '@/lib/nomina/periodos';
 import { partesDeHoras, totalHorasTexto, type ResumenHoras } from '@/lib/nomina/horas';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { toast } from '@/lib/toast';
-import { ArrowLeft, Loader2, CheckCircle2, BookOpen, Download, Banknote, AlertTriangle, FileText, PiggyBank, Landmark, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle2, BookOpen, Download, Banknote, AlertTriangle, FileText, PiggyBank, Landmark, Trash2, RefreshCw } from 'lucide-react';
 
 interface Corrida {
   id: number;
@@ -45,6 +44,7 @@ interface Linea {
   afpEmpleadoCents: number;
   sfsEmpleadoCents: number;
   isrCents: number;
+  otrasDeduccionesCents: number;
   totalDeduccionesCents: number;
   netoCents: number;
   totalPatronalCents: number;
@@ -63,6 +63,15 @@ interface Linea {
   /** Quien cobra por hora: sus horas aprobadas del período. */
   horasDetalle: ResumenHoras | null;
   pagada: boolean;
+}
+interface ConceptoLinea {
+  id: number;
+  lineaId: number;
+  tipo: 'ingreso' | 'descuento';
+  nombre: string;
+  montoCents: number;
+  pedidoCents: number;
+  comentario: string | null;
 }
 interface Obligacion {
   id: number;
@@ -134,7 +143,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   const { can } = usePermissions();
   const puedeCorrer = can('nomina:correr');
   const puedePagar = can('nomina:pagar');
-  const { data, isLoading, mutate } = useSWR<{ corrida: Corrida; lineas: Linea[]; obligaciones: Obligacion[]; horasPendientes?: number }>(`/api/nomina/corridas/${id}`, fetcher);
+  const { data, isLoading, mutate } = useSWR<{ corrida: Corrida; lineas: Linea[]; obligaciones: Obligacion[]; conceptos?: ConceptoLinea[]; horasPendientes?: number }>(`/api/nomina/corridas/${id}`, fetcher);
   const [confirmar, setConfirmar] = useState(false);
   const [aprobando, setAprobando] = useState(false);
   const [descargando, setDescargando] = useState(false);
@@ -143,22 +152,40 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   const [pagandoObl, setPagandoObl] = useState<number | null>(null);
   const [metodoObl, setMetodoObl] = useState<'efectivo' | 'transferencia' | 'cheque'>('transferencia');
   const [metodoEmp, setMetodoEmp] = useState<'efectivo' | 'transferencia' | 'cheque'>('transferencia');
+  // De qué caja o banco sale el pago; vacío = la de por defecto de la nómina.
+  const [cuentaEmp, setCuentaEmp] = useState('');
+  const [cuentaObl, setCuentaObl] = useState('');
   const [descargandoTSS, setDescargandoTSS] = useState(false);
   const [formato, setFormato] = useState(FORMATO_POR_DEFECTO);
   const [borrar, setBorrar] = useState(false);
+  const [recalculando, setRecalculando] = useState(false);
   const [borrando, setBorrando] = useState(false);
   // Candado de las operaciones que mueven dinero o estado. Un ref y no estado de
   // React: entre la respuesta y el re-render el botón volvía a habilitarse un
   // instante, y un segundo clic ahí devolvía el 409 de «ya pagada».
   const ocupadoRef = useRef(false);
   const router = useRouter();
-  const ruta = useRutaNomina();
 
   const yaAprobada = data?.corrida && data.corrida.estado !== 'borrador';
+  // Con empleados marcados, el archivo del banco y la constancia de efectivo se limitan a ellos.
+  const parametroLineas = sel.size > 0 ? `&lineas=${[...sel].join(',')}` : '';
+  const conceptosPorLinea = new Map<number, ConceptoLinea[]>();
+  for (const c of data?.conceptos ?? []) conceptosPorLinea.set(c.lineaId, [...(conceptosPorLinea.get(c.lineaId) ?? []), c]);
   const { data: preview } = useSWR<PreviewDispersion>(
-    yaAprobada && puedePagar ? `/api/nomina/corridas/${id}/dispersion?preview=1&formato=${formato}` : null,
+    yaAprobada && puedePagar ? `/api/nomina/corridas/${id}/dispersion?preview=1&formato=${formato}${parametroLineas}` : null,
     fetcher,
   );
+  const { data: dCuentas } = useSWR<{ cuentas: { id: number; codigo: string; nombre: string }[]; efectivoId: number | null; bancoId: number | null }>(
+    yaAprobada && puedePagar ? '/api/nomina/cuentas-pago' : null,
+    fetcher,
+  );
+  const cuentasPago = dCuentas?.cuentas ?? [];
+  /** «Por defecto (Caja)» según el método: efectivo sale de la caja, lo demás del banco. */
+  const textoCuentaPorDefecto = (metodo: string) => {
+    const id = metodo === 'efectivo' ? dCuentas?.efectivoId : dCuentas?.bancoId;
+    const c = cuentasPago.find((x) => x.id === id);
+    return c ? `Por defecto: ${c.nombre}` : 'Cuenta por defecto';
+  };
   const { data: previewTSS } = useSWR<PreviewTSS>(
     yaAprobada && puedePagar ? `/api/nomina/corridas/${id}/tss?preview=1` : null,
     fetcher,
@@ -174,6 +201,8 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   const { corrida, lineas } = data;
   const obligaciones = data.obligaciones ?? [];
   const b = BADGE[corrida.estado] ?? BADGE.borrador;
+  // La regalía y la liquidación no provisionan nada ni se arman con los conceptos de la ficha.
+  const esEspecial = esCorridaEspecial(corrida.tipo);
   // Provisiones del período (regalía/vacaciones/cesantía): estimación lineal
   // sobre el bruto de cada línea. No se descuenta al empleado; es costo futuro.
   const prov = provisionesDeLineas(lineas);
@@ -204,6 +233,11 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
       if (!res.ok) throw new Error(j.error ?? 'No se pudo aprobar');
       const contable = textoAsiento(j.asiento);
       toast.success(contable ? `Corrida aprobada · ${contable}` : 'Corrida aprobada');
+      // Un préstamo cancelado, o ya cobrado por otro borrador, no se descuenta de más.
+      const ajustes = Array.isArray(j.ajustesPrestamos) ? j.ajustesPrestamos : [];
+      if (ajustes.length > 0) {
+        toast.warning(`Se ajustó el descuento de préstamo de ${ajustes.length} empleado${ajustes.length === 1 ? '' : 's'}: ya estaba cancelado o cobrado. Revisa la columna «Otros desc.».`);
+      }
       await mutate();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
@@ -217,7 +251,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   async function descargarDispersion() {
     setDescargando(true);
     try {
-      const res = await fetch(`/api/nomina/corridas/${id}/dispersion?formato=${formato}`);
+      const res = await fetch(`/api/nomina/corridas/${id}/dispersion?formato=${formato}${parametroLineas}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error ?? 'No se pudo generar el archivo');
@@ -268,7 +302,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
     setPagandoEmp(true);
     try {
       const res = await fetch(`/api/nomina/corridas/${id}/pagar-empleados`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...cuerpo, metodo: metodoEmp }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...cuerpo, metodo: metodoEmp, ...(cuentaEmp ? { cuentaSalidaId: Number(cuentaEmp) } : {}) }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error ?? 'No se pudo registrar el pago');
@@ -292,7 +326,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
     setPagandoObl(oblId);
     try {
       const res = await fetch(`/api/nomina/corridas/${id}/obligaciones/${oblId}/pagar`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metodo: metodoObl }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metodo: metodoObl, ...(cuentaObl ? { cuentaSalidaId: Number(cuentaObl) } : {}) }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error ?? 'No se pudo registrar el pago');
@@ -307,6 +341,25 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
     }
   }
 
+  /** Vuelve a calcular el borrador con lo que hay hoy (conceptos, préstamos, ausencias, horas, salarios). */
+  async function recalcular() {
+    if (ocupadoRef.current) return;
+    ocupadoRef.current = true;
+    setRecalculando(true);
+    try {
+      const res = await fetch(`/api/nomina/corridas/${id}/recalcular`, { method: 'POST' });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? 'No se pudo recalcular');
+      toast.success(j.antesNetoCents === j.totalNetoCents ? 'Recalculado: sin cambios' : 'Borrador recalculado con los datos de hoy');
+      await mutate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error');
+    } finally {
+      ocupadoRef.current = false;
+      setRecalculando(false);
+    }
+  }
+
   /** Un borrador todavía no tiene efecto contable: se puede borrar entero. */
   async function borrarBorrador() {
     if (ocupadoRef.current) return;
@@ -317,6 +370,8 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error ?? 'No se pudo borrar el borrador');
       toast.success('Borrador eliminado');
+      // Por ejemplo: la regalía del año ya está aprobada y ese empleado hay que pagarle su regalía aparte.
+      if (typeof j.aviso === 'string') toast.warning(j.aviso, { duration: 15000 });
       // Se saca de la lista en caché ANTES de volver: sin esto la lista seguía
       // enseñando el borrador borrado hasta la siguiente recarga.
       await mutarCache<{ corridas: { id: number }[] }>(
@@ -324,7 +379,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
         (actual) => (actual ? { ...actual, corridas: actual.corridas.filter((c) => c.id !== Number(id)) } : actual),
         { revalidate: true },
       );
-      router.push(ruta('/corridas'));
+      router.push('/nomina/corridas');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
       setBorrando(false);
@@ -336,7 +391,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
-      <Link href={ruta('/corridas')} className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      <Link href="/nomina/corridas" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Corridas
       </Link>
 
@@ -359,6 +414,11 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
           )}
           {corrida.estado === 'borrador' && puedeCorrer && (
             <>
+              {corrida.tipo !== 'regalia' && corrida.tipo !== 'liquidacion' && (
+                <Button variant="outline" onClick={recalcular} disabled={recalculando} className="gap-1.5" title="Vuelve a calcular con los conceptos, ausencias y salarios de hoy">
+                  {recalculando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Recalcular
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setBorrar(true)} className="gap-1.5 text-red-600 hover:text-red-700">
                 <Trash2 className="h-4 w-4" /> Borrar borrador
               </Button>
@@ -382,12 +442,23 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
               </NativeSelect>
               <Button variant="outline" onClick={descargarDispersion} disabled={descargando} className="shrink-0 gap-1.5 whitespace-nowrap">
                 {descargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                Descargar dispersión
+                Descargar dispersión{sel.size > 0 ? ` (${sel.size})` : ''}
               </Button>
-              <Button variant="outline" onClick={descargarTSS} disabled={descargandoTSS} className="shrink-0 gap-1.5 whitespace-nowrap" title="Autodeterminación de la TSS (CSV)">
-                {descargandoTSS ? <Loader2 className="h-4 w-4 animate-spin" /> : <Landmark className="h-4 w-4" />}
-                Autodeterminación TSS
+              <Button
+                variant="outline"
+                onClick={() => window.open(`/api/nomina/corridas/${id}/constancia${parametroLineas ? `?${parametroLineas.slice(1)}` : ''}`, '_blank', 'noopener')}
+                className="shrink-0 gap-1.5 whitespace-nowrap"
+                title="Hoja con una línea de firma por empleado, para pagos en efectivo"
+              >
+                <FileText className="h-4 w-4" />
+                Constancia de efectivo{sel.size > 0 ? ` (${sel.size})` : ''}
               </Button>
+              {!esEspecial && (
+                <Button variant="outline" onClick={descargarTSS} disabled={descargandoTSS} className="shrink-0 gap-1.5 whitespace-nowrap" title="Autodeterminación de la TSS (CSV)">
+                  {descargandoTSS ? <Loader2 className="h-4 w-4 animate-spin" /> : <Landmark className="h-4 w-4" />}
+                  Autodeterminación TSS
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -402,9 +473,22 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
               {data?.horasPendientes} registro{data?.horasPendientes === 1 ? '' : 's'} de horas sin revisar en estas fechas.
             </span>{' '}
             Esta corrida paga solo las horas aprobadas: revísalas en{' '}
-            <Link href={ruta('/horas')} className="font-medium underline">Horas</Link>, borra este borrador y vuelve a generarlo.
+            <Link href="/nomina/horas" className="font-medium underline">Horas</Link>, borra este borrador y vuelve a generarlo.
           </div>
         </div>
+      )}
+
+      {corrida.estado === 'borrador' && corrida.tipo === 'liquidacion' && (
+        <p className="mb-5 text-sm text-muted-foreground" data-testid="nota-liquidacion">
+          Al registrar esta liquidación el empleado quedó de baja. Si la borras, vuelve a estar activo.
+        </p>
+      )}
+      {corrida.estado === 'borrador' && !esEspecial && (
+        <p className="mb-5 text-sm text-muted-foreground" data-testid="nota-conceptos-borrador">
+          Los incentivos, descuentos y préstamos salen de la ficha de cada empleado (botón de monedas en{' '}
+          <Link href="/nomina/empleados" className="font-medium underline">Empleados</Link>). Para cambiarlos en esta corrida,
+          ajústalos allá, borra este borrador y vuelve a generarlo.
+        </p>
       )}
 
       {/* Aviso: empleados sin cuenta de banco que quedan fuera de la dispersión */}
@@ -444,6 +528,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
       </div>
 
       {/* Provisiones del período (regalía, vacaciones, cesantía) */}
+      {!esEspecial && (
       <Card className="mb-5">
         <CardContent className="p-4">
           <div className="mb-3 flex items-center justify-between gap-2">
@@ -464,9 +549,10 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Resumen de la autodeterminación TSS (aprobada) */}
-      {corrida.estado !== 'borrador' && puedePagar && previewTSS && (
+      {corrida.estado !== 'borrador' && !esEspecial && puedePagar && previewTSS && (
         <Card className="mb-5">
           <CardContent className="p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
@@ -522,6 +608,16 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                     <option value="efectivo">Efectivo</option>
                     <option value="cheque">Cheque</option>
                   </NativeSelect>
+                  <NativeSelect
+                  aria-label="Caja o banco de donde sale el pago"
+                  value={cuentaObl}
+                  onChange={(e) => setCuentaObl(e.target.value)}
+                  style={{ width: 'auto', height: 32 }}
+                  title="Caja o banco de donde sale el dinero"
+                >
+                  <option value="">{textoCuentaPorDefecto(metodoObl)}</option>
+                  {cuentasPago.map((c) => <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>)}
+                </NativeSelect>
                 </div>
               )}
             </div>
@@ -580,6 +676,16 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                   <option value="efectivo">Efectivo</option>
                   <option value="cheque">Cheque</option>
                 </NativeSelect>
+                <NativeSelect
+                  aria-label="Caja o banco de donde sale el pago"
+                  value={cuentaEmp}
+                  onChange={(e) => setCuentaEmp(e.target.value)}
+                  style={{ width: 'auto', height: 32 }}
+                  title="Caja o banco de donde sale el dinero"
+                >
+                  <option value="">{textoCuentaPorDefecto(metodoEmp)}</option>
+                  {cuentasPago.map((c) => <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>)}
+                </NativeSelect>
               </div>
             )}
             {sel.size > 0 && (
@@ -616,6 +722,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                   <th className="px-3 py-2 text-right font-medium">AFP</th>
                   <th className="px-3 py-2 text-right font-medium">SFS</th>
                   <th className="px-3 py-2 text-right font-medium">ISR</th>
+                  <th className="px-3 py-2 text-right font-medium">Otros desc.</th>
                   <th className="px-3 py-2 text-right font-medium">Neto</th>
                   {aprobada && <th className="px-3 py-2 text-center font-medium">Pago</th>}
                   <th className="px-3 py-2 text-right font-medium">Volante</th>
@@ -635,6 +742,14 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                     <td className="min-w-[13rem] px-3 py-2">
                       <div className="font-medium">{l.nombre}</div>
                       {l.cargo && <div className="text-xs text-muted-foreground">{l.cargo}</div>}
+                      {(conceptosPorLinea.get(l.id) ?? []).map((c) => (
+                        <div key={c.id} className={`text-xs [overflow-wrap:anywhere] ${c.tipo === 'ingreso' ? 'text-emerald-700' : 'text-muted-foreground'}`} data-testid="concepto-linea">
+                          {c.tipo === 'ingreso' ? '+' : '−'}{pesos(c.montoCents)} {c.nombre}
+                          {c.montoCents < c.pedidoCents && (
+                            <span className="text-amber-700"> (se pidió {pesos(c.pedidoCents)}; el neto no alcanzó)</span>
+                          )}
+                        </div>
+                      ))}
                       {l.horasDetalle ? (
                         <div className="text-xs text-muted-foreground" data-testid="detalle-horas">
                           {totalHorasTexto(l.horasDetalle)} h a {pesos(l.horasDetalle.tarifaHoraCents)} en {l.horasDetalle.dias} día{l.horasDetalle.dias === 1 ? '' : 's'}
@@ -666,6 +781,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                       )}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{pesos(l.isrCents)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{l.otrasDeduccionesCents > 0 ? pesos(l.otrasDeduccionesCents) : '—'}</td>
                     <td className="px-3 py-2 text-right font-medium tabular-nums">{pesos(l.netoCents)}</td>
                     {aprobada && (
                       <td className="px-3 py-2 text-center">

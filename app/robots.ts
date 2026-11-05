@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
+import { RUTA_MCP_PUBLICO } from '@/lib/agentes/crm-rutas';
 
 /**
  * Qué puede recorrer un buscador —y los buscadores con IA, que hoy traen tanta
@@ -46,11 +47,14 @@ const FUERA_DE_LIMITES = [
   '/escolar/', '/cuenta/', '/zero-tickets/', '/sign-in', '/sign-up',
 ];
 
+/** El MCP público del sitio vive bajo `/api/`, pero es contenido publicado: la regla más larga manda. */
+const PERMITIDO = ['/', RUTA_MCP_PUBLICO];
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
-      { userAgent: '*', allow: '/', disallow: FUERA_DE_LIMITES },
-      ...RASTREADORES_IA.map(userAgent => ({ userAgent, allow: '/', disallow: FUERA_DE_LIMITES })),
+      { userAgent: '*', allow: PERMITIDO, disallow: FUERA_DE_LIMITES },
+      ...RASTREADORES_IA.map(userAgent => ({ userAgent, allow: PERMITIDO, disallow: FUERA_DE_LIMITES })),
     ],
     sitemap: new URL('/sitemap.xml', SITIO_PUBLICO).toString(),
     host: SITIO_PUBLICO,

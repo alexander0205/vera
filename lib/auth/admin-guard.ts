@@ -26,6 +26,33 @@ export async function exigirAdmin() {
 }
 
 /**
+ * Las rutas que CAMBIAN algo (POST, PUT, DELETE) solo aceptan peticiones que
+ * nacieron en este mismo sitio. La cookie de sesión es `SameSite=Lax`, que ya
+ * frena el envío desde otro sitio; esto es la segunda capa y no depende de
+ * cómo la configure un navegador raro.
+ *
+ * Un navegador SIEMPRE manda `Origin` en un POST o DELETE de `fetch`, así que
+ * sin `Origin` (ni `Sec-Fetch-Site: same-origin`) no se acepta: el panel no lo
+ * usa ningún cliente que no sea un navegador. Con `Origin`, tienen que
+ * coincidir el servidor y, si el proxy dice con qué protocolo llegó, también
+ * el protocolo. El host reenviado (`x-forwarded-host`) solo lo pone el proxy de
+ * la plataforma; en un despliegue sin proxy no existe y vale `Host`.
+ */
+export function origenValido(req: Request): boolean {
+  const origin = req.headers.get('origin');
+  if (origin) {
+    const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host');
+    const protocolo = req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+    try {
+      const o = new URL(origin);
+      if (!host || o.host !== host) return false;
+      return !protocolo || o.protocol === `${protocolo}:`;
+    } catch { return false; }
+  }
+  return req.headers.get('sec-fetch-site') === 'same-origin';
+}
+
+/**
  * Lo mismo para una ruta /api/admin/*: en vez de redirigir, contesta 401/403.
  * Devuelve el usuario para dejar rastro de quién hizo el cambio.
  */

@@ -370,7 +370,7 @@ export function PagoMetodos({
                 type="text"
                 size="small"
                 fullWidth
-                placeholder="Opcional"
+                placeholder="Nº de recibo, transferencia o cheque"
                 value={l.referencia ?? ''}
                 onChange={(e) => setLinea(i, { referencia: e.target.value })}
                 disabled={disabled}

@@ -1,9 +1,11 @@
-import { ADDONS, LINEAS_PRODUCTO, PRODUCTOS_APARTE, lineaBajoCotizacion, planesDeLinea } from '@/lib/config/plans';
+import { preciosAdicionales, preciosDeLineas } from '@/lib/agentes/precios';
 import { CONTACTO } from '@/app/(marketing)/_piezas';
 import { GUIAS } from '@/app/(marketing)/guias/page';
 import { SITIO_PUBLICO } from '@/lib/config/enlaces';
 import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 import { ALTA, CONECTOR, RUTA_AGENTES_MD, RUTA_FUNCIONES_MD, textoDeLaPrueba } from '@/lib/agentes/contenido';
+import { PAGINAS_SIN_CATEGORIA, RUTA_CRM_MD, RUTA_LLMS_FULL, RUTA_MCP_PUBLICO, paginasPorCategoria } from '@/lib/agentes/crm-rutas';
+import { RUTA_CAPACIDADES } from '@/lib/agentes/crm-capacidades';
 
 /**
  * `/llms.txt` — el sitio resumido para quien lo lee con un modelo.
@@ -26,27 +28,11 @@ import { ALTA, CONECTOR, RUTA_AGENTES_MD, RUTA_FUNCIONES_MD, textoDeLaPrueba } f
 
 export const dynamic = 'force-static';
 
-const usd = (n: number) => `US$${n}`;
-
-function lineas(): string {
-  return LINEAS_PRODUCTO.map(l => {
-    if (lineaBajoCotizacion(l.key)) {
-      return `- **${l.nombre}** — ${l.descripcion} Precio bajo cotización.`;
-    }
-    const planes = planesDeLinea(l.key);
-    const detalle = planes.map(({ plan, precio }) => `${plan.name} ${usd(precio)}/mes`).join(' · ');
-    return `- **${l.nombre}** — ${l.descripcion}\n  ${detalle}`;
-  }).join('\n');
-}
-
-function adicionales(): string {
-  const sueltos = ADDONS.map(a => {
-    const incluido = a.incluidoEn.length > 0 ? ` (incluido en ${a.incluidoEn.join(', ')})` : '';
-    return `- **${a.name}** — +${usd(a.price)}/mes. ${a.descripcion}${incluido}`;
-  });
-  const aparte = PRODUCTOS_APARTE.map(p =>
-    `- **${p.nombre}** — ${p.descripcion} Se contrata aparte de los planes; precio bajo cotización.`);
-  return [...sueltos, ...aparte].join('\n');
+function paginasCrm(): string {
+  const grupos = paginasPorCategoria().map(c =>
+    `  - ${c.nombre}: ${c.resumen}\n${c.paginas.map(p => `    - [${p.menu}](${SITIO_PUBLICO}${p.ruta}): ${p.resumen}`).join('\n')}`);
+  const sueltas = PAGINAS_SIN_CATEGORIA.map(p => `  - [${p.menu}](${SITIO_PUBLICO}${p.ruta}): ${p.resumen}`);
+  return [...grupos, ...sueltas].join('\n');
 }
 
 function guias(): string {
@@ -75,16 +61,20 @@ Zero es un producto de Yisrael Technology. Opera en República Dominicana, en es
 
 - [Zero para agentes](${SITIO_PUBLICO}${RUTA_AGENTES_MD}): qué puede hacer hoy un agente con Zero, cómo se conecta y con qué reglas.
 - [Todas las funciones](${SITIO_PUBLICO}${RUTA_FUNCIONES_MD}): el sistema entero, módulo por módulo, con lo que no hace.
+- [Zero CRM por partes](${SITIO_PUBLICO}${RUTA_CRM_MD}): cada función con su estado, en texto.
+- [Zero CRM, todo el texto](${SITIO_PUBLICO}${RUTA_LLMS_FULL}): las subpáginas, las preguntas y los precios en un archivo. Cada subpágina tiene además su versión en texto: su dirección terminada en \`.md\`.
+- [Capacidades de Zero CRM en JSON](${SITIO_PUBLICO}${RUTA_CAPACIDADES}): cada capacidad con su estado, su página y las funciones que cubre, con su esquema.
+- Servidor MCP público del sitio, de solo lectura, sin clave y sin datos de clientes: \`${SITIO_PUBLICO}${RUTA_MCP_PUBLICO}\` (HTTP con streaming). Herramientas: listar_paginas, leer_pagina, buscar_capacidades, estado_capacidad, catalogo_funciones, catalogo_integraciones y precios. En un cliente MCP: \`{"mcpServers":{"zero":{"url":"${SITIO_PUBLICO}${RUTA_MCP_PUBLICO}"}}}\`.
 - Conector MCP, de solo lectura: \`${CONECTOR.url}\`. Se usa con una llave por empresa (\`${CONECTOR.cabecera}\`).
 - Crear una empresa: la crea una persona en ${ALTA.url}. Prueba gratis: ${textoDeLaPrueba()}.
 
 ## Productos
 
-${lineas()}
+${preciosDeLineas()}
 
 ## Adicionales y productos aparte
 
-${adicionales()}
+${preciosAdicionales()}
 
 ## Páginas
 
@@ -93,11 +83,13 @@ ${adicionales()}
 - [Contabilidad](${SITIO_PUBLICO}/productos/contabilidad): asientos automáticos, libros, 606/607/608.
 - [Punto de venta](${SITIO_PUBLICO}/productos/punto-de-venta): caja con turnos, mesas y venta a crédito.
 - [Nómina](${SITIO_PUBLICO}/productos/nomina): TSS, AFP, SFS, ISR, INFOTEP, regalía y vacaciones.
-- [Zero CRM](${SITIO_PUBLICO}/productos/crm): agentes de IA por WhatsApp, Messenger, Instagram, correo, web y teléfono.
+- [Zero CRM](${SITIO_PUBLICO}/productos/crm): agentes de IA por WhatsApp, Messenger, Instagram, correo, web y teléfono. Por partes:
+${paginasCrm()}
 - [Colegios](${SITIO_PUBLICO}/colegios): matrícula, mensualidades, mora automática y portal de padres.
 - [Precios](${SITIO_PUBLICO}/precios): los planes con sus topes.
 - [Guías](${SITIO_PUBLICO}/guias): los trámites fiscales y laborales dominicanos explicados.
 - [Contacto](${SITIO_PUBLICO}/contacto).
+- [Distribuidores autorizados](${SITIO_PUBLICO}/distribuidores): quién vende, implementa y da soporte local a Zero en República Dominicana.
 
 ## Guías
 
@@ -111,11 +103,19 @@ ${guias()}
 - **¿Emite comprobantes fiscales electrónicos?** Sí: los diez tipos de e-CF, firmados, enviados y acusados ante la DGII, con sus reportes 606, 607 y 608.
 - **¿Incluye contabilidad?** Sí, en todos los planes, sin costo aparte.
 - **¿Tiene inteligencia artificial?** Sí. Zero CRM usa agentes que entienden lenguaje natural, leen notas de voz y fotos con OCR, responden desde los documentos que se les cargan citando la fuente, verifican identidad, agendan citas, cobran y contestan llamadas por voz.
-- **¿Se integra con otros sistemas?** En parte: una API de solo lectura y un conector MCP, con una llave por empresa; webhooks de salida, todavía sin pantalla para configurarlos; avisos de cobro a los padres por WhatsApp, SMS y correo; y conexión con SIGERD para los colegios. No hay API para crear o cambiar datos desde fuera.
+- **¿Zero ERP se integra con otros sistemas?** En parte: una API de solo lectura y un conector MCP, con una llave por empresa; webhooks de salida, todavía sin pantalla para configurarlos; avisos de cobro a los padres por WhatsApp, SMS y correo; y conexión con SIGERD para los colegios. No hay API para crear o cambiar datos desde fuera.
+- **¿Zero CRM se integra con otros sistemas?** Es otra aplicación, con su propia API: desde tu sistema envías mensajes por WhatsApp y consultas conversaciones, y por webhook recibes los que entran. Además se conecta, al implementar, con los sistemas que publican una API, servicios web o webhooks: CRM y gestión de casos, centros de contacto, ERP, identidad, SIEM, turnos, documentos, pagos y sistemas del Estado dominicano, con el acceso que dé cada institución. Esos conectores se han probado contra ambientes simulados y todavía no están en operación con clientes. El catálogo completo está en la página de integraciones.
 - **¿Hay prueba?** ${textoPrueba()} Sin contrato mínimo.
 - **Contacto:** ${CONTACTO.ventas} · ${CONTACTO.telefono} · WhatsApp ${CONTACTO.whatsapp}
 
-## Qué NO hace (para no inducir a error)
+## Zero CRM: lo que conviene saber antes de contar con algo
+
+- Varias funciones vienen apagadas y se encienden por negocio. Cada subpágina dice el estado de cada una: Disponible, Se activa por cliente, Se conecta al implementar o A medida.
+- No tiene ISO 27001 ni SOC 2 propios, ni una prueba de penetración externa. Las certificaciones que hay son de sus proveedores.
+- Un compromiso de disponibilidad por contrato se pacta sobre infraestructura dedicada.
+- El inicio de sesión único usa OIDC, no SAML. No atiende por X.
+
+## Qué NO hace Zero ERP (para no inducir a error)
 
 - No gestiona sucursales como entidades separadas.
 - El punto de venta no funciona sin conexión.

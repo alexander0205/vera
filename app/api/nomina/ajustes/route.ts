@@ -14,6 +14,7 @@ import {
   tasasDelAnio,
 } from '@/lib/config/nomina-tasas';
 import { ajustesNomina } from '@/lib/nomina/ajustes-db';
+import { leerAvanzado } from '@/lib/nomina/avanzado-db';
 import { hoyRD } from '@/lib/utils/format';
 
 export const dynamic = 'force-dynamic';
@@ -35,6 +36,8 @@ export async function GET() {
 
   return NextResponse.json({
     ...ajustes,
+    // Los valores «Avanzado» de la empresa: el resumen del empleado calcula con ellos.
+    avanzado: await leerAvanzado(auth.teamId),
     srlTasaAnio: tasasDelAnio(Number(hoy.slice(0, 4))).srlPatronal,
     srlMin: SRL_TASA_MIN,
     srlMax: SRL_TASA_MAX,

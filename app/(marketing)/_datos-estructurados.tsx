@@ -227,6 +227,42 @@ export function DatosDeRuta({ migas }: { migas: readonly { nombre: string; ruta:
 }
 
 /**
+ * Una página interior de un producto, declarada como lo que es: una parte del
+ * sitio que habla de ese producto.
+ *
+ * El `SoftwareApplication` va una sola vez, en la página del producto. Repetirlo
+ * aquí con otra lista de funciones sería declarar dos productos que dicen cosas
+ * distintas; con `about` se apunta al mismo.
+ */
+export function DatosDePagina({
+  titulo, descripcion, ruta, actualizada, producto,
+}: {
+  titulo: string;
+  descripcion: string;
+  ruta: string;
+  /** ISO (YYYY-MM-DD). La misma fecha que se ve en la página. */
+  actualizada: string;
+  producto: { nombre: string; ruta: string };
+}) {
+  return (
+    <Json
+      datos={{
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name: titulo,
+        description: descripcion,
+        url: urlDelSitio(ruta),
+        inLanguage: 'es-DO',
+        dateModified: actualizada,
+        isPartOf: { '@id': `${SITIO_PUBLICO}/#sitio` },
+        publisher: { '@id': `${SITIO_PUBLICO}/#organizacion` },
+        about: { '@type': 'SoftwareApplication', name: producto.nombre, url: urlDelSitio(producto.ruta) },
+      }}
+    />
+  );
+}
+
+/**
  * Una guía, declarada como artículo.
  *
  * `Article` y no `BlogPosting`: no es un blog con opinión, es documentación de

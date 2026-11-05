@@ -7,9 +7,17 @@
  * lee los empleados y guarda; aquí solo está la aritmética, para probarla sola.
  */
 
-import { calcularNominaEmpleado, pedazoPeriodo, repartirDesglose, type DesgloseNomina } from '@/lib/nomina/calculo';
+import {
+  calcularNominaEmpleado, isrMensualCents, pedazoPeriodo, repartirDesglose,
+  type DesgloseNomina, type ParametrosNomina,
+} from '@/lib/nomina/calculo';
+import { aplicarConceptos, type ConceptoAplicable, type ConceptoAplicado } from '@/lib/nomina/conceptos';
 import type { TasasNomina } from '@/lib/config/nomina-tasas';
+import { diasAusentes, type RangoAusente } from '@/lib/nomina/ausencias';
+import { DIAS_SEMANA, HORARIO_LUNES_A_SABADO, type HorarioSemanal } from '@/lib/nomina/jornada';
 import { calcularProvisionesPeriodo } from '@/lib/nomina/provisiones';
+import { AVANZADO_DEFAULT, type AvanzadoNomina } from '@/lib/nomina/avanzado';
+import { PROVISIONES_DEFAULT } from '@/lib/config/nomina-provisiones';
 import type { ResumenHoras } from '@/lib/nomina/horas';
 import {
   diasDelRango, esFechaYMD, esMes, interseccion, rangoDelMes, semanaDelAnio, sumarDiasYMD, type Rango,
@@ -26,8 +34,13 @@ import {
 export const TIPOS_CORRIDA = ['mensual', 'quincenal-1', 'quincenal-2', 'semanal'] as const;
 export type TipoCorrida = (typeof TIPOS_CORRIDA)[number];
 
+/** La regalía y la liquidación no llevan TSS ni aportes: no se les muestra el bloque de la TSS ni su autodeterminación. */
+export const esCorridaEspecial = (tipo: string) => tipo === 'regalia' || tipo === 'liquidacion';
+
 /** Cómo se lee cada tipo en pantalla. «quincenal» a secas es de corridas viejas. */
 export const LABEL_TIPO_CORRIDA: Record<string, string> = {
+  regalia: 'Regalía pascual',
+  liquidacion: 'Liquidación',
   mensual: 'Mensual',
   'quincenal-1': '1ra quincena',
   'quincenal-2': '2da quincena',
@@ -116,9 +129,57 @@ export interface EmpleadoParaCorrida {
    * viene, el bruto sale de aquí y no del salario mensual.
    */
   pagoPorHoras?: ResumenHoras | null;
+  /** Ingresos y descuentos que le tocan en ESTA corrida (incentivos, préstamos…). */
+  conceptos?: ConceptoAplicable[];
+  /** Ingresos que cobró en la 1.ª quincena de este mismo mes (solo en la 2.ª): para que el ISR del mes cuadre. */
+  conceptosPrevios?: ConceptoAplicable[];
+  /** Lo aprobado antes en el mismo mes (solo en la última corrida del mes). */
+  previoMes?: PrevioMes;
+  /** Su horario: con el método de faltas «laborable» solo cuentan los días que trabaja. Sin él, lunes a sábado. */
+  horarioSemanal?: HorarioSemanal | null;
+  /** Faltas y licencias sin pago: días que no se le pagan. */
+  ausencias?: RangoAusente[];
 }
 
 /** Lo que la corrida toma de la empresa y del período, igual para todos. */
+/** Lo que el empleado ya tiene aprobado en las corridas anteriores del MISMO mes (para cerrar el ISR del mes). */
+export interface PrevioMes {
+  brutoCents: number;
+  afpCents: number;
+  sfsCents: number;
+  /** ISR ya retenido en esas corridas. */
+  isrCents: number;
+  /** Ingresos que no gravan ISR (conceptos con esa marca apagada), ya dentro del bruto. */
+  exentoCents: number;
+}
+
+/**
+ * ¿Es esta la última corrida del mes? La 2.ª quincena, y la semana que cierra el mes (la última que termina
+ * dentro de él; su mes contable es el del último día). Ahí el ISR se cierra contra lo real del mes.
+ */
+export function esUltimoPeriodoDelMes(p: Pick<PeriodoCorrida, 'tipo' | 'fin'>): boolean {
+  if (p.tipo === 'quincenal-2') return true;
+  if (p.tipo === 'semanal') return sumarDiasYMD(p.fin, 7).slice(0, 7) !== p.fin.slice(0, 7);
+  return false;
+}
+
+/**
+ * Cierra el ISR de la última corrida del mes: ISR mensual de lo REAL del mes (lo aprobado antes más esta
+ * corrida) menos lo ya retenido, sin bajar de 0. Así una quincena con faltas no retiene de más (ni de menos)
+ * por haber partido el mes en dos cálculos. Sin corrida anterior aprobada, se deja el cálculo de la corrida.
+ */
+export function cerrarIsrDelMes(
+  d: DesgloseNomina, previo: PrevioMes | undefined, exentoEstaCorridaCents: number, escala: TasasNomina['isrEscala'],
+): DesgloseNomina {
+  if (!previo) return d;
+  const base =
+    previo.brutoCents - previo.exentoCents - previo.afpCents - previo.sfsCents +
+    (d.brutoCents - exentoEstaCorridaCents - d.afpEmpleadoCents - d.sfsEmpleadoCents);
+  const isr = Math.max(0, isrMensualCents(Math.max(0, base), escala) - previo.isrCents);
+  const totalDeduccionesCents = d.totalDeduccionesCents - d.isrCents + isr;
+  return { ...d, isrCents: isr, totalDeduccionesCents, netoCents: d.brutoCents - totalDeduccionesCents };
+}
+
 export interface AjustesCorrida {
   /** Salario mínimo del sector de la empresa: piso de la base cotizable. */
   pisoCotizableCents?: number;
@@ -126,6 +187,8 @@ export interface AjustesCorrida {
   srlTasa?: number;
   /** Cápita por dependiente adicional vigente en el período. */
   capitaDependienteCents?: number;
+  /** Valores «Avanzado» de la empresa (faltas, vacaciones, tope de regalía). Omitido = los de ley. */
+  avanzado?: AvanzadoNomina;
 }
 
 /** Una línea calculada, lista para insertar (le falta solo corridaId/teamId). */
@@ -158,6 +221,10 @@ export interface LineaCalculada {
   provisionCesantiaCents: number;
   /** Quien cobra por hora: cómo se clasificaron sus horas. Null para los demás. */
   horasDetalle: ResumenHoras | null;
+  /** Conceptos aplicados en la línea (descuentos ya topados por el neto). */
+  conceptos: ConceptoAplicado[];
+  /** Descuentos que no cupieron en el neto de esta corrida. */
+  descuentoNoAplicadoCents: number;
 }
 
 export interface TotalesCorrida {
@@ -176,17 +243,38 @@ const nombreCompleto = (e: EmpleadoParaCorrida) =>
   [e.nombres, e.apellidos].filter(Boolean).join(' ').trim();
 
 /**
- * Días del rango en que estuvo contratado. Quien está de baja sin fecha de
+ * Días del rango en que estuvo contratado y no faltó (faltas y licencias sin
+ * pago no se pagan). Quien está de baja sin fecha de
  * salida no cobra: no hay forma de saber hasta cuándo trabajó.
  */
 export function diasPagables(e: EmpleadoParaCorrida, r: Rango): number {
+  return diasPagablesExactos(e, r);
+}
+
+/**
+ * Igual que `diasPagables`, pero con el método de faltas de la empresa. Por «calendario» una
+ * falta resta un día. Por «laborable» cada falta cuesta lo que un día laborable (sueldo ÷ divisor),
+ * que es más que un día de calendario: se expresa como días de calendario equivalentes
+ * (días del mes ÷ divisor por falta), con decimales.
+ */
+export function diasPagablesExactos(e: EmpleadoParaCorrida, r: Rango, av: AvanzadoNomina = AVANZADO_DEFAULT, periodosPorMes = 1): number {
   if (e.estado !== 'activo' && !e.fechaSalida) return 0;
   const parte = interseccion(r, e.fechaIngreso ?? null, e.fechaSalida ?? null);
-  return parte ? diasDelRango(parte) : 0;
+  if (!parte) return 0;
+  // Por «laborable» una falta es un día que le tocaba trabajar: un sábado o domingo libre no se descuenta.
+  const horario = e.horarioSemanal ?? HORARIO_LUNES_A_SABADO;
+  const trabaja = (d: number) => horario[DIAS_SEMANA[(d + 6) % 7]] > 0; // getUTCDay: 0 = domingo
+  const faltas = diasAusentes(parte.inicio, parte.fin, e.ausencias, av.metodoFaltas === 'laborable' ? trabaja : undefined);
+  // Una falta cuesta salario ÷ divisor sea cual sea el período: con el sueldo de la quincena (la mitad) y
+  // sus 13 a 16 días, el peso en días de ese tramo es días × períodos por mes ÷ divisor.
+  const peso = av.metodoFaltas === 'laborable' ? (diasDelRango(r) * periodosPorMes) / av.divisorSalarioDiario : 1;
+  return Math.max(0, diasDelRango(parte) - faltas * peso);
 }
 
 interface Pedazo {
   desglose: DesgloseNomina;
+  /** El cálculo mensual de donde salió: los conceptos que cotizan se miden contra él. */
+  mensual: ParametrosNomina;
   diasPagados: number;
   diasPeriodo: number;
 }
@@ -209,12 +297,12 @@ function pedazoDelMes(e: EmpleadoParaCorrida, tasas: TasasNomina, p: PeriodoCorr
 
   const partes = tramos.map((t, k) => {
     const dias = diasDelRango(t);
-    const pagados = diasPagables(e, t);
+    const pagados = diasPagablesExactos(e, t, ajustes.avanzado, tramos.length);
     const base = tramos.length === 1 ? salario : pedazoPeriodo(salario, k + 1, tramos.length);
     return { dias, pagados, bruto: Math.round((base * pagados) / dias) };
   });
   const propio = partes[indice];
-  if (propio.pagados === 0) return null;
+  if (propio.pagados <= 0) return null;
 
   const suma = (f: (x: (typeof partes)[number]) => number, hasta = partes.length) =>
     partes.slice(0, hasta).reduce((s, x) => s + f(x), 0);
@@ -222,19 +310,20 @@ function pedazoDelMes(e: EmpleadoParaCorrida, tasas: TasasNomina, p: PeriodoCorr
   // El mínimo es mensual: quien trabajó parte del mes cotiza sobre esa parte.
   const piso = e.dispensaSalarioMinimo ? 0 : Math.round(((ajustes.pisoCotizableCents ?? 0) * suma((x) => x.pagados)) / suma((x) => x.dias));
 
-  const mensual = calcularNominaEmpleado({
+  const paramsMes: ParametrosNomina = {
     salarioMensualCents: brutoMes,
     tasas,
     pisoCotizableCents: piso,
     srlTasa: ajustes.srlTasa,
     dependientesAdicionales: e.dependientesAdicionales,
     capitaDependienteCents: ajustes.capitaDependienteCents,
-  });
+  };
+  const mensual = calcularNominaEmpleado(paramsMes);
 
   // Se reparte por lo devengado; sin salario, por días (la cápita igual se reparte).
   const peso = (x: (typeof partes)[number]) => (brutoMes > 0 ? x.bruto : x.pagados);
   const desglose = repartirDesglose(mensual, suma(peso, indice), peso(propio), suma(peso));
-  return { desglose, diasPagados: propio.pagados, diasPeriodo: propio.dias };
+  return { desglose, mensual: paramsMes, diasPagados: Math.round(propio.pagados), diasPeriodo: propio.dias };
 }
 
 /**
@@ -245,26 +334,27 @@ function pedazoDelMes(e: EmpleadoParaCorrida, tasas: TasasNomina, p: PeriodoCorr
  */
 function pedazoDeSemana(e: EmpleadoParaCorrida, tasas: TasasNomina, p: PeriodoCorrida, ajustes: AjustesCorrida): Pedazo | null {
   const dias = diasDelRango(p);
-  const pagados = diasPagables(e, p);
-  if (pagados === 0) return null;
+  const pagados = diasPagablesExactos(e, p, ajustes.avanzado, 52 / 12);
+  if (pagados <= 0) return null;
   const salario = Math.max(0, e.salarioBaseCents);
 
   const semanaCompleta = pedazoPeriodo(salario * 12, semanaDelAnio(p.inicio), 52);
   const bruto = Math.round((semanaCompleta * pagados) / dias);
 
-  const mensual = calcularNominaEmpleado({
+  const paramsMes: ParametrosNomina = {
     salarioMensualCents: salario,
     tasas,
     pisoCotizableCents: e.dispensaSalarioMinimo ? 0 : ajustes.pisoCotizableCents,
     srlTasa: ajustes.srlTasa,
     dependientesAdicionales: e.dependientesAdicionales,
     capitaDependienteCents: ajustes.capitaDependienteCents,
-  });
+  };
+  const mensual = calcularNominaEmpleado(paramsMes);
 
   const desglose = salario > 0
     ? repartirDesglose(mensual, 0, bruto, salario)
     : repartirDesglose(mensual, 0, 12 * pagados, 52 * dias);
-  return { desglose, diasPagados: pagados, diasPeriodo: dias };
+  return { desglose, mensual: paramsMes, diasPagados: Math.round(pagados), diasPeriodo: dias };
 }
 
 /** Cuántas veces cabe el período en un mes: la base mensual para topes, ISR y mínimo. */
@@ -279,16 +369,18 @@ function pedazoPorHoras(e: EmpleadoParaCorrida, tasas: TasasNomina, p: PeriodoCo
   const h = e.pagoPorHoras;
   if (!h || h.brutoCents <= 0) return null;
   const mesEquivalente = Math.round(h.brutoCents * periodosPorMes(p.tipo));
-  const mensual = calcularNominaEmpleado({
+  const paramsMes: ParametrosNomina = {
     salarioMensualCents: mesEquivalente,
     tasas,
     pisoCotizableCents: e.dispensaSalarioMinimo ? 0 : ajustes.pisoCotizableCents,
     srlTasa: ajustes.srlTasa,
     dependientesAdicionales: e.dependientesAdicionales,
     capitaDependienteCents: ajustes.capitaDependienteCents,
-  });
+  };
+  const mensual = calcularNominaEmpleado(paramsMes);
   return {
     desglose: repartirDesglose(mensual, 0, h.brutoCents, mesEquivalente),
+    mensual: paramsMes,
     diasPagados: h.dias,
     diasPeriodo: diasDelRango(p),
   };
@@ -320,7 +412,10 @@ export function construirCorrida(
         ? pedazoDeSemana(e, tasas, periodo, ajustes)
         : pedazoDelMes(e, tasas, periodo, ajustes);
     if (!pedazo) continue;
-    const d = pedazo.desglose;
+    const conConceptos = aplicarConceptos(pedazo.desglose, pedazo.mensual, e.conceptos ?? [], e.conceptosPrevios ?? []);
+    const { aplicados, noAplicadoCents } = conConceptos;
+    const exentoAqui = aplicados.filter((c) => c.tipo === 'ingreso' && !c.gravaIsr).reduce((t, c) => t + c.montoCents, 0);
+    const d = esUltimoPeriodoDelMes(periodo) ? cerrarIsrDelMes(conConceptos.desglose, e.previoMes, exentoAqui, tasas.isrEscala) : conConceptos.desglose;
     // El tope de la regalía son 5 salarios mínimos: el del sector de la empresa.
     const provision = calcularProvisionesPeriodo({
       brutoPeriodoCents: d.brutoCents,
@@ -332,7 +427,15 @@ export function construirCorrida(
       inicio: periodo.inicio,
       fin: periodo.fin,
       diasVacacionesEmpleado: e.vacacionesDias ?? null,
-      topeRegaliaAnualCents: ajustes.pisoCotizableCents ? 5 * ajustes.pisoCotizableCents : null,
+      // Sin tope: el de 5 salarios mínimos es de EXENCIÓN de ISR en el pago, no un límite a lo que se reserva.
+      topeRegaliaAnualCents: null,
+      params: ajustes.avanzado ? {
+        ...PROVISIONES_DEFAULT,
+        divisorSalarioDiario: ajustes.avanzado.divisorSalarioDiario,
+        diasVacaciones: ajustes.avanzado.diasVacaciones,
+        diasVacacionesMas5Anios: ajustes.avanzado.diasVacacionesMas5Anios,
+        diasCesantiaPorAnio: ajustes.avanzado.diasCesantiaProvision,
+      } : undefined,
     });
 
     lineas.push({
@@ -361,6 +464,8 @@ export function construirCorrida(
       provisionVacacionesCents: provision.vacacionesCents,
       provisionCesantiaCents: provision.cesantiaCents,
       horasDetalle: e.pagoPorHoras ?? null,
+      conceptos: aplicados,
+      descuentoNoAplicadoCents: noAplicadoCents,
     });
 
     totales.totalBrutoCents += d.brutoCents;

@@ -4,7 +4,7 @@
  *  - los meses que se marcaron «Debe todo»: no tienen pago que anotar, pero ya
  *    están indicados (el «X de N meses indicados» de cada alumno).
  * Uno por colegio y año, compartido entre quienes migran. Vive en la tabla de
- * borradores (migración 0216) con su propia clave, así que matricular o
+ * borradores (migración 0236) con su propia clave, así que matricular o
  * «Empezar de cero» no lo borra.
  *
  *   GET  ?periodoId=  → { alumnos: { [id]: { en, por } }, debe: number[], moraPrevia: { [cargoId]: centavos } }

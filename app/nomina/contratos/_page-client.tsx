@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useRutaNomina } from '@/lib/nomina/rutas';
 import useSWR from 'swr';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,7 +14,6 @@ import { Plantilla, fetcher, resumenClausulas } from './shared';
 
 export default function ContratosClient() {
   const router = useRouter();
-  const ruta = useRutaNomina();
   const { can } = usePermissions();
   const puedeConfig = can('nomina:configurar');
   const { data, isLoading, mutate } = useSWR<{ plantillas: Plantilla[] }>('/api/nomina/contratos/plantillas', fetcher);
@@ -26,8 +24,8 @@ export default function ContratosClient() {
 
   // La creación y edición de la plantilla viven en su propia página (no modal):
   // cerrar por accidente no borra lo configurado (pedido de Alex).
-  const irNueva = () => router.push(ruta('/contratos/nueva'));
-  const irEditar = (id: number) => router.push(ruta(`/contratos/${id}/editar`));
+  const irNueva = () => router.push('/nomina/contratos/nueva');
+  const irEditar = (id: number) => router.push(`/nomina/contratos/${id}/editar`);
 
   async function borrar() {
     if (!aBorrar) return;

@@ -1,7 +1,6 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useRutaNomina } from '@/lib/nomina/rutas';
 import { FileText } from 'lucide-react';
 import { PlantillaWizard } from '../plantilla-wizard';
 
@@ -11,8 +10,7 @@ import { PlantillaWizard } from '../plantilla-wizard';
  */
 export default function NuevaPlantillaClient() {
   const router = useRouter();
-  const ruta = useRutaNomina();
-  const volver = () => router.push(ruta('/contratos'));
+  const volver = () => router.push('/nomina/contratos');
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-6 sm:px-6">

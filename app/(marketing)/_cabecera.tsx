@@ -22,17 +22,16 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LogoZero } from '@/components/marca-zero';
 import { CONTACTO, Contenedor, Flecha, IconoWhatsApp, Iconos } from './_piezas';
-import { ENLACE_CRM, ENLACE_ERP, MODULOS, SECCIONES } from './_menu';
+import { ENLACE_CRM, ENLACE_ERP, ENTRADAS_CRM_SUELTAS, GRUPOS_CRM, MODULOS, SECCIONES } from './_menu';
 
 /**
- * La barra: ERP con su desplegable, y estos cuatro sueltos.
+ * La barra: ERP y CRM con su desplegable, y estos cuatro sueltos.
  *
  * El CRM salió del desplegable de ERP a propósito. No es un módulo del ERP —es
  * otra aplicación, con su cuenta y su cobro— y tenerlo dentro lo hacía pasar
- * por uno más de los que vienen en el plan.
+ * por uno más de los que vienen en el plan. Por eso tiene el suyo.
  */
 const ENLACES = [
-  { href: ENLACE_CRM, texto: 'CRM' },
   { href: '/colegios', texto: 'Colegios' },
   { href: '/precios', texto: 'Precios' },
   { href: '/guias', texto: 'Guías' },
@@ -57,35 +56,55 @@ function EnlaceAncla({
   return <a href={href} className={className} onClick={onClick}>{children}</a>;
 }
 
-export function CabeceraMarketing() {
-  const ruta = usePathname();
+/**
+ * Un desplegable de la barra: el del ERP y el del CRM funcionan igual.
+ *
+ * `fijado` es abierto A PROPÓSITO (clic o teclado), no por haber pasado el ratón.
+ * Sin esa distinción el menú no se puede abrir con un clic: al llegar al botón,
+ * el ratón ya lo abrió, y el clic —que alterna— lo cierra en el acto. Fijado, el
+ * ratón no lo cierra al salir y el segundo clic sí lo cierra.
+ */
+function useDesplegable() {
   const [abierto, setAbierto] = useState(false);
-  const [producto, setProducto] = useState(false);
-  /**
-   * Abierto A PROPÓSITO (clic o teclado), no por haber pasado el ratón.
-   *
-   * Sin esta distinción el menú no se puede abrir con un clic: al llegar al
-   * botón, el ratón ya lo abrió, y el clic —que alterna— lo cierra en el acto.
-   * Fijado, el ratón no lo cierra al salir y el segundo clic sí lo cierra.
-   */
   const [fijado, setFijado] = useState(false);
-  const cajaProducto = useRef<HTMLDivElement>(null);
+  const caja = useRef<HTMLDivElement>(null);
   const cerrarConRetraso = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Los dos menús se cierran al navegar. Sin esto quedan encima de la página
-  // nueva y parece que el enlace no hizo nada.
-  useEffect(() => { setAbierto(false); cerrarProducto(); }, [ruta]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Al salir del botón hacia el panel el ratón pasa por el hueco de en medio:
+  // cerrar en ese instante hace que el menú se escape justo cuando lo vas a
+  // usar. El respiro es corto y se cancela al volver a entrar.
+  function cerrar() {
+    if (cerrarConRetraso.current) clearTimeout(cerrarConRetraso.current);
+    setAbierto(false);
+    setFijado(false);
+  }
+  function entrar() {
+    if (cerrarConRetraso.current) clearTimeout(cerrarConRetraso.current);
+    setAbierto(true);
+  }
+  function salir() {
+    if (fijado) return;
+    if (cerrarConRetraso.current) clearTimeout(cerrarConRetraso.current);
+    cerrarConRetraso.current = setTimeout(() => setAbierto(false), 140);
+  }
+  /** Clic o Enter: fija el panel abierto, o lo cierra si ya estaba fijado. */
+  function alternar() {
+    if (fijado) { cerrar(); return; }
+    if (cerrarConRetraso.current) clearTimeout(cerrarConRetraso.current);
+    setAbierto(true);
+    setFijado(true);
+  }
 
   // Escape y clic fuera. Un panel que solo se cierra volviendo a apretar el
   // botón deja tapada media pantalla en cuanto el visitante se distrae.
   useEffect(() => {
-    if (!producto) return;
+    if (!abierto) return;
 
     function alTeclear(e: KeyboardEvent) {
-      if (e.key === 'Escape') cerrarProducto();
+      if (e.key === 'Escape') cerrar();
     }
     function alTocar(e: MouseEvent) {
-      if (!cajaProducto.current?.contains(e.target as Node)) cerrarProducto();
+      if (!caja.current?.contains(e.target as Node)) cerrar();
     }
 
     document.addEventListener('keydown', alTeclear);
@@ -94,40 +113,42 @@ export function CabeceraMarketing() {
       document.removeEventListener('keydown', alTeclear);
       document.removeEventListener('mousedown', alTocar);
     };
-  }, [producto]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [abierto]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Al salir del botón hacia el panel el ratón pasa por el hueco de en medio:
-  // cerrar en ese instante hace que el menú se escape justo cuando lo vas a
-  // usar. El respiro es corto y se cancela al volver a entrar.
-  function cerrarProducto() {
-    if (cerrarConRetraso.current) clearTimeout(cerrarConRetraso.current);
-    setProducto(false);
-    setFijado(false);
-  }
-  function entrar() {
-    if (cerrarConRetraso.current) clearTimeout(cerrarConRetraso.current);
-    setProducto(true);
-  }
-  function salir() {
-    if (fijado) return;
-    if (cerrarConRetraso.current) clearTimeout(cerrarConRetraso.current);
-    cerrarConRetraso.current = setTimeout(() => setProducto(false), 140);
-  }
-  /** Clic o Enter: fija el panel abierto, o lo cierra si ya estaba fijado. */
-  function alternar() {
-    if (fijado) { cerrarProducto(); return; }
-    if (cerrarConRetraso.current) clearTimeout(cerrarConRetraso.current);
-    setProducto(true);
-    setFijado(true);
-  }
   useEffect(() => () => {
     if (cerrarConRetraso.current) clearTimeout(cerrarConRetraso.current);
   }, []);
+
+  return { abierto, caja, cerrar, entrar, salir, alternar };
+}
+
+function Chevron({ girado }: { girado: boolean }) {
+  return (
+    <svg
+      width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden
+      className={`transition-transform ${girado ? 'rotate-180' : ''}`}
+    >
+      <path d="m6 9.5 6 6 6-6" />
+    </svg>
+  );
+}
+
+export function CabeceraMarketing() {
+  const ruta = usePathname();
+  const [abierto, setAbierto] = useState(false);
+  const erp = useDesplegable();
+  const crm = useDesplegable();
+
+  // Los menús se cierran al navegar. Sin esto quedan encima de la página nueva y
+  // parece que el enlace no hizo nada.
+  useEffect(() => { setAbierto(false); erp.cerrar(); crm.cerrar(); }, [ruta]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // En contacto el botón principal ya no puede ser «ir a contacto»: ahí el
   // atajo útil es escribir por WhatsApp, que es la vía más rápida que tenemos.
   const enContacto = ruta === '/contacto';
   const enPortada = ruta === '/';
+  const enCrm = ruta === ENLACE_CRM || ruta.startsWith(`${ENLACE_CRM}/`);
 
   return (
     <header className="sticky top-0 z-50 border-b border-[#edeff5] bg-white/90 backdrop-blur-[14px]">
@@ -140,34 +161,28 @@ export function CabeceraMarketing() {
           <nav className="hidden flex-1 items-center gap-7 md:flex">
             {/* ── ERP, con su desplegable ───────────────────────────────── */}
             <div
-              ref={cajaProducto}
+              ref={erp.caja}
               className="relative flex h-[68px] items-center"
-              onMouseEnter={entrar}
-              onMouseLeave={salir}
+              onMouseEnter={() => { crm.cerrar(); erp.entrar(); }}
+              onMouseLeave={erp.salir}
             >
               <button
                 type="button"
-                onClick={alternar}
-                aria-expanded={producto}
+                onClick={() => { crm.cerrar(); erp.alternar(); }}
+                aria-expanded={erp.abierto}
                 aria-controls="menu-producto"
                 // Se pinta activo solo con el panel abierto: «Producto» no es
                 // una ruta, y encenderlo en la portada le dice al visitante que
                 // está en una página que no existe.
                 className={`flex items-center gap-1.5 whitespace-nowrap text-[13.5px] transition ${
-                  producto ? 'font-semibold text-zero-600' : 'font-medium text-[#3b4252] hover:text-zero-600'
+                  erp.abierto ? 'font-semibold text-zero-600' : 'font-medium text-[#3b4252] hover:text-zero-600'
                 }`}
               >
                 ERP
-                <svg
-                  width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden
-                  className={`transition-transform ${producto ? 'rotate-180' : ''}`}
-                >
-                  <path d="m6 9.5 6 6 6-6" />
-                </svg>
+                <Chevron girado={erp.abierto} />
               </button>
 
-              {producto && (
+              {erp.abierto && (
                 <div
                   id="menu-producto"
                   className="absolute left-[-22px] top-[62px] w-[640px] rounded-[18px] border border-[#e7eaf4] bg-white p-[18px] shadow-[0_34px_70px_-30px_rgba(16,42,114,.34)]"
@@ -176,7 +191,7 @@ export function CabeceraMarketing() {
                       viven dentro de él y esta es la puerta grande. */}
                   <Link
                     href={ENLACE_ERP}
-                    onClick={cerrarProducto}
+                    onClick={erp.cerrar}
                     className="flex items-center gap-2.5 rounded-[13px] bg-[#f4f7fe] px-3 py-2.5 transition hover:bg-[#edf1fe]"
                   >
                     <span className="grid size-7 shrink-0 place-items-center rounded-[9px] bg-white text-zero-600">
@@ -197,7 +212,7 @@ export function CabeceraMarketing() {
                       <Link
                         key={m.href}
                         href={m.href}
-                        onClick={cerrarProducto}
+                        onClick={erp.cerrar}
                         className="flex min-w-0 gap-3 rounded-[13px] p-3 transition hover:bg-[#f4f7fe]"
                       >
                         <span className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-[#edf1fe] text-zero-600">
@@ -220,7 +235,7 @@ export function CabeceraMarketing() {
                       <EnlaceAncla
                         key={s.href}
                         href={s.href}
-                        onClick={cerrarProducto}
+                        onClick={erp.cerrar}
                         className="flex min-w-0 flex-col rounded-[13px] px-3 py-2.5 transition hover:bg-[#f4f7fe]"
                       >
                         <span className="text-[12.5px] font-semibold text-[#102a72]">{s.titulo}</span>
@@ -229,6 +244,108 @@ export function CabeceraMarketing() {
                     ))}
                   </div>
 
+                </div>
+              )}
+            </div>
+
+            {/* ── CRM, con su desplegable ───────────────────────────────── */}
+            {/* «CRM» sigue siendo un enlace y la flecha abre el panel: es una
+                página de verdad, y un buscador tiene que poder seguirlo con el
+                panel cerrado. */}
+            <div
+              ref={crm.caja}
+              className="relative flex h-[68px] items-center gap-1"
+              onMouseEnter={() => { erp.cerrar(); crm.entrar(); }}
+              onMouseLeave={crm.salir}
+            >
+              <Link
+                href={ENLACE_CRM}
+                aria-current={ruta === ENLACE_CRM ? 'page' : undefined}
+                className={`whitespace-nowrap text-[13.5px] transition ${
+                  enCrm || crm.abierto ? 'font-semibold text-zero-600' : 'font-medium text-[#3b4252] hover:text-zero-600'
+                }`}
+              >
+                CRM
+              </Link>
+              <button
+                type="button"
+                onClick={() => { erp.cerrar(); crm.alternar(); }}
+                aria-expanded={crm.abierto}
+                aria-controls="menu-crm"
+                aria-label="Ver las partes de Zero CRM"
+                className={`grid size-6 place-items-center rounded-md transition ${
+                  enCrm || crm.abierto ? 'text-zero-600' : 'text-[#3b4252] hover:text-zero-600'
+                }`}
+              >
+                <Chevron girado={crm.abierto} />
+              </button>
+
+              {crm.abierto && (
+                <div
+                  id="menu-crm"
+                  className="absolute left-[-22px] top-[62px] w-[960px] rounded-[18px] border border-[#e7eaf4] bg-white p-[18px] shadow-[0_34px_70px_-30px_rgba(16,42,114,.34)]"
+                >
+                  <Link
+                    href={ENLACE_CRM}
+                    onClick={crm.cerrar}
+                    className="flex items-center gap-2.5 rounded-[13px] bg-[#f4f7fe] px-3 py-2.5 transition hover:bg-[#edf1fe]"
+                  >
+                    <span className="grid size-7 shrink-0 place-items-center rounded-[9px] bg-white text-zero-600">
+                      <Iconos.soporte className="size-[15px]" />
+                    </span>
+                    <span className="text-[12.5px] font-semibold text-[#102a72]">Zero CRM</span>
+                    <span className="min-w-0 truncate text-[11.5px] text-[#6b7280]">
+                      Chatbot con IA y bandeja para tu equipo
+                    </span>
+                    <Flecha tamano={13} className="ml-auto shrink-0 text-zero-600" />
+                  </Link>
+
+                  {/* Las categorías, una por columna; preguntas frecuentes va abajo, fuera de ellas. */}
+                  <div className="mt-3 grid grid-cols-4 gap-3">
+                    {GRUPOS_CRM.map(g => (
+                      <div key={g.clave} className="min-w-0">
+                        <p className="m-0 px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#666d80]">
+                          {g.titulo}
+                        </p>
+                        <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+                          {g.entradas.map(m => (
+                            <li key={m.href}>
+                              <Link
+                                href={m.href}
+                                onClick={crm.cerrar}
+                                className="flex min-w-0 gap-2.5 rounded-[12px] p-2.5 transition hover:bg-[#f4f7fe]"
+                              >
+                                <span className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-[#edf1fe] text-zero-600">
+                                  <m.icono className="size-[15px]" />
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block text-pretty font-[family-name:var(--font-display)] text-[13px] font-semibold tracking-[-.015em] text-[#102a72]">
+                                    {m.titulo}
+                                  </span>
+                                  <span className="mt-0.5 block text-pretty text-[11px] leading-[1.4] text-[#6b7280]">
+                                    {m.detalle}
+                                  </span>
+                                </span>
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex gap-2 border-t border-[#eef1f8] pt-2">
+                    {ENTRADAS_CRM_SUELTAS.map(m => (
+                      <Link
+                        key={m.href}
+                        href={m.href}
+                        onClick={crm.cerrar}
+                        className="flex items-center gap-2 rounded-[10px] px-2.5 py-2 text-[12.5px] font-semibold text-[#102a72] transition hover:bg-[#f4f7fe]"
+                      >
+                        <m.icono className="size-[14px] text-zero-600" />
+                        {m.titulo}
+                      </Link>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -326,6 +443,38 @@ export function CabeceraMarketing() {
                 </span>
                 {m.titulo}
               </Link>
+            ))}
+
+            <p className="m-0 px-3 pb-1 pt-3 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#666d80]">
+              Zero CRM
+            </p>
+            <Link
+              href={ENLACE_CRM}
+              className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-[#102a72]"
+            >
+              <span className="grid size-7 shrink-0 place-items-center rounded-[9px] bg-[#edf1fe] text-zero-600">
+                <Iconos.soporte className="size-[15px]" />
+              </span>
+              Zero CRM
+            </Link>
+            {[...GRUPOS_CRM, { clave: 'mas', titulo: '', entradas: ENTRADAS_CRM_SUELTAS }].map(g => (
+              <div key={g.clave} className="flex flex-col">
+                {g.titulo && (
+                  <p className="m-0 px-3 pb-1 pt-2.5 text-[10.5px] font-semibold uppercase tracking-[.16em] text-[#666d80]">{g.titulo}</p>
+                )}
+                {g.entradas.map(m => (
+                  <Link
+                    key={m.href}
+                    href={m.href}
+                    className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-[#3b4252]"
+                  >
+                    <span className="grid size-7 shrink-0 place-items-center rounded-[9px] bg-[#edf1fe] text-zero-600">
+                      <m.icono className="size-[15px]" />
+                    </span>
+                    {m.titulo}
+                  </Link>
+                ))}
+              </div>
             ))}
 
             <div className="mt-2 border-t border-[#f0f3fa] pt-2" />

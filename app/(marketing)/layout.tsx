@@ -19,6 +19,7 @@ import { MicrosoftClarity } from '@/components/analytics/microsoft-clarity';
 import { CabeceraMarketing } from './_cabecera';
 import { PieMarketing } from './_pie';
 import { BarraPrueba } from './_barra-prueba';
+import { ChatZero } from './_chat-zero';
 
 export const metadata: Metadata = {
   /**
@@ -104,6 +105,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <main className="flex-1">{children}</main>
       <PieMarketing />
       <BarraPrueba />
+      <ChatZero />
       <GoogleAnalytics />
       <CapturaOrigen />
       <MicrosoftClarity />

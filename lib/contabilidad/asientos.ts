@@ -27,13 +27,16 @@ import { getConfig, resolverCuentaCobro, claveContableDePago, getCuentasGasto, c
 import { elegirCuentaSalida } from './cuenta-salida';
 import { elegirCuentaGasto } from './cuenta-gasto';
 import { provisionesDeLineas } from '@/lib/nomina/provisiones';
+import { conceptosParaAsiento } from '@/lib/nomina/conceptos-db';
+import { cuentaSalidaElegida, cuentasPagoNomina } from '@/lib/nomina/cuenta-pago-db';
 import type { ClaveMetodo } from './metodos';
 import { distribuirCompra } from './compras';
+import { partesDeJson } from '@/lib/compras/pago-mixto';
 import { categoriaCompra, CUENTA_CATEGORIA_GASTO_VIEJA } from '@/lib/compras/categorias';
 import { retencionesDeJson } from '@/lib/compras/formato606';
 import { partidasAsientoCompra, type BaseCuenta } from '@/lib/compras/asiento-compra';
 import {
-  lineasDevengoNomina, lineasPagoObligacion, lineasPagoSueldos, lineasProvisionNomina,
+  RESERVAS, lineasDevengoNomina, lineasDevengoRegalia, lineasPagoObligacion, lineasPagoSueldos, lineasProvisionNomina,
   type CuentasNomina, type SumasCorrida,
 } from './nomina-asientos';
 
@@ -54,14 +57,24 @@ const TIPO_NOTA_CREDITO = '34';
 const TIPO_SIN_NCF = 'sin-ncf';
 
 /**
+ * Factura traída de otro sistema (Alegra, un Excel). No es una venta del
+ * período: su ingreso ya está en los libros de allá. Entra como saldo inicial
+ * (ver `generarAsientoSaldoInicial`), nunca como venta. Puede venir con tipo
+ * `'00'` o `'sin-ncf'`, así que se excluye por estado antes de mirar el tipo.
+ */
+const ESTADO_HISTORICA = 'HISTORICA';
+
+/**
  * ¿Este documento genera asiento de venta? Dos familias:
  *  - e-CF fiscal emitido y vivo (`TIPOS_VENTA` en un `ESTADOS_VENTA`), y
  *  - venta interna `sin-ncf` no anulada (permanece en BORRADOR a propósito).
+ * Una factura histórica nunca, aunque sea `sin-ncf`.
  *
  * ⚠️ `VENTA_ASENTABLE_SQL` es el espejo de esta función para el barrido.
  * **Cambiar las dos juntas** o el barrido y el generador se desincronizan.
  */
 export function esVentaAsentable(estado: string, tipoEcf: string): boolean {
+  if (estado === ESTADO_HISTORICA) return false;
   if (tipoEcf === TIPO_SIN_NCF) return estado !== 'ANULADO' && estado !== 'RECHAZADO';
   return ESTADOS_VENTA.includes(estado) && TIPOS_VENTA.includes(tipoEcf);
 }
@@ -69,7 +82,29 @@ export function esVentaAsentable(estado: string, tipoEcf: string): boolean {
 /** Espejo SQL de `esVentaAsentable`, sobre el alias `d`. Mantener en sync. */
 export const VENTA_ASENTABLE_SQL = sql`(
   (d.estado IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO') AND d.tipo_ecf IN ('31', '32', '33', '44', '45'))
-  OR (d.tipo_ecf = 'sin-ncf' AND d.estado NOT IN ('ANULADO', 'RECHAZADO'))
+  OR (d.tipo_ecf = 'sin-ncf' AND d.estado NOT IN ('ANULADO', 'RECHAZADO', 'HISTORICA'))
+)`;
+
+/**
+ * Lo que se debía de una factura histórica al traerla, en centavos, sobre el
+ * alias `d`: el total menos lo retenido y menos lo que ya se había cobrado en el
+ * sistema anterior (los cobros `de_migracion`). Los cobros hechos en Zero no
+ * restan: esos sí se asientan, y son los que van cerrando este saldo.
+ */
+export const SALDO_INICIAL_HISTORICA_SQL = sql`(
+  d.monto_total - COALESCE(d.total_retenciones, 0) - COALESCE((
+    SELECT sum(pm.monto_centavos) FROM pagos_recibidos pm
+    WHERE pm.team_id = d.team_id AND pm.ecf_document_id = d.id AND pm.de_migracion
+  ), 0)
+)`;
+
+/**
+ * ¿Esta factura histórica abre saldo inicial? Sobre el alias `d`. El barrido y
+ * el conteo de pendientes usan esto mismo; si una histórica llegó cobrada del
+ * todo no hay nada que abrir, y tampoco debe contarse como pendiente.
+ */
+export const HISTORICA_ASENTABLE_SQL = sql`(
+  d.estado = 'HISTORICA' AND ${SALDO_INICIAL_HISTORICA_SQL} > 0
 )`;
 
 export interface LineaAsiento {
@@ -104,7 +139,9 @@ export type MotivoSalto =
   | 'provisiones-apagadas'
   | 'no-es-gasto'
   | 'compra-anulada'
-  | 'sin-cuenta-retenciones-por-pagar';
+  | 'sin-cuenta-retenciones-por-pagar'
+  | 'sin-cuenta-resultados-acumulados'
+  | 'cobro-de-migracion';
 
 export interface ResultadoGeneracion {
   creado:  boolean;
@@ -412,6 +449,73 @@ export async function generarAsientoFactura(
     : { creado: true, asientoId };
 }
 
+// ─── Saldo inicial de una factura histórica ──────────────────────────────────
+
+/** Cuenta contra la que se abre el saldo de lo traído de otro sistema. */
+const CODIGO_RESULTADOS_ACUMULADOS = '3102';
+
+/**
+ * Asiento de una factura histórica: abre la deuda que el cliente traía.
+ *
+ *   Debe  Cuentas por cobrar          lo que se debía al traerla
+ *     Haber  Resultados acumulados      lo mismo
+ *
+ * No es una venta del período: su ingreso y lo que ya se cobró viven en los
+ * libros del sistema anterior. Asentarla como venta duplicaría ese ingreso, y no
+ * asentarla dejaba Cuentas por cobrar negativa en cuanto entraba el primer
+ * cobro hecho en Zero. Por eso solo entra el saldo pendiente
+ * (`SALDO_INICIAL_HISTORICA_SQL`), y los cobros de migración no se asientan
+ * (ver `generarAsientoPago`).
+ *
+ * Usa el origen `'factura'` a propósito: una factura abre deuda una sola vez, y
+ * así una histórica anulada se reversa con `generarAsientoAnulacion` como
+ * cualquier otra.
+ */
+export async function generarAsientoSaldoInicial(
+  teamId: number,
+  documentoId: number,
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+
+  const filas = await db.execute(sql`
+    SELECT d.id, d.encf, d.estado,
+           ${SALDO_INICIAL_HISTORICA_SQL}::bigint AS saldo,
+           to_char(d.fecha_emision AT TIME ZONE 'America/Santo_Domingo', 'YYYY-MM-DD') AS fecha
+    FROM ecf_documents d
+    WHERE d.team_id = ${teamId} AND d.id = ${documentoId}
+  `);
+  const doc = (filas as unknown as {
+    id: number; encf: string | null; estado: string; saldo: unknown; fecha: string;
+  }[])[0];
+  if (!doc || doc.estado !== ESTADO_HISTORICA) return { creado: false, motivo: 'no-es-venta' };
+
+  const saldo = Number(doc.saldo ?? 0);
+  if (saldo <= 0) return { creado: false, motivo: 'sin-monto' };
+
+  if (!cfg.cuentaPorCobrarId) return { creado: false, motivo: 'sin-cuenta-por-cobrar' };
+  const cuentaResultados = await cuentaPorCodigo(teamId, CODIGO_RESULTADOS_ACUMULADOS);
+  if (!cuentaResultados) return { creado: false, motivo: 'sin-cuenta-resultados-acumulados' };
+
+  const concepto = `Saldo inicial · factura ${doc.encf ?? doc.id}`;
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: doc.fecha, concepto, origenTipo: 'factura', origenId: doc.id },
+    [
+      { cuentaId: cfg.cuentaPorCobrarId, debeCents: saldo, haberCents: 0,
+        descripcion: 'Saldo pendiente traído del sistema anterior' },
+      { cuentaId: cuentaResultados, debeCents: 0, haberCents: saldo,
+        descripcion: 'Contrapartida del saldo inicial' },
+    ],
+    userId,
+  );
+
+  return asientoId === null
+    ? { creado: false, motivo: 'ya-tiene-asiento' }
+    : { creado: true, asientoId };
+}
+
 // ─── Asiento de nota de crédito ──────────────────────────────────────────────
 
 /**
@@ -629,16 +733,21 @@ export async function generarAsientoPago(
   const filas = await db.execute(sql`
     SELECT p.id, p.metodo, p.monto_centavos AS "montoCentavos",
            to_char(p.fecha_pago, 'YYYY-MM-DD') AS fecha,
+           p.de_migracion AS "deMigracion",
            d.encf
     FROM pagos_recibidos p
     LEFT JOIN ecf_documents d ON d.id = p.ecf_document_id
     WHERE p.team_id = ${teamId} AND p.id = ${pagoId}
   `);
   const pago = (filas as unknown as {
-    id: number; metodo: string; montoCentavos: number; fecha: string; encf: string | null;
+    id: number; metodo: string; montoCentavos: number; fecha: string;
+    deMigracion: boolean; encf: string | null;
   }[])[0];
 
   if (!pago) return { creado: false, motivo: 'no-es-venta' };
+  // Se cobró en el sistema anterior: ese dinero ya está en sus libros, y el
+  // saldo inicial de la factura histórica ya lo descontó.
+  if (pago.deMigracion) return { creado: false, motivo: 'cobro-de-migracion' };
   if (pago.montoCentavos <= 0) return { creado: false, motivo: 'sin-monto' };
 
   // ── Aplicación de un saldo a favor ────────────────────────────────────────
@@ -737,6 +846,8 @@ export async function generarAsientoCompra(
   const filas = await db.execute(sql`
     SELECT id, clase, estado, monto_total AS "montoTotal", itbis_cents AS "itbisCents",
            forma_pago AS "formaPago", metodo_pago AS "metodoPago", cuenta_salida_id AS "cuentaSalidaId",
+           -- Por to_jsonb y no por la columna: una base sin la migración 0221 devuelve null en vez de fallar.
+           to_jsonb(compras_locales.*) -> 'pagos_mixtos' AS "pagosMixtos",
            to_char(fecha, 'YYYY-MM-DD') AS fecha,
            proveedor_nombre AS "proveedorNombre", referencia_encf AS ncf,
            tipo_bienes_606 AS "tipoBienes606",
@@ -804,9 +915,22 @@ export async function generarAsientoCompra(
   }
 
   const esContado = c.formaPago === 'contado';
-  const contrapartida = esContado
-    ? await cuentaSalidaFondos(teamId, String(c.metodoPago ?? 'efectivo'), numeroONull(c.cuentaSalidaId))
-    : cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  // Pago mixto: cada parte sale de su propia caja o banco; no hay una sola cuenta de salida.
+  let contrapartidas: { cuentaId: number; cents: number; descripcion?: string }[] | undefined;
+  const partesMixtas = esContado && c.metodoPago === 'mixto' ? partesDeJson(c.pagosMixtos) : null;
+  if (partesMixtas) {
+    contrapartidas = [];
+    for (const parte of partesMixtas) {
+      const cuentaParte = await cuentaSalidaFondos(teamId, parte.metodo, parte.cuentaSalidaId);
+      if (!cuentaParte) return { creado: false, motivo: 'sin-cuenta-cobro' };
+      contrapartidas.push({ cuentaId: cuentaParte, cents: parte.montoCents, descripcion: `Pago al proveedor (${parte.metodo})` });
+    }
+  }
+  const contrapartida = contrapartidas
+    ? contrapartidas[0].cuentaId
+    : esContado
+      ? await cuentaSalidaFondos(teamId, String(c.metodoPago ?? 'efectivo'), numeroONull(c.cuentaSalidaId))
+      : cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
   if (!contrapartida) return { creado: false, motivo: esContado ? 'sin-cuenta-cobro' : 'sin-cuenta-por-pagar' };
 
   const itbisRetenido = num(c.itbisRetenidoCents);
@@ -826,6 +950,7 @@ export async function generarAsientoCompra(
       itbisRetenido: itbisRetenido > 0 ? (await cuentaPorCodigo(teamId, '2113')) ?? await cuentaPorCodigo(teamId, '2103') : null,
       isrRetenido: isrRetenido > 0 ? (await cuentaPorCodigo(teamId, '2114')) ?? await cuentaPorCodigo(teamId, '2103') : null,
       contrapartida,
+      contrapartidas,
     },
   });
   if (!Array.isArray(partidas)) return { creado: false, motivo: partidas.motivo };
@@ -1082,7 +1207,57 @@ async function cuentaSalidaFondos(teamId: number, metodo: string, elegidaId: num
   if (elegida) return elegida;
   const configurada = await resolverCuentaCobro(teamId, metodo as ClaveMetodo);
   if (configurada) return configurada;
-  return cuentaPorCodigo(teamId, metodo === 'efectivo' ? '1101' : '1102');
+  if (metodo === 'efectivo') return cuentaPorCodigo(teamId, '1101');
+  // 1102 Bancos es cuenta padre en el catálogo nuevo; su hija es la que asienta.
+  return (await cuentaPorCodigo(teamId, '1102')) ?? cuentaPorCodigo(teamId, '110201');
+}
+
+/**
+ * La cuenta de la que sale un pago de nómina, de la más específica a la más
+ * general: la elegida en ese pago; la de por defecto de nómina (caja para el
+ * efectivo, banco para transferencia y cheque); la del método de pago, como
+ * funcionaba antes. Una cuenta que ya no sirve (desactivada, o que nunca pudo
+ * soltar dinero) se salta.
+ */
+async function cuentaSalidaNomina(teamId: number, metodo: string, elegidaId: number | null): Promise<number | null> {
+  const elegida = await cuentaElegidaDeSalida(teamId, elegidaId);
+  if (elegida) return elegida;
+  const porDefecto = await cuentasPagoNomina(teamId);
+  const defecto = await cuentaElegidaDeSalida(teamId, metodo === 'efectivo' ? porDefecto.efectivoId : porDefecto.bancoId);
+  return defecto ?? cuentaSalidaFondos(teamId, metodo);
+}
+
+export type ClaveReserva = keyof typeof RESERVAS;
+
+/**
+ * LA cuenta de pasivo de cada provisión (regalía, vacaciones, cesantía). La usan la provisión
+ * mensual, la corrida de regalía y la liquidación: así la reserva que se consume es la misma
+ * que se acumuló. De la más específica a la más general: la de ese concepto, la general de
+ * provisiones, «cuentas por pagar» de la configuración y, por último, la 2101 del catálogo.
+ */
+export async function cuentaPasivoReserva(teamId: number, clave: ClaveReserva): Promise<number | null> {
+  const cfg = await getConfig(teamId);
+  const propia = clave === 'regalia' ? cfg.cuentaProvRegaliaPagarId
+    : clave === 'vacaciones' ? cfg.cuentaProvVacacionesPagarId
+    : cfg.cuentaProvCesantiaPagarId;
+  return propia ?? cfg.cuentaProvisionPorPagarId ?? cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+}
+
+/**
+ * Lo acumulado en una reserva (regalía, vacaciones o cesantía) y todavía sin consumir, MEDIDO POR LAS
+ * LÍNEAS de ese tipo: lo provisionado como tal menos lo ya consumido como tal. No se toma el saldo de
+ * la cuenta: sin cuenta de provisión propia la reserva cae en «cuentas por pagar» (o en la 2101) y ese
+ * saldo incluye lo que se le debe a proveedores, que una liquidación no puede gastar.
+ */
+async function saldoReservaDe(teamId: number, clave: ClaveReserva, cuentaId: number, fecha: string): Promise<number> {
+  const r = RESERVAS[clave];
+  const [saldo] = await db.execute(sql`
+    SELECT COALESCE(sum(CASE WHEN l.descripcion = ${r.provision} THEN l.haber_cents ELSE 0 END), 0)
+         - COALESCE(sum(CASE WHEN l.descripcion LIKE ANY (${sql.raw(`ARRAY[${r.consumos.map((c) => `'${c}'`).join(',')}]`)}) THEN l.debe_cents ELSE 0 END), 0) AS saldo
+    FROM contabilidad_asiento_lineas l JOIN contabilidad_asientos a ON a.id = l.asiento_id
+    WHERE l.team_id = ${teamId} AND l.cuenta_id = ${cuentaId} AND a.fecha <= ${fecha}::date
+  `) as unknown as { saldo: unknown }[];
+  return Math.max(0, Number(saldo?.saldo ?? 0));
 }
 
 /** Lo que viene de la base como columna nullable: BIGINT/INTEGER o null. */
@@ -1135,7 +1310,7 @@ export async function generarAsientoNomina(
   if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
 
   const filas = await db.execute(sql`
-    SELECT c.descripcion,
+    SELECT c.descripcion, c.tipo,
            to_char(coalesce(c.fecha_pago, c.fecha_fin), 'YYYY-MM-DD') AS fecha,
            coalesce(sum(l.bruto_cents), 0)   AS bruto,
            coalesce(sum(l.neto_cents), 0)    AS neto,
@@ -1157,6 +1332,27 @@ export async function generarAsientoNomina(
   const f = (filas as unknown as Record<string, string | number>[])[0];
   if (!f) return { creado: false, motivo: 'no-es-gasto' };
 
+  // La regalía tiene su propio asiento: sin TSS, y usa la reserva que se fue acumulando.
+  if (f.tipo === 'regalia') {
+    const bruto = Number(f.bruto);
+    if (bruto <= 0) return { creado: false, motivo: 'sin-monto' };
+    const cuentas = await cuentasNomina(teamId);
+    if ('motivo' in cuentas) return { creado: false, motivo: cuentas.motivo };
+    const gastoRegalia = cfg.cuentaProvRegaliaGastoId ?? cfg.cuentaProvisionGastoId ?? cuentas.gastoSueldos;
+    const regaliaPorPagar = cfg.provisionarNomina ? await cuentaPasivoReserva(teamId, 'regalia') : null;
+    const reservaCents = regaliaPorPagar ? await saldoReservaDe(teamId, 'regalia', regaliaPorPagar, String(f.fecha)) : 0;
+    const asientoId = await insertarAsiento(
+      teamId,
+      { fecha: String(f.fecha), concepto: `Nómina · ${f.descripcion}`, origenTipo: 'nomina', origenId: corridaId },
+      lineasDevengoRegalia(
+        { brutoCents: bruto, reservaCents, isrCents: Number(f.isr), netoCents: Number(f.neto) },
+        { gastoRegalia, regaliaPorPagar, isr: cuentas.isr, sueldosPorPagar: cuentas.sueldosPorPagar },
+      ),
+      userId,
+    );
+    return asientoId === null ? { creado: false, motivo: 'ya-tiene-asiento' } : { creado: true, asientoId };
+  }
+
   // Los BIGINT llegan como string desde el SQL crudo: sin Number() las sumas se
   // concatenan y el asiento no cuadra.
   const sumas: SumasCorrida = {
@@ -1176,6 +1372,21 @@ export async function generarAsientoNomina(
     },
   };
   if (sumas.brutoCents <= 0) return { creado: false, motivo: 'sin-monto' };
+  sumas.conceptos = await conceptosParaAsiento(teamId, corridaId);
+  // Lo que se paga contra una reserva (cesantía, vacaciones, regalía por pagar) usa lo que haya acumulado,
+  // sin pasarse: lo que falta va al gasto. Una cuenta compartida por varios conceptos se reparte en orden.
+  if (cfg.provisionarNomina) {
+    const disponible = new Map<string, number>();
+    for (const k of sumas.conceptos) {
+      // Sin saber de qué reserva sale (clave), no se consume nada: todo va al gasto.
+      if (!k.reservaCuentaId || !k.reservaClave || k.tipo !== 'ingreso') continue;
+      const llave = `${k.reservaCuentaId}:${k.reservaClave}`;
+      if (!disponible.has(llave)) disponible.set(llave, await saldoReservaDe(teamId, k.reservaClave, k.reservaCuentaId, String(f.fecha)));
+      const queda = disponible.get(llave)!;
+      k.reservaUsadaCents = Math.min(k.montoCents, queda);
+      disponible.set(llave, queda - k.reservaUsadaCents);
+    }
+  }
 
   const cuentas = await cuentasNomina(teamId);
   if ('motivo' in cuentas) return { creado: false, motivo: cuentas.motivo };
@@ -1207,7 +1418,7 @@ export async function generarAsientoPagoNominaObligacion(
   if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
 
   const filas = await db.execute(sql`
-    SELECT o.destino, o.monto_cents AS "monto",
+    SELECT o.id AS "oblId", o.destino, o.monto_cents AS "monto",
            o.parte_retenciones_cents AS "retenciones", o.parte_aportes_cents AS "aportes",
            to_char(coalesce(c.fecha_pago, c.fecha_fin), 'YYYY-MM-DD') AS fecha,
            c.descripcion,
@@ -1220,6 +1431,7 @@ export async function generarAsientoPagoNominaObligacion(
   const o = (filas as unknown as {
     destino: string; monto: string | number; retenciones: string | number; aportes: string | number;
     fecha: string; descripcion: string; infotep: string | number; afpEmpleado: string | number;
+    oblId: number;
   }[])[0];
   if (!o) return { creado: false, motivo: 'no-es-gasto' };
   const monto = Number(o.monto);
@@ -1227,7 +1439,7 @@ export async function generarAsientoPagoNominaObligacion(
 
   const cuentas = await cuentasNomina(teamId);
   if ('motivo' in cuentas) return { creado: false, motivo: cuentas.motivo };
-  const salida = await cuentaSalidaFondos(teamId, metodo);
+  const salida = await cuentaSalidaNomina(teamId, metodo, await cuentaSalidaElegida('nomina_obligaciones', teamId, Number(o.oblId)));
   if (!salida) return { creado: false, motivo: 'sin-cuenta-cobro' };
 
   const lineas = lineasPagoObligacion({
@@ -1277,7 +1489,7 @@ export async function generarAsientoPagoSueldos(
 
   const cuentas = await cuentasNomina(teamId);
   if ('motivo' in cuentas) return { creado: false, motivo: cuentas.motivo };
-  const salida = await cuentaSalidaFondos(teamId, p.metodo);
+  const salida = await cuentaSalidaNomina(teamId, p.metodo, await cuentaSalidaElegida('nomina_pagos', teamId, pagoId));
   if (!salida) return { creado: false, motivo: 'sin-cuenta-cobro' };
 
   const asientoId = await insertarAsiento(
@@ -1349,11 +1561,11 @@ export async function generarAsientoProvisionNomina(
     { fecha: corrida.fecha, concepto: `Provisión nómina · ${corrida.descripcion}`, origenTipo: 'provision_nomina', origenId: corridaId },
     lineasProvisionNomina(prov, {
       regaliaGasto: cfg.cuentaProvRegaliaGastoId ?? cuentaGasto,
-      regaliaPasivo: cfg.cuentaProvRegaliaPagarId ?? cuentaPasivo,
+      regaliaPasivo: (await cuentaPasivoReserva(teamId, 'regalia')) ?? cuentaPasivo,
       vacacionesGasto: cfg.cuentaProvVacacionesGastoId ?? cuentaGasto,
-      vacacionesPasivo: cfg.cuentaProvVacacionesPagarId ?? cuentaPasivo,
+      vacacionesPasivo: (await cuentaPasivoReserva(teamId, 'vacaciones')) ?? cuentaPasivo,
       cesantiaGasto: cfg.cuentaProvCesantiaGastoId ?? cuentaGasto,
-      cesantiaPasivo: cfg.cuentaProvCesantiaPagarId ?? cuentaPasivo,
+      cesantiaPasivo: (await cuentaPasivoReserva(teamId, 'cesantia')) ?? cuentaPasivo,
     }),
     userId,
   );
@@ -1496,4 +1708,36 @@ export async function generarAsientoManual(
   }
 
   return { asientoId };
+}
+
+/**
+ * Borra el asiento de un origen (con sus líneas, por cascada). Solo para deshacer lo que ESTE intento acaba
+ * de crear cuando una operación falla a medias: un asiento ya asentado no se borra por esta vía.
+ */
+export async function borrarAsientoDeOrigen(teamId: number, origenTipo: string, origenId: number): Promise<void> {
+  await db.execute(sql`DELETE FROM contabilidad_asientos WHERE team_id = ${teamId} AND origen_tipo = ${origenTipo} AND origen_id = ${origenId}`);
+}
+
+/**
+ * Desembolso de un préstamo o avance a un empleado: Dr «cuentas por cobrar a empleados» / Cr la caja o el banco de
+ * donde salió el dinero. Un solo asiento por préstamo (idempotente por su id). Las cuotas de nómina lo van abonando.
+ */
+export async function generarAsientoPrestamoEmpleado(
+  teamId: number,
+  datos: { prestamoId: number; montoCents: number; cuentaPorCobrarId: number; cuentaSalidaId: number; fecha: string; concepto: string },
+  userId: number | null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+  if (datos.montoCents <= 0) return { creado: false, motivo: 'sin-monto' };
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: datos.fecha, concepto: datos.concepto, origenTipo: 'prestamo_empleado', origenId: datos.prestamoId },
+    [
+      { cuentaId: datos.cuentaPorCobrarId, debeCents: datos.montoCents, haberCents: 0, descripcion: 'Préstamo o avance a empleado' },
+      { cuentaId: datos.cuentaSalidaId, debeCents: 0, haberCents: datos.montoCents, descripcion: 'Salida del dinero del préstamo' },
+    ],
+    userId,
+  );
+  return asientoId === null ? { creado: false, motivo: 'ya-tiene-asiento' } : { creado: true, asientoId };
 }

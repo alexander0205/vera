@@ -238,6 +238,8 @@ export async function POST(req: NextRequest) {
           fechaPago:      f.fecha,
           notas:          `Cobrada al importar (factura ${f.codigo})`,
           createdBy:      user.id,
+          // Se cobró en el sistema anterior: contabilidad no lo asienta.
+          deMigracion:    true,
         });
       }
     }

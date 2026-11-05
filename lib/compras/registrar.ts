@@ -23,6 +23,9 @@ import {
 } from './fiscal';
 import { categoriaCompra, tipo606Dominante } from './categorias';
 import { repartir } from './asiento-compra';
+import { validarPartes, type ParteMixta } from './pago-mixto';
+import { crearFichasDesdeCompra } from '@/lib/contabilidad/activos-fijos-db';
+import { activosCompletosDisponible } from '@/lib/contabilidad/depreciacion';
 
 export class CompraError extends Error {
   constructor(message: string, public status = 400, public codigo?: string, public compraId?: number) {
@@ -66,6 +69,8 @@ export interface RegistroCompra {
   metodoPago: MetodoPagoCompra;
   /** De qué cuenta salió el dinero; null = la del método de pago. */
   cuentaSalidaId?: number | null;
+  /** Con `metodoPago: 'mixto'`: cuánto se pagó con cada método y de qué caja o banco. */
+  pagosMixtos?: { metodo: string; cuentaSalidaId?: number | null; montoCents: number }[] | null;
   fechaPago?: string | null;
   fechaVencimiento?: string | null;
   almacenId?: number | null;
@@ -159,7 +164,10 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
   const fechaVencimiento = r.formaPago === 'credito' && r.fechaVencimiento && esFechaYMD(r.fechaVencimiento) ? r.fechaVencimiento : null;
   if (fechaVencimiento && fechaVencimiento < r.fecha) throw new CompraError('El vencimiento no puede ser anterior al comprobante');
   // A crédito todavía no sale dinero: la cuenta se elige al pagar.
-  const cuentaSalidaId = r.formaPago === 'contado' ? (r.cuentaSalidaId ?? null) : null;
+  const mixto = r.metodoPago === 'mixto';
+  if (mixto && r.formaPago !== 'contado') throw new CompraError('El pago mixto solo aplica a lo que se paga de contado', 400, 'pagosMixtos');
+  // En un pago mixto cada parte lleva su cuenta: no hay una sola.
+  const cuentaSalidaId = r.formaPago === 'contado' && !mixto ? (r.cuentaSalidaId ?? null) : null;
   if (cuentaSalidaId) {
     const { cuentas } = await cuentasDeSalida(teamId);
     if (!cuentas.some((c) => c.id === cuentaSalidaId)) {
@@ -228,6 +236,14 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
   if (r.isrRetenidoCents > 0 && !esTipoRetencionIsr(isrTipo)) throw new CompraError('Elige el tipo de retención de ISR');
   const resumen = resumirCompra(t.baseCents, imp);
   if (!Number.isSafeInteger(resumen.totalCents)) throw new CompraError('Monto fuera de rango');
+  // El reparto del pago mixto tiene que sumar exactamente lo que se paga: total menos retenciones.
+  let pagosMixtos: ParteMixta[] | null = null;
+  if (mixto) {
+    const { cuentas } = await cuentasDeSalida(teamId);
+    const v = validarPartes(r.pagosMixtos, resumen.totalCents - r.itbisRetenidoCents - r.isrRetenidoCents, new Set(cuentas.map((c) => c.id)));
+    if (!v.ok) throw new CompraError(v.error, 400, 'pagosMixtos');
+    pagosMixtos = v.partes;
+  }
   if (reglas.gastoSinNcf) {
     avisos.push('Sin NCF: este gasto se guardó, pero no va al 606 ni da crédito de ITBIS');
     // Lo retenido solo sale en los campos 12, 17 y 18 del 606 (y en el 609 si es
@@ -291,6 +307,16 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
       itbisCents: t.lineas[i].itbisCents,
       cuentaId: l.cuentaId,
     })));
+    // El reparto va por SQL y no por el esquema de drizzle: así una base a la que
+    // todavía no se le corrió la migración 0221 sigue registrando compras normales
+    // (drizzle nombraría la columna en TODO insert y lo rompería).
+    if (pagosMixtos) {
+      try {
+        await tx.execute(sql`UPDATE compras_locales SET pagos_mixtos = ${JSON.stringify(pagosMixtos)}::jsonb WHERE id = ${c.id}`);
+      } catch {
+        throw new CompraError('El pago mixto necesita una actualización de la base que aún no se aplica. Registra el pago con un solo método.', 503, 'pagosMixtos');
+      }
+    }
     return c.id;
   });
 
@@ -306,6 +332,16 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
       almacenId: l.almacenId ?? r.almacenId ?? null,
       costoUnitarioCents: Math.round((t.lineas[i].baseCents + extra[i]) / l.cantidad),
     }] : []));
+  }
+
+  // ── Activos fijos: cada línea con categoría «activo fijo» abre su ficha (en revisión) ──
+  if (lineas.some((l) => l.categoria === 'activo_fijo' && !l.productoId)) {
+    const bases = lineas.map((_, i) => t.lineas[i].baseCents);
+    const extra = repartir(itbisAlCosto + r.iscCents + r.otrosImpuestosCents + r.propinaCents, bases);
+    const creadas = await crearFichasDesdeCompra(teamId, userId, compraId, r.fecha, lineas.map((l, i) => ({
+      descripcion: l.descripcion, categoria: l.categoria, productoId: l.productoId ?? null, cantidad: l.cantidad, costoCents: bases[i] + extra[i],
+    })));
+    if (creadas > 0) avisos.push(`Se abrió la ficha de ${creadas === 1 ? 'un activo fijo' : `${creadas} activos fijos`} en Activos fijos: confirma su categoría y vida útil para que empiece a depreciar`);
   }
 
   const asiento = await generarAsientoCompra(teamId, compraId, userId);
@@ -327,6 +363,22 @@ export async function anularCompra(teamId: number, userId: number, compraId: num
     `);
     if (Number(pagos) > 0) {
       throw new CompraError('Tiene pagos registrados en Cuentas por pagar: no se puede anular una deuda ya pagada', 409, 'con-pagos');
+    }
+    // Las fichas de activo fijo abiertas desde esta compra: sin depreciación ni bajas se quitan con ella;
+    // con depreciación hay asientos montados encima y la compra no se puede anular de golpe.
+    if (await activosCompletosDisponible()) {
+      const [{ fichas, historia, reclasificadas }] = await tx.execute<{ fichas: number; historia: number; reclasificadas: number }>(sql`
+        SELECT count(*)::int AS fichas, (count(*) FILTER (WHERE cuenta_activo_id IS NOT NULL))::int AS reclasificadas,
+               (SELECT count(*) FROM contabilidad_depreciaciones d WHERE d.team_id = ${teamId} AND d.activo_id IN (SELECT id FROM contabilidad_activos_fijos WHERE team_id = ${teamId} AND compra_id = ${compraId}))::int
+             + (SELECT count(*) FROM contabilidad_activos_bajas b WHERE b.team_id = ${teamId} AND b.activo_id IN (SELECT id FROM contabilidad_activos_fijos WHERE team_id = ${teamId} AND compra_id = ${compraId}))::int AS historia
+        FROM contabilidad_activos_fijos WHERE team_id = ${teamId} AND compra_id = ${compraId}`);
+      if (Number(historia) > 0) {
+        throw new CompraError('Un activo fijo de esta compra ya tiene depreciación o bajas asentadas: no se puede anular la compra. Da de baja el activo desde Activos fijos.', 409, 'con-activos');
+      }
+      if (Number(reclasificadas) > 0) {
+        throw new CompraError('Un activo fijo de esta compra se pasó a la cuenta de su categoría (hay un asiento de reclasificación). Quítale la categoría en Activos fijos para deshacerlo y vuelve a anular la compra.', 409, 'con-activos');
+      }
+      if (Number(fichas) > 0) await tx.execute(sql`DELETE FROM contabilidad_activos_fijos WHERE team_id = ${teamId} AND compra_id = ${compraId}`);
     }
     await tx.update(comprasLocales).set({
       estado: 'anulada', anuladaEn: new Date(), anuladaPor: userId, motivoAnulacion: texto.slice(0, 300),

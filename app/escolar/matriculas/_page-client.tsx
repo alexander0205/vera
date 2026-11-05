@@ -29,6 +29,10 @@ import {
   idDeRuta, rutaEditarMatricula, rutaNuevaMatricula,
 } from '@/lib/administracion-escolar/matricula-pantalla';
 import { textoDeCurso } from '@/lib/administracion-escolar/sin-grado';
+import { FiltroEstructura, filtroAUrl, filtroDeUrl } from '@/components/administracion-escolar/FiltroEstructura';
+import {
+  completarFiltro, nombreDelGrupo, normalizarFiltro, seccionesDelFiltro, TODOS_LOS_CURSOS, type FiltroGrupo,
+} from '@/lib/administracion-escolar/filtro-curso';
 
 interface Matricula {
   id: number;
@@ -112,6 +116,8 @@ export default function MatriculasClient() {
   const [periodos, setPeriodos]     = useState<Periodo[]>([]);
   const [cursos, setCursos]         = useState<Curso[]>([]);
   const [estudiantes, setEstudiantes] = useState<Estudiante[]>([]);
+  /** Ya llegaron períodos y cursos: sin ellos un filtro de curso no se puede traducir a secciones. */
+  const [catalogoListo, setCatalogoListo] = useState(false);
   const [loading, setLoading]       = useState(true);
   const [loadError, setLoadError]   = useState<string | null>(null);
 
@@ -144,6 +150,31 @@ export default function MatriculasClient() {
   const selectedId = idDeRuta(urlParams.get('matricula'));
 
   /**
+   * Nivel, grado y sección (`?servicio=&grado=&curso=`), con el mismo control
+   * que Estudiantes. Una sección es de un solo año, así que las opciones son
+   * las del período elegido, o las del activo si se miran todos.
+   *
+   * Al servidor no va el filtro sino las secciones que entran
+   * (`seccionesDelFiltro`): «Primaria» son todas sus secciones de ese año.
+   */
+  const periodoEstructura = periodoUrl
+    ?? periodos.find((p) => p.activo)?.id ?? periodos[0]?.id ?? null;
+  const filtroCrudo = filtroDeUrl(urlParams);
+  const filtroEstr: FiltroGrupo = catalogoListo
+    ? normalizarFiltro(cursos, periodoEstructura, completarFiltro(cursos, filtroCrudo))
+    : filtroCrudo;
+  const hayFiltroEstr = filtroEstr.servicioId != null || filtroEstr.gradoId != null
+    || filtroEstr.cursoId != null || filtroEstr.sinGrado === true;
+  const secciones = catalogoListo ? seccionesDelFiltro(cursos, periodoEstructura, filtroEstr) : null;
+  // `null` = sin filtro de curso. Una lista vacía va como «0» para que el
+  // servidor no la lea como «sin filtro» y devuelva el colegio entero.
+  const cursoIds = secciones == null ? null : secciones.join(',') || '0';
+  // Un enlace con curso, mientras llega el catálogo: sin esperar se pintaría
+  // un momento el listado entero.
+  const esperandoCatalogo = !catalogoListo && (filtroCrudo.servicioId != null
+    || filtroCrudo.gradoId != null || filtroCrudo.cursoId != null || filtroCrudo.sinGrado === true);
+
+  /**
    * El texto del buscador SÍ es estado local, además del de la URL: a la URL
    * va el valor ya rebotado (300 ms), y el recuadro se alimenta de este para
    * no ir a tirones mientras se teclea.
@@ -162,6 +193,7 @@ export default function MatriculasClient() {
     const params = new URLSearchParams({ pagina: String(pagina) });
     if (filtroPeriodo !== 'todos') params.set('periodoId', filtroPeriodo);
     if (filtroEstado !== 'todos') params.set('estado', filtroEstado);
+    if (cursoIds != null) params.set('cursoIds', cursoIds);
     if (qUrl) params.set('q', qUrl);
     const res = await fetch(`/api/administracion-escolar/matriculas?${params}`);
     const data = await res.json();
@@ -169,7 +201,7 @@ export default function MatriculasClient() {
     setMatriculas(data.matriculas ?? []);
     setPaginaInfo({ total: data.total ?? 0, paginas: data.paginas ?? 1, porPagina: data.porPagina ?? 50 });
     setStats(data.stats ?? { total: 0, activas: 0, cursos: 0 });
-  }, [filtroPeriodo, filtroEstado, qUrl, pagina]);
+  }, [filtroPeriodo, filtroEstado, cursoIds, qUrl, pagina]);
 
   // Para el export: todas las páginas con el filtro de la pantalla.
   async function armarExport() {
@@ -177,11 +209,13 @@ export default function MatriculasClient() {
       const params = new URLSearchParams({ pagina: String(pag), porPagina: '200' });
       if (filtroPeriodo !== 'todos') params.set('periodoId', filtroPeriodo);
       if (filtroEstado !== 'todos') params.set('estado', filtroEstado);
+      if (cursoIds != null) params.set('cursoIds', cursoIds);
       if (qUrl) params.set('q', qUrl);
       return `/api/administracion-escolar/matriculas?${params}`;
     }, 'matriculas');
     const partes = [
       filtroPeriodo !== 'todos' ? `Período: ${periodos.find(x => String(x.id) === filtroPeriodo)?.nombre ?? filtroPeriodo}` : 'Todos los períodos',
+      hayFiltroEstr ? `Curso: ${nombreDelGrupo(cursos, periodoEstructura, filtroEstr) ?? '—'}` : null,
       filtroEstado !== 'todos' ? `Estado: ${ESTADOS.find(e => e.valor === filtroEstado)?.etiqueta ?? filtroEstado}` : null,
       qUrl ? `Búsqueda: «${qUrl}»` : null,
       truncado ? notaDeCorte(todas.length, total) : null,
@@ -202,6 +236,7 @@ export default function MatriculasClient() {
     setPeriodos(p.periodos ?? []);
     setCursos(c.cursos ?? []);
     setEstudiantes(e.estudiantes ?? []);
+    setCatalogoListo(true);
   }, []);
 
   // Debounce de la búsqueda (300 ms): sin él sale una consulta por tecla.
@@ -233,7 +268,11 @@ export default function MatriculasClient() {
     setQuery((actual) => (actual.trim() === qUrl ? actual : qUrl));
   }, [qUrl]);
 
-  const cambiarPeriodo = (v: string) => setParams({ periodo: v === 'todos' ? null : v, page: null });
+  // Cambiar de año suelta el curso: sus secciones eran de otro período y el
+  // filtro ya no apuntaría a nada.
+  const cambiarPeriodo = (v: string) =>
+    setParams({ periodo: v === 'todos' ? null : v, ...filtroAUrl(TODOS_LOS_CURSOS), page: null });
+  const cambiarEstructura = (f: FiltroGrupo) => setParams({ ...filtroAUrl(f), page: null });
   const cambiarEstado  = (v: string) => setParams({ estado: v === 'todos' ? null : v, page: null });
   const irAPagina      = (p: number) => setParams({ page: p <= 1 ? null : p });
 
@@ -256,12 +295,13 @@ export default function MatriculasClient() {
   // ya está en pantalla: la tabla anterior se queda hasta que llega la nueva,
   // igual que en Estudiantes, en vez de parpadear a vacío.
   useEffect(() => {
+    if (esperandoCatalogo) return;
     setLoading(true);
     setLoadError(null);
     cargarMatriculas()
       .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : 'Error cargando matrículas'))
       .finally(() => setLoading(false));
-  }, [cargarMatriculas]);
+  }, [cargarMatriculas, esperandoCatalogo]);
 
   const estudiantesActivos = useMemo(
     () => estudiantes.filter((e) => e.estado === 'activo'),
@@ -320,7 +360,7 @@ export default function MatriculasClient() {
 
   const sinCatalogos = estudiantesActivos.length === 0 || periodos.length === 0 || cursosActivos.length === 0;
   const periodoActivo = periodos.find((p) => p.activo);
-  const filtrosActivos = qUrl !== '' || filtroPeriodo !== 'todos' || filtroEstado !== 'todos';
+  const filtrosActivos = qUrl !== '' || filtroPeriodo !== 'todos' || filtroEstado !== 'todos' || hayFiltroEstr;
 
   return (
     <section className="p-6 space-y-6">
@@ -363,8 +403,10 @@ export default function MatriculasClient() {
           </div>
 
           {/* Filtros */}
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="relative flex-1">
+          {/* `flex-wrap`: con nivel, grado y sección puestos no caben siete
+              controles en una fila, y sin él se salían por la derecha. */}
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
+            <div className="relative flex-1 sm:min-w-[14rem]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input className="pl-8" placeholder="Buscar por estudiante o código…"
                 value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -379,6 +421,13 @@ export default function MatriculasClient() {
                 {periodos.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
               </SelectContent>
             </Select>
+            <FiltroEstructura
+              cursos={cursos}
+              periodoId={periodoEstructura}
+              filtro={filtroEstr}
+              onChange={cambiarEstructura}
+              className="sm:w-40"
+            />
             <Select value={filtroEstado} onValueChange={cambiarEstado}>
               <SelectTrigger className="sm:w-36"><SelectValue placeholder="Estado" /></SelectTrigger>
               <SelectContent>

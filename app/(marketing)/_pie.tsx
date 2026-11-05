@@ -12,6 +12,7 @@
  */
 
 import Link from 'next/link';
+import { RUTA_CRM, paginaCrm, type ClaveCrm } from '@/lib/agentes/crm-rutas';
 import { CONTACTO, Contenedor } from './_piezas';
 
 /**
@@ -22,13 +23,25 @@ import { CONTACTO, Contenedor } from './_piezas';
  * por línea vive en `/precios`, que enseña una línea a la vez con su selector:
  * no hay ancla por producto a la que apuntar.
  */
-const COLUMNAS = [
+type EnlacePie = { texto: string; href: string };
+type ColumnaPie = { titulo: string; enlaces: readonly EnlacePie[] };
+
+/**
+ * Del CRM, el pie lleva el resumen y una página por categoría, no las diecinueve.
+ * Con todas, la columna medía el triple que las demás y estiraba el pie entero.
+ * Las demás siguen enlazadas: el menú de cada subpágina lista el CRM completo y
+ * el sitemap las declara una por una.
+ */
+const CRM_EN_EL_PIE: readonly ClaveCrm[] = ['chatbot-whatsapp', 'pipeline', 'bandeja', 'integraciones', 'preguntas'];
+
+const COLUMNAS: readonly ColumnaPie[] = [
   {
     titulo: 'Navegación',
     enlaces: [
       { texto: 'Inicio', href: '/' },
       { texto: 'Precios', href: '/precios' },
       { texto: 'Contacto', href: '/contacto' },
+      { texto: 'Distribuidores', href: '/distribuidores' },
       { texto: 'Iniciar sesión', href: '/sign-in' },
     ],
   },
@@ -46,13 +59,40 @@ const COLUMNAS = [
       { texto: 'Para agentes de IA', href: '/agentes' },
     ],
   },
-] as const;
+  {
+    // Aquí salen en el HTML de todas las páginas: es el enlace interno que un
+    // buscador sigue aunque el desplegable de la cabecera esté cerrado.
+    titulo: 'Zero CRM',
+    enlaces: [
+      { texto: 'Resumen', href: RUTA_CRM },
+      ...CRM_EN_EL_PIE.map(clave => {
+        const p = paginaCrm(clave);
+        return { texto: p.menu, href: p.ruta };
+      }),
+    ],
+  },
+];
+
+/* Los que llevan ancla van en `a` y no en `Link`: estando ya en la portada, el
+   Link de Next cambia la URL pero deja la página arriba del todo, así que el
+   enlace parecía roto. */
+function EnlaceDelPie({ enlace: l }: { enlace: EnlacePie }) {
+  return l.href.includes('#') ? (
+    <a href={l.href} className="text-[12.5px] text-white/55 transition hover:text-white">{l.texto}</a>
+  ) : (
+    <Link href={l.href} className="text-[12.5px] text-white/55 transition hover:text-white">{l.texto}</Link>
+  );
+}
 
 export function PieMarketing() {
   return (
-    <footer className="bg-[#0f1118] pt-12">
+    // `relative` para que el pie pinte ENCIMA del lazo de fondo de la página.
+    // El lazo es `absolute` y mide por ancho (140vw); en una página corta como
+    // `/distribuidores` baja más que el contenido y, sin esto, se dibujaba
+    // sobre el pie como arcos claros que se salían del marco.
+    <footer className="relative bg-[#0f1118] pt-12">
       <Contenedor>
-        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1.1fr]">
+        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1.1fr]">
           <div>
             {/* Las medidas van en el atributo, no solo en la clase: sin ellas
                 el navegador no conoce la proporción hasta que el SVG termina de
@@ -69,18 +109,7 @@ export function PieMarketing() {
             <div key={col.titulo}>
               <p className="text-[12.5px] font-semibold text-white">{col.titulo}</p>
               <div className="mt-4 flex flex-col gap-2.5">
-                {/* Los que llevan ancla van en `a` y no en `Link`: estando ya
-                    en la portada, el Link de Next cambia la URL pero deja la
-                    página arriba del todo, así que el enlace parecía roto. */}
-                {col.enlaces.map(l => (l.href.includes('#') ? (
-                  <a key={l.texto} href={l.href} className="text-[12.5px] text-white/55 transition hover:text-white">
-                    {l.texto}
-                  </a>
-                ) : (
-                  <Link key={l.texto} href={l.href} className="text-[12.5px] text-white/55 transition hover:text-white">
-                    {l.texto}
-                  </Link>
-                )))}
+                {col.enlaces.map(l => <EnlaceDelPie key={l.texto} enlace={l} />)}
               </div>
             </div>
           ))}
@@ -104,15 +133,15 @@ export function PieMarketing() {
         </div>
 
         <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-white/10 py-5">
-          <span className="text-[11.5px] text-white/40">
+          <span className="text-[11.5px] text-white/65">
             © {new Date().getFullYear()} Zero · Yisrael Technology LLC
           </span>
-          <span className="text-[11.5px] text-white/40">
+          <span className="text-[11.5px] text-white/65">
             Ventas: lun a vie 8:00–17:00 · Soporte: 7:00–24:00
           </span>
           <span className="flex-1" />
-          <Link href="/privacidad" className="text-[11.5px] text-white/40 transition hover:text-white">Privacidad</Link>
-          <Link href="/terminos" className="text-[11.5px] text-white/40 transition hover:text-white">Términos</Link>
+          <Link href="/privacidad" className="text-[11.5px] text-white/65 transition hover:text-white">Privacidad</Link>
+          <Link href="/terminos" className="text-[11.5px] text-white/65 transition hover:text-white">Términos</Link>
         </div>
       </Contenedor>
     </footer>

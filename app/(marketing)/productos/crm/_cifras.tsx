@@ -10,6 +10,11 @@
  *
  * Arranca cuando el bloque se ve, no al cargar la página: un contador que ya
  * terminó antes de que bajes no lo ve nadie.
+ *
+ * El número real va en el HTML inicial y la animación es lo único que lo baja a
+ * cero un momento. Antes salía en cero hasta que corría el JavaScript, y quien
+ * lee la página sin ejecutarlo —un buscador, un asistente de IA, un lector con
+ * los scripts apagados— leía «0 canales» y «menos de 0 s».
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -24,11 +29,10 @@ const CIFRAS: Cifra[] = [
 ];
 
 function Contador({ cifra, corriendo }: { cifra: Cifra; corriendo: boolean }) {
-  const [n, setN] = useState(0);
+  const [n, setN] = useState(cifra.valor);
 
   useEffect(() => {
-    if (!corriendo) return;
-    if (cifra.valor === 0) { setN(0); return; }
+    if (!corriendo || cifra.valor === 0) return;
     const inicio = performance.now();
     const duracion = 900;
     let marco = 0;
@@ -51,8 +55,8 @@ function Contador({ cifra, corriendo }: { cifra: Cifra; corriendo: boolean }) {
         <span className="block text-[12px] font-medium text-white/55">{cifra.antes}</span>
       )}
       <span className="font-[family-name:var(--font-display)] text-[clamp(2rem,4vw,2.75rem)] font-semibold tabular-nums tracking-[-.05em] text-white">
-        {Math.round(n)}
-        {cifra.despues}
+        {/* Una sola cadena: en dos, React las separa en el HTML y «24/7» se lee partido. */}
+        {`${Math.round(n)}${cifra.despues ?? ''}`}
       </span>
     </span>
   );
@@ -65,16 +69,16 @@ export function CifrasIA() {
   useEffect(() => {
     const nodo = caja.current;
     if (!nodo) return;
-    // Sin IntersectionObserver (o con «menos movimiento»), sale el número
+    // Sin IntersectionObserver (o con «menos movimiento»), se queda el número
     // final y ya: el dato no depende de la animación.
     if (typeof IntersectionObserver === 'undefined'
       || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      setVisible(true);
       return;
     }
+    // Umbral bajo: que arranque apenas asoma, y no con el número ya leído.
     const observador = new IntersectionObserver(
       entradas => { if (entradas[0].isIntersecting) { setVisible(true); observador.disconnect(); } },
-      { threshold: 0.35 },
+      { threshold: 0.15 },
     );
     observador.observe(nodo);
     return () => observador.disconnect();

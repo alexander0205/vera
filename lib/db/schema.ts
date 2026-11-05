@@ -17,6 +17,7 @@ import {
   jsonb,
   numeric,
   primaryKey,
+  customType,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
@@ -940,6 +941,13 @@ export const pagosRecibidos = pgTable('pagos_recibidos', {
   turnoCajaId:     integer('turno_caja_id').references(() => cajaTurnos.id),
   /** Usuario que registró el pago. */
   createdBy:       integer('created_by').references(() => users.id),
+  /**
+   * Cobro que llegó con una factura histórica: se cobró en el sistema anterior
+   * y ese dinero ya está en sus libros. Contabilidad no lo asienta (ver
+   * `generarAsientoSaldoInicial`). Lo marcan solo el importador y «Cuenta
+   * histórica»; todo cobro registrado en Zero queda en false. Migración 0217.
+   */
+  deMigracion:     boolean('de_migracion').notNull().default(false),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   index('pagos_team_doc_idx').on(t.teamId, t.ecfDocumentId),
@@ -1553,6 +1561,8 @@ export const comprasLocales = pgTable('compras_locales', {
   estadoPago:       varchar('estado_pago', { length: 12 }).notNull().default('PENDIENTE'),
   /** De qué cuenta salió el dinero; NULL = la del método (migración 0183). */
   cuentaSalidaId:   integer('cuenta_salida_id').references(() => contabilidadCuentas.id),
+  // `pagos_mixtos` (JSONB, migración 0221) NO está aquí a propósito: se lee y se
+  // escribe por SQL, para que una base sin esa migración no rompa los inserts.
   createdBy:        integer('created_by').references(() => users.id),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 
@@ -1623,6 +1633,28 @@ export const pagosProveedores = pgTable('pagos_proveedores', {
   createdBy: integer('created_by').references(() => users.id),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [index('pagos_proveedores_team_compra_idx').on(t.teamId, t.compraId)]);
+
+/** Pedido de pago a un proveedor que el dueño aprueba antes de que se pague (migración 0222). */
+export const pagosSolicitudes = pgTable('pagos_solicitudes', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id').notNull().references(() => teams.id),
+  compraId: integer('compra_id').notNull().references(() => comprasLocales.id),
+  montoCents: bigint('monto_cents', { mode: 'number' }).notNull(),
+  metodo: varchar('metodo', { length: 30 }).notNull(),
+  cuentaSalidaId: integer('cuenta_salida_id').references(() => contabilidadCuentas.id),
+  nota: varchar('nota', { length: 300 }),
+  /** 'solicitado' | 'aprobado' | 'rechazado' | 'cancelado' | 'pagando' | 'pagado'. */
+  estado: varchar('estado', { length: 12 }).notNull().default('solicitado'),
+  solicitadaPor: integer('solicitada_por').references(() => users.id),
+  solicitadaAt: timestamp('solicitada_at').notNull().defaultNow(),
+  resueltaPor: integer('resuelta_por').references(() => users.id),
+  resueltaAt: timestamp('resuelta_at'),
+  motivo: varchar('motivo', { length: 300 }),
+  pagoId: integer('pago_id').references(() => pagosProveedores.id),
+}, (t) => [
+  index('pagos_solicitudes_team_estado_idx').on(t.teamId, t.estado, t.solicitadaAt),
+  index('pagos_solicitudes_compra_idx').on(t.compraId),
+]);
 
 // ─── EmiteDO — Listas de Precios ──────────────────────────────────────────────
 
@@ -4332,7 +4364,8 @@ export const nominaCorridas = pgTable('nomina_corridas', {
   pagadaEn:    timestamp('pagada_en'),
 }, (t) => [
   index('nomina_corridas_team_idx').on(t.teamId),
-  uniqueIndex('nomina_corridas_inicio_uniq').on(t.teamId, t.tipo, t.fechaInicio),
+  // Varias liquidaciones pueden caer el mismo día (migración 0233): el único no aplica a ese tipo.
+  uniqueIndex('nomina_corridas_inicio_uniq').on(t.teamId, t.tipo, t.fechaInicio).where(sql`${t.tipo} <> 'liquidacion'`),
   index('nomina_corridas_team_rango_idx').on(t.teamId, t.fechaInicio, t.fechaFin),
 ]);
 
@@ -4460,10 +4493,38 @@ export const nominaPagos = pgTable('nomina_pagos', {
   montoCents: bigint('monto_cents', { mode: 'number' }).notNull(),
   lineas:     integer('lineas').notNull().default(0),
   asientoId:  integer('asiento_id').references(() => contabilidadAsientos.id),
+  // `cuenta_salida_id` (migración 0231) no está aquí a propósito: se lee y escribe con SQL tolerante
+  // (lib/nomina/cuenta-pago-db.ts) para que nada se rompa si la migración aún no corrió.
   createdBy:  integer('created_by').references(() => users.id),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   index('nomina_pagos_corrida_idx').on(t.teamId, t.corridaId),
+]);
+
+/**
+ * Liquidación de un empleado que sale (migración 0233): el cálculo y cómo estaba
+ * el empleado antes, para restaurarlo si se borra el borrador.
+ */
+export const nominaLiquidaciones = pgTable('nomina_liquidaciones', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  empleadoId:  integer('empleado_id').notNull().references(() => empleados.id),
+  corridaId:   integer('corrida_id').notNull().references(() => nominaCorridas.id, { onDelete: 'cascade' }),
+  fechaIngreso: date('fecha_ingreso').notNull(),
+  fechaSalida:  date('fecha_salida').notNull(),
+  motivo:       varchar('motivo', { length: 30 }).notNull(),
+  mesesServicio: integer('meses_servicio').notNull(),
+  salarioMensualCents: bigint('salario_mensual_cents', { mode: 'number' }).notNull(),
+  salarioDiarioCents:  bigint('salario_diario_cents', { mode: 'number' }).notNull(),
+  totalCents:   bigint('total_cents', { mode: 'number' }).notNull(),
+  componentes:  jsonb('componentes').notNull(),
+  estadoPrevio: varchar('estado_previo', { length: 20 }).notNull(),
+  fechaSalidaPrevia: date('fecha_salida_previa'),
+  createdBy:    integer('created_by').references(() => users.id),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('nomina_liquidaciones_empleado_uniq').on(t.empleadoId, t.fechaSalida),
+  index('nomina_liquidaciones_team_idx').on(t.teamId, t.fechaSalida),
 ]);
 
 export type NominaCorrida    = typeof nominaCorridas.$inferSelect;
@@ -4472,6 +4533,122 @@ export type NominaObligacion    = typeof nominaObligaciones.$inferSelect;
 export type NewNominaObligacion = typeof nominaObligaciones.$inferInsert;
 export type NominaLinea      = typeof nominaLineas.$inferSelect;
 export type NewNominaLinea   = typeof nominaLineas.$inferInsert;
+
+// ─── Nómina — Conceptos variables (ingresos y descuentos por empleado) ───────
+// Catálogo por empresa (incentivo, comisión, avance, seguro médico…), lo que
+// cada empleado tiene asignado, sus préstamos con saldo y el snapshot de lo que
+// se aplicó en cada línea de corrida. Ver lib/nomina/conceptos.ts.
+
+/** Catálogo de la empresa. Se siembra la primera vez que se lee. */
+export const nominaConceptos = pgTable('nomina_conceptos', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  codigo:    varchar('codigo', { length: 40 }).notNull(),
+  nombre:    varchar('nombre', { length: 120 }).notNull(),
+  /** 'ingreso' | 'descuento'. */
+  tipo:      varchar('tipo', { length: 12 }).notNull(),
+  /** Ingresos: entra a la base de TSS (AFP, SFS, SRL, INFOTEP). */
+  cotizaTss: boolean('cotiza_tss').notNull().default(false),
+  /** Ingresos: entra a la base del ISR (migración 0230). Se decide aparte de la TSS. */
+  gravaIsr:  boolean('grava_isr').notNull().default(false),
+  /** Cuenta contable propia. Null = sueldos (ingreso) / otras deducciones por pagar (descuento). */
+  cuentaId:  integer('cuenta_id').references(() => contabilidadCuentas.id),
+  activo:    boolean('activo').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('nomina_conceptos_team_codigo_uniq').on(t.teamId, t.codigo),
+]);
+
+/** Un concepto asignado a un empleado: fijo (se repite) o de una sola vez. */
+export const empleadoConceptos = pgTable('empleado_conceptos', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  empleadoId: integer('empleado_id').notNull().references(() => empleados.id, { onDelete: 'cascade' }),
+  conceptoId: integer('concepto_id').notNull().references(() => nominaConceptos.id),
+  /** Monto POR CORRIDA, en centavos. */
+  montoCents: bigint('monto_cents', { mode: 'number' }).notNull(),
+  fijo:       boolean('fijo').notNull().default(false),
+  desde:      date('desde').notNull(),
+  hasta:      date('hasta'),
+  comentario: varchar('comentario', { length: 300 }),
+  activo:     boolean('activo').notNull().default(true),
+  createdBy:  integer('created_by').references(() => users.id),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('empleado_conceptos_team_empleado_idx').on(t.teamId, t.empleadoId),
+  // Un doble clic o dos pestañas no duplican un incentivo: lo idéntico y activo es único.
+  uniqueIndex('empleado_conceptos_activo_uniq')
+    .on(t.empleadoId, t.conceptoId, t.montoCents, t.fijo, t.desde, sql`coalesce(${t.hasta}, '9999-12-31'::date)`)
+    .where(sql`${t.activo}`),
+]);
+
+/** Avance o préstamo a un empleado, descontado por cuotas hasta saldarse. */
+export const empleadoPrestamos = pgTable('empleado_prestamos', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  empleadoId: integer('empleado_id').notNull().references(() => empleados.id, { onDelete: 'cascade' }),
+  montoCents: bigint('monto_cents', { mode: 'number' }).notNull(),
+  /** Cuota por corrida. */
+  cuotaCents: bigint('cuota_cents', { mode: 'number' }).notNull(),
+  saldoCents: bigint('saldo_cents', { mode: 'number' }).notNull(),
+  /** Primer día desde el que se descuenta. */
+  desde:      date('desde').notNull(),
+  /** 'activo' | 'saldado' | 'cancelado'. */
+  estado:     varchar('estado', { length: 12 }).notNull().default('activo'),
+  comentario: varchar('comentario', { length: 300 }),
+  createdBy:  integer('created_by').references(() => users.id),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('empleado_prestamos_team_empleado_idx').on(t.teamId, t.empleadoId, t.estado),
+  uniqueIndex('empleado_prestamos_activo_uniq')
+    .on(t.empleadoId, t.montoCents, t.cuotaCents, t.desde)
+    .where(sql`${t.estado} = 'activo' and ${t.saldoCents} = ${t.montoCents}`),
+]);
+
+/** Faltas y licencias: las que no se pagan restan días a la corrida. */
+export const nominaAusencias = pgTable('nomina_ausencias', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  empleadoId: integer('empleado_id').notNull().references(() => empleados.id, { onDelete: 'cascade' }),
+  /** 'falta' | 'licencia_sin_pago' | 'licencia_con_pago'. */
+  tipo:       varchar('tipo', { length: 20 }).notNull(),
+  desde:      date('desde').notNull(),
+  hasta:      date('hasta').notNull(),
+  comentario: varchar('comentario', { length: 300 }),
+  activo:     boolean('activo').notNull().default(true),
+  createdBy:  integer('created_by').references(() => users.id),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('nomina_ausencias_team_empleado_idx').on(t.teamId, t.empleadoId, t.desde),
+  uniqueIndex('nomina_ausencias_activa_uniq').on(t.empleadoId, t.tipo, t.desde, t.hasta).where(sql`${t.activo}`),
+]);
+
+/** Lo que se aplicó en una línea de corrida. Snapshot: no cambia si se edita la asignación. */
+export const nominaLineaConceptos = pgTable('nomina_linea_conceptos', {
+  id:         serial('id').primaryKey(),
+  lineaId:    integer('linea_id').notNull().references(() => nominaLineas.id, { onDelete: 'cascade' }),
+  corridaId:  integer('corrida_id').notNull().references(() => nominaCorridas.id, { onDelete: 'cascade' }),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  empleadoId: integer('empleado_id').notNull().references(() => empleados.id),
+  conceptoId: integer('concepto_id').references(() => nominaConceptos.id),
+  prestamoId: integer('prestamo_id').references(() => empleadoPrestamos.id),
+  tipo:       varchar('tipo', { length: 12 }).notNull(),
+  nombre:     varchar('nombre', { length: 120 }).notNull(),
+  /** Lo aplicado (un descuento puede quedar por debajo de lo pedido). */
+  montoCents:  bigint('monto_cents', { mode: 'number' }).notNull(),
+  pedidoCents: bigint('pedido_cents', { mode: 'number' }).notNull(),
+  cotizaTss:  boolean('cotiza_tss').notNull().default(false),
+  gravaIsr:   boolean('grava_isr').notNull().default(false),
+  cuentaId:   integer('cuenta_id').references(() => contabilidadCuentas.id),
+  /** Pasivo de provisión contra el que se paga primero, hasta donde alcance la reserva (migración 0230). */
+  reservaCuentaId: integer('reserva_cuenta_id').references(() => contabilidadCuentas.id),
+  /** 'regalia' | 'vacaciones' | 'cesantia': qué reserva se consume (migración 0230). */
+  reservaClave: varchar('reserva_clave', { length: 12 }),
+  comentario: varchar('comentario', { length: 300 }),
+}, (t) => [
+  index('nomina_linea_conceptos_linea_idx').on(t.lineaId),
+  index('nomina_linea_conceptos_corrida_idx').on(t.corridaId),
+]);
 
 // ─── Nómina — Programación automática (corridas por cron) ─────────────────────
 // Config POR EMPRESA de los días de pago. Un cron diario mira esta fila y, si
@@ -4751,3 +4928,40 @@ export const pushSuscripciones = pgTable('push_suscripciones', {
 
 export type Notificacion = typeof notificaciones.$inferSelect;
 export type PushSuscripcion = typeof pushSuscripciones.$inferSelect;
+
+// ─── Equipo Zero: dueños de la plataforma y campana del panel (0216) ─────────
+
+/**
+ * Los DUEÑOS de la plataforma: admins que además pueden agregar y quitar a
+ * otros admins desde `/admin/equipo`. Aparte de `users` a propósito (ver la
+ * migración 0216). Se administra a mano; la pantalla solo lo lee.
+ */
+export const platformOwners = pgTable('platform_owners', {
+  userId:    integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+/** Hasta cuándo ha visto cada admin la campana del panel (todas las empresas). */
+export const notificacionesPlataformaLeidas = pgTable('notificaciones_plataforma_leidas', {
+  userId:     integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  leidoHasta: timestamp('leido_hasta').notNull().defaultNow(),
+});
+
+/** Bytes crudos de Postgres (`bytea`) como `Buffer`. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
+
+/**
+ * Foto y cargo de cada administrador de la plataforma (migración 0218). Aparte
+ * de `users` por lo mismo que `platformOwners`. La foto (256×256, pocos KB) va
+ * en la base y la sirve `/api/admin/equipo/:id/foto`; NUNCA se selecciona en
+ * los listados: ahí basta `fotoVersion`.
+ */
+export const equipoZeroPerfiles = pgTable('equipo_zero_perfiles', {
+  userId:         integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  cargo:          varchar('cargo', { length: 80 }),
+  foto:           bytea('foto'),
+  fotoTipo:       varchar('foto_tipo', { length: 20 }),
+  fotoVersion:    integer('foto_version').notNull().default(0),
+  actualizadoEn:  timestamp('actualizado_en').notNull().defaultNow(),
+  actualizadoPor: integer('actualizado_por').references(() => users.id, { onDelete: 'set null' }),
+});

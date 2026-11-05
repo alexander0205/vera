@@ -6,8 +6,9 @@
  * Mismo armazón que los demás módulos (`components/rail`). Las pantallas son
  * las que antes colgaban del grupo «Contabilidad» de Facturación; salieron a su
  * propio espacio para que quien solo factura no se tope con el libro diario.
- * Secuencias y consulta de e-NCF se quedaron en Facturación: son de la DGII,
- * no del libro.
+ * Secuencias y consulta de e-NCF son de la DGII y se usan facturando, así que
+ * siguen en Facturación; el contable las encuentra también aquí (el grupo
+ * «Comprobantes»), sin que se hayan movido las rutas de Facturación.
  *
  * Los `id` llevan prefijo del módulo: el orden por uso comparte localStorage
  * con los otros rails.
@@ -19,7 +20,7 @@ import type { RailSeccion } from '@/components/rail/tipos';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { Permission } from '@/lib/config/roles';
 import {
-  LayoutDashboard, BookOpen, PenLine, ListTree, BarChart3, Receipt, Building2, Lock, Settings,
+  LayoutDashboard, BookOpen, PenLine, ListTree, BarChart3, Receipt, Building2, Lock, Settings, FileSearch, Landmark,
 } from 'lucide-react';
 
 type SeccionContable = RailSeccion & { permiso?: Permission };
@@ -37,6 +38,14 @@ const SECCIONES: SeccionContable[] = [
       { href: '/contabilidad/balance', label: 'Balance de comprobación' },
       { href: '/contabilidad/estado-resultados', label: 'Estado de resultados' },
       { href: '/contabilidad/balance-general', label: 'Balance general' },
+    ],
+  },
+  { tipo: 'item', id: 'contabilidad-bancos', href: '/contabilidad/bancos', label: 'Bancos y caja', icon: Landmark },
+  {
+    tipo: 'grupo', id: 'contabilidad-comprobantes', label: 'Comprobantes', icon: FileSearch,
+    children: [
+      { href: '/contabilidad/secuencias', label: 'Secuencias de comprobantes' },
+      { href: '/contabilidad/consulta-ncf', label: 'Consulta de e-NCF' },
     ],
   },
   { tipo: 'item', id: 'contabilidad-cxp', href: '/contabilidad/cuentas-por-pagar', label: 'Cuentas por pagar', icon: Receipt },

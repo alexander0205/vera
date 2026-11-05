@@ -44,12 +44,16 @@ const appVersion = JSON.parse(readFileSync('./package.json', 'utf8')).version ??
  * firmada de S3 (ver lib/storage/tareas.ts). Sin `media-src` caía en
  * `default-src 'self'` y el navegador bloqueaba el `<video>`: el reproductor
  * salía negro, en 0:00. Las fotos ya pasaban por `img-src https:`.
+ *
+ * `crm.zero.com.do` en script-src y frame-src — el chat con el agente de la web
+ * pública: `widget.js` crea el botón y un iframe con la conversación (ver
+ * `app/(marketing)/_chat-zero.tsx`). Sus llamadas ya entran en `*.zero.com.do`.
  */
 const securityHeaders = [
   {
     key: 'Content-Security-Policy',
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com https://www.clarity.ms https://*.clarity.ms; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' blob: https://*.s3.us-east-1.amazonaws.com https://*.s3.amazonaws.com; connect-src 'self' https://*.zero.com.do https://api.stripe.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.clarity.ms stun: turn: turns:; frame-src 'self' blob: https://js.stripe.com; object-src 'none'; base-uri 'self'",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com https://www.clarity.ms https://*.clarity.ms https://crm.zero.com.do; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' blob: https://*.s3.us-east-1.amazonaws.com https://*.s3.amazonaws.com; connect-src 'self' https://*.zero.com.do https://api.stripe.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.clarity.ms stun: turn: turns:; frame-src 'self' blob: https://js.stripe.com https://crm.zero.com.do; object-src 'none'; base-uri 'self'",
   },
   {
     key: 'Strict-Transport-Security',
@@ -106,6 +110,10 @@ const nextConfig: NextConfig = {
       // El cobro a un grupo volvió, en su propia ruta: el enlace viejo va ahí.
       { source: '/escolar/cargos/lote', destination: '/escolar/cobrar-grupo', permanent: false },
       { source: '/escolar/cargos/:resto*', destination: '/escolar/responsables?filtro=con-deuda', permanent: false },
+      // La nómina se quitó de Gobernanza: vive solo en su módulo. Los enlaces
+      // viejos a /escolar/nomina llegan a la misma pantalla allá.
+      { source: '/escolar/nomina', destination: '/nomina', permanent: false },
+      { source: '/escolar/nomina/:resto*', destination: '/nomina/:resto*', permanent: false },
     ];
   },
   // Desactivar el indicador de dev para evitar conflicto con extensiones del browser

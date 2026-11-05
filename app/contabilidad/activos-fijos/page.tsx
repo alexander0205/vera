@@ -4,6 +4,7 @@ import { requirePermission, hasPermission } from '@/lib/auth/page-guard';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { hoyRD } from '@/lib/utils/format';
 import { listarActivosFijos } from '@/lib/contabilidad/depreciacion';
+import { cuentasDeSalida } from '@/lib/contabilidad/config';
 import { ActivosFijosClient } from './_client';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -24,9 +25,10 @@ export default async function ActivosFijosPage() {
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/sign-in');
 
-  const [activos, puedeGestionar] = await Promise.all([
+  const [activos, puedeGestionar, salida] = await Promise.all([
     listarActivosFijos(teamId),
     hasPermission('contabilidad:gestionar'),
+    cuentasDeSalida(teamId),
   ]);
 
   return (
@@ -49,7 +51,7 @@ export default async function ActivosFijosPage() {
         </Typography>
       </Box>
 
-      <ActivosFijosClient activos={activos} hoy={hoyRD()} puedeGestionar={puedeGestionar} />
+      <ActivosFijosClient activos={activos} hoy={hoyRD()} puedeGestionar={puedeGestionar} cuentasCobro={salida.cuentas.map((c) => ({ id: c.id, codigo: c.codigo, nombre: c.nombre }))} />
     </Box>
   );
 }

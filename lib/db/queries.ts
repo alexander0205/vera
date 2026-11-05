@@ -1325,6 +1325,8 @@ export async function registrarPago(input: {
   notas?:        string | null;
   turnoCajaId?:  number | null;
   createdBy?:    number;
+  /** Cobro hecho en el sistema anterior, traído con una factura histórica. */
+  deMigracion?:  boolean;
 }) {
   // Delega en la versión batch con un solo elemento. Mantiene la firma pública
   // (otros callers la usan) y retorna `pago` singular además del array.
@@ -1334,6 +1336,7 @@ export async function registrarPago(input: {
     fechaPago:     input.fechaPago,
     createdBy:     input.createdBy,
     turnoCajaId:   input.turnoCajaId,
+    deMigracion:   input.deMigracion,
     pagos: [{
       montoCentavos: input.montoCentavos,
       metodo:        input.metodo,
@@ -1367,6 +1370,11 @@ export async function registrarPagosSplit(input: {
   createdBy?:    number;
   /** Cuadre de caja: turno al que se atribuye el cobro (null si no aplica). */
   turnoCajaId?:  number | null;
+  /**
+   * Cobros hechos en el sistema anterior, traídos con una factura histórica.
+   * Contabilidad no los asienta: ese dinero ya está en los libros de allá.
+   */
+  deMigracion?:  boolean;
   pagos: Array<{
     montoCentavos: number;
     metodo:        string;
@@ -1439,6 +1447,7 @@ export async function registrarPagosSplit(input: {
       notas:         p.notas ?? null,
       turnoCajaId:   input.turnoCajaId ?? null,
       createdBy:     input.createdBy ?? null,
+      deMigracion:   input.deMigracion ?? false,
     })),
   ).returning();
 
