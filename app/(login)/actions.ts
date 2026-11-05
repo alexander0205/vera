@@ -1,7 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { and, eq, sql, gt } from 'drizzle-orm';
+import { and, eq, sql, gt, isNull } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   User,
@@ -14,7 +14,9 @@ import {
   type NewTeamMember,
   type NewActivityLog,
   ActivityType,
-  invitations
+  invitations,
+  passwordResetTokens,
+  emailVerificationTokens
 } from '@/lib/db/schema';
 import { comparePasswords, hashPassword, setSession, clearSession } from '@/lib/auth/session';
 import { seedSystemRoles } from '@/lib/auth/permissions';
@@ -258,6 +260,16 @@ export const deleteAccount = validatedActionWithUser(
   async (data, _, user) => {
     const { password } = data;
 
+    // Una cuenta de administrador de la plataforma no se borra por aquí: se
+    // saltaría las reglas del Equipo Zero (el último admin, el dueño) y la
+    // auditoría. Primero la quita el dueño en /admin/equipo.
+    if (user.platformRole === 'admin') {
+      return {
+        password,
+        error: 'Esta cuenta es de administrador de la plataforma. Pídele al dueño que te quite del Equipo Zero antes de eliminarla.'
+      };
+    }
+
     const isPasswordValid = await comparePasswords(password, user.passwordHash);
     if (!isPasswordValid) {
       return {
@@ -268,20 +280,30 @@ export const deleteAccount = validatedActionWithUser(
 
     const userWithTeam = await getUserWithTeam(user.id);
 
-    await logActivity(
-      userWithTeam?.teamId,
-      user.id,
-      ActivityType.DELETE_ACCOUNT
-    );
-
-    // Soft delete
-    await db
+    // Soft delete. `platform_role <> 'admin'`: si entre la comprobación de arriba y esta
+    // escritura alguien le dio acceso de administrador, la cuenta NO se borra (el Equipo
+    // Zero manda). Y si no se borró nada, tampoco se sigue con lo demás: ni la membresía
+    // se quita, ni se cierra la sesión, ni se anota un borrado que no ocurrió.
+    const [borrada] = await db
       .update(users)
       .set({
         deletedAt: sql`CURRENT_TIMESTAMP`,
         email: sql`CONCAT(email, '-', id, '-deleted')` // Ensure email uniqueness
       })
-      .where(eq(users.id, user.id));
+      .where(and(eq(users.id, user.id), sql`${users.platformRole} <> 'admin'`))
+      .returning({ id: users.id });
+    if (!borrada) {
+      return {
+        password,
+        error: 'No se pudo eliminar la cuenta. Si eres administrador de la plataforma, pídele al dueño que te quite del Equipo Zero primero.'
+      };
+    }
+
+    await logActivity(
+      userWithTeam?.teamId,
+      user.id,
+      ActivityType.DELETE_ACCOUNT
+    );
 
     if (userWithTeam?.teamId) {
       await db
@@ -310,10 +332,32 @@ export const updateAccount = validatedActionWithUser(
     const { name, email } = data;
     const userWithTeam = await getUserWithTeam(user.id);
 
-    await Promise.all([
-      db.update(users).set({ name, email }).where(eq(users.id, user.id)),
-      logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_ACCOUNT)
-    ]);
+    // Cambiar el correo deshace la verificación. `email_verified` dice «este correo es de
+    // esta persona»; si el correo cambia y la marca se queda, esa cuenta pasa a afirmar algo
+    // que nadie comprobó. Importa desde que el dueño puede dar acceso de administrador a una
+    // cuenta existente por su correo (/admin/equipo): alguien con una cuenta verificada podría
+    // ponerle el correo de un futuro integrante y quedarse con ese acceso. Los enlaces de
+    // contraseña y de verificación que ya estaban en el aire eran del correo ANTERIOR: se anulan.
+    const cambioCorreo = email.trim().toLowerCase() !== user.email.trim().toLowerCase();
+    await db.transaction(async (tx) => {
+      await tx.update(users)
+        .set(cambioCorreo ? { name, email, emailVerified: false, updatedAt: new Date() } : { name, email })
+        .where(eq(users.id, user.id));
+      if (cambioCorreo) {
+        await tx.update(passwordResetTokens).set({ usedAt: new Date() })
+          .where(and(eq(passwordResetTokens.userId, user.id), isNull(passwordResetTokens.usedAt)));
+        await tx.update(emailVerificationTokens).set({ usedAt: new Date() })
+          .where(and(eq(emailVerificationTokens.userId, user.id), isNull(emailVerificationTokens.usedAt)));
+      }
+    });
+    await logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_ACCOUNT);
+
+    // El enlace para verificar el correo NUEVO. Si no sale, la pantalla de verificación ofrece reenviarlo.
+    if (cambioCorreo) {
+      await mandarVerificacion({ id: user.id, email, name }).catch((e) => {
+        console.error('[updateAccount] no se pudo preparar la verificación del correo nuevo:', e instanceof Error ? e.message : e);
+      });
+    }
 
     return { name, success: 'Account updated successfully.' };
   }

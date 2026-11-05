@@ -36,6 +36,17 @@ import { base64UrlABytes } from '@/lib/notificaciones/base64';
 export const CLAVE_NOTIFICACIONES = '/api/notificaciones';
 export const refrescarNotificaciones = () => { void mutarGlobal(CLAVE_NOTIFICACIONES); };
 
+/**
+ * `empresa`: la campana de cada colegio o negocio (la empresa activa).
+ * `plataforma`: la del panel del equipo de Zero (`/admin`): lo que le toca a la
+ * persona en TODAS las empresas. Mismas pantallas, otras rutas.
+ */
+export type AmbitoCampana = 'empresa' | 'plataforma';
+const RUTAS: Record<AmbitoCampana, { lista: string; leidas: string; push: string }> = {
+  empresa: { lista: CLAVE_NOTIFICACIONES, leidas: '/api/notificaciones/leidas', push: '/api/notificaciones/push' },
+  plataforma: { lista: '/api/admin/notificaciones', leidas: '/api/admin/notificaciones/leidas', push: '/api/admin/notificaciones/push' },
+};
+
 interface Item {
   id: number;
   tipo: string;
@@ -69,9 +80,9 @@ async function registro(): Promise<ServiceWorkerRegistration | undefined> {
 }
 
 /** Le dice al servidor que este dispositivo es de quien tiene la sesión ahora. */
-async function guardarSuscripcion(sub: PushSubscription): Promise<boolean> {
+async function guardarSuscripcion(sub: PushSubscription, rutaPush: string): Promise<boolean> {
   const j = sub.toJSON();
-  const r = await fetch('/api/notificaciones/push', {
+  const r = await fetch(rutaPush, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ endpoint: j.endpoint, keys: j.keys }),
@@ -98,11 +109,12 @@ const URGENTE = { icono: AlertTriangle, etiqueta: 'Urgente', circulo: 'bg-red-10
  * tareas por revisar, así que ahí la campana va para todos. En Facturación solo
  * para quien recibe pagos.
  */
-export function CampanaNotificaciones({ personales = false }: { personales?: boolean }) {
+export function CampanaNotificaciones({ personales = false, ambito = 'empresa' }: { personales?: boolean; ambito?: AmbitoCampana }) {
   const { permissions } = usePermissions();
-  const puede = personales || tiposVisibles(permissions).length > 0;
+  const rutas = RUTAS[ambito];
+  const puede = ambito === 'plataforma' || personales || tiposVisibles(permissions).length > 0;
 
-  const { data, mutate } = useSWR<Respuesta>(puede ? CLAVE_NOTIFICACIONES : null, traer, { revalidateOnFocus: true });
+  const { data, mutate } = useSWR<Respuesta>(puede ? rutas.lista : null, traer, { revalidateOnFocus: true });
   const [ancla, setAncla] = useState<HTMLElement | null>(null);
   // Los que estaban sin leer al abrir: se siguen marcando mientras el menú está
   // abierto aunque ya se hayan dado por leídos en el servidor.
@@ -129,7 +141,7 @@ export function CampanaNotificaciones({ personales = false }: { personales?: boo
     if (!ultimo) return;
     setCargandoMas(true);
     try {
-      const r = await traer(`${CLAVE_NOTIFICACIONES}?antes=${ultimo.id}`);
+      const r = await traer(`${rutas.lista}?antes=${ultimo.id}`);
       setAnteriores((a) => [...a, ...r.items]);
       setHayMasAnteriores(r.hayMas ?? false);
     } finally { setCargandoMas(false); }
@@ -140,7 +152,7 @@ export function CampanaNotificaciones({ personales = false }: { personales?: boo
     if (yaMiro.current) return;
     yaMiro.current = true;
     try {
-      const r = await fetch('/api/notificaciones/push');
+      const r = await fetch(rutas.push);
       const { publicKey } = r.ok ? await r.json() : { publicKey: null };
       clavePush.current = publicKey ?? null;
       if (!publicKey) { setPush('no-disponible'); return; }
@@ -152,7 +164,7 @@ export function CampanaNotificaciones({ personales = false }: { personales?: boo
       if (sub && Notification.permission === 'granted') {
         // Ya estaba activado: se confirma al servidor por si en este dispositivo
         // entró otra persona o cambió de empresa desde la última vez.
-        await guardarSuscripcion(sub).catch(() => {});
+        await guardarSuscripcion(sub, rutas.push).catch(() => {});
         setPush('activo');
       } else {
         setPush('inactivo');
@@ -160,7 +172,7 @@ export function CampanaNotificaciones({ personales = false }: { personales?: boo
     } catch {
       setPush('inactivo');
     }
-  }, []);
+  }, [rutas.push]);
 
   async function abrir(e: React.MouseEvent<HTMLElement>) {
     const boton = e.currentTarget;
@@ -171,7 +183,7 @@ export function CampanaNotificaciones({ personales = false }: { personales?: boo
     if (!fresco) return;
     setRecientes(new Set(fresco.items.filter((i) => i.noLeida).map((i) => i.id)));
     if (fresco.noLeidas > 0) {
-      void fetch('/api/notificaciones/leidas', { method: 'POST' }).then((r) => {
+      void fetch(rutas.leidas, { method: 'POST' }).then((r) => {
         if (r.ok) {
           void mutate({ ...fresco, noLeidas: 0, items: fresco.items.map((i) => ({ ...i, noLeida: false })) }, { revalidate: false });
         }
@@ -191,7 +203,7 @@ export function CampanaNotificaciones({ personales = false }: { personales?: boo
       const reg = await navigator.serviceWorker.ready;
       const sub = (await reg.pushManager.getSubscription())
         ?? await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64UrlABytes(clave) });
-      setPush((await guardarSuscripcion(sub)) ? 'activo' : 'inactivo');
+      setPush((await guardarSuscripcion(sub, rutas.push)) ? 'activo' : 'inactivo');
     } catch {
       setPush('inactivo');
     }
@@ -205,7 +217,7 @@ export function CampanaNotificaciones({ personales = false }: { personales?: boo
       if (sub) {
         const endpoint = sub.endpoint;
         await sub.unsubscribe();
-        await fetch('/api/notificaciones/push', {
+        await fetch(rutas.push, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ endpoint }),
@@ -280,7 +292,9 @@ export function CampanaNotificaciones({ personales = false }: { personales?: boo
                   {filtro === 'no-leidas' ? 'No tienes notificaciones sin leer' : 'Nada nuevo por ahora'}
                 </p>
                 <p className="mx-auto mt-1 max-w-[260px] text-xs text-gray-500">
-                  Aquí llegan los pagos que mandan las familias y lo que pasa en tus tareas.
+                  {ambito === 'plataforma'
+                    ? 'Aquí llega lo que pasa en las tareas de los colegios que le tocan a Soporte.'
+                    : 'Aquí llegan los pagos que mandan las familias y lo que pasa en tus tareas.'}
                 </p>
               </div>
             ) : items.map((i) => {
