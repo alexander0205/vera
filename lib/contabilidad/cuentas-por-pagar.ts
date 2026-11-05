@@ -47,7 +47,7 @@ export async function getPagosProveedor(teamId:number, compraId:number) {
 
 export class PagoProveedorError extends Error {}
 
-export async function registrarPagoProveedor(input: { teamId:number; compraId:number; montoCents:number; metodo:string; fechaPago:string; referencia?:string|null; notas?:string|null; cuentaSalidaId?:number|null; userId:number }) {
+export async function registrarPagoProveedor(input: { teamId:number; compraId:number; montoCents:number; metodo:string; fechaPago:string; referencia?:string|null; notas?:string|null; cuentaSalidaId?:number|null; userId:number; solicitudId?:number|null }) {
   if (!Number.isSafeInteger(input.montoCents) || input.montoCents <= 0) throw new PagoProveedorError('Monto de pago inválido.');
   // De qué cuenta sale el dinero: solo caja, bancos o la de un método de pago.
   const cuentaSalidaId = input.cuentaSalidaId ?? null;
@@ -63,8 +63,13 @@ export async function registrarPagoProveedor(input: { teamId:number; compraId:nu
     const sums = await tx.execute(sql`SELECT coalesce(sum(monto_cents),0) AS pagado FROM pagos_proveedores WHERE compra_id=${input.compraId} AND team_id=${input.teamId}`);
     const saldo = Number((sums as unknown as { pagado:number }[])[0].pagado);
     if (input.montoCents > Number(compra.monto_total) - saldo) throw new PagoProveedorError('El pago excede saldo pendiente.');
-    const filas = await tx.execute(sql`INSERT INTO pagos_proveedores (team_id,compra_id,monto_cents,metodo,cuenta_salida_id,fecha_pago,referencia,notas,created_by)
-      VALUES (${input.teamId},${input.compraId},${input.montoCents},${input.metodo},${cuentaSalidaId},${input.fechaPago},${input.referencia??null},${input.notas??null},${input.userId}) RETURNING id`);
+    // `solicitud_id` (migración 0222) solo se nombra cuando el pago viene de una solicitud: los pagos de siempre
+    // no dependen de esa columna.
+    const filas = input.solicitudId
+      ? await tx.execute(sql`INSERT INTO pagos_proveedores (team_id,compra_id,monto_cents,metodo,cuenta_salida_id,fecha_pago,referencia,notas,created_by,solicitud_id)
+          VALUES (${input.teamId},${input.compraId},${input.montoCents},${input.metodo},${cuentaSalidaId},${input.fechaPago},${input.referencia??null},${input.notas??null},${input.userId},${input.solicitudId}) RETURNING id`)
+      : await tx.execute(sql`INSERT INTO pagos_proveedores (team_id,compra_id,monto_cents,metodo,cuenta_salida_id,fecha_pago,referencia,notas,created_by)
+          VALUES (${input.teamId},${input.compraId},${input.montoCents},${input.metodo},${cuentaSalidaId},${input.fechaPago},${input.referencia??null},${input.notas??null},${input.userId}) RETURNING id`);
     const id = (filas as unknown as {id:number}[])[0].id;
     const restante = Number(compra.monto_total) - saldo - input.montoCents;
     // Cuando queda saldada, la fecha del último pago es la «fecha de pago» del 606.

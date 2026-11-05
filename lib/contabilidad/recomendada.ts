@@ -54,7 +54,7 @@ export const CAMPOS_RECOMENDADOS: Partial<Record<keyof GuardarConfigInput, strin
 export function cuentaRecomendadaMetodo(clave: ClaveMetodo): { cuenta: string; comision: string | null } {
   if (esPasarela(clave)) return { cuenta: CODIGO.cobrosPorLiquidar, comision: CODIGO.comisionCobro };
   if (clave === 'efectivo' || clave === 'otro') return { cuenta: CODIGO.caja, comision: null };
-  return { cuenta: CODIGO.bancos, comision: null };
+  return { cuenta: CODIGO.bancoPrincipal, comision: null };
 }
 
 export interface ResultadoRecomendada {
@@ -89,7 +89,8 @@ export async function aplicarConfiguracionRecomendada(teamId: number, userId: nu
   for (const clave of CLAVES_METODO) {
     if (CLAVES_SIN_COBRO.includes(clave) || yaConfigurados.has(clave)) continue;
     const r = cuentaRecomendadaMetodo(clave);
-    const cuentaId = porCodigo.get(r.cuenta);
+    // Un catálogo anterior tiene 1102 Bancos imputable y no la hija 110201.
+    const cuentaId = porCodigo.get(r.cuenta) ?? (r.cuenta === CODIGO.bancoPrincipal ? porCodigo.get(CODIGO.bancos) : undefined);
     if (!cuentaId) continue;
     await guardarMetodo(teamId, clave, cuentaId, r.comision ? porCodigo.get(r.comision) ?? null : null, userId);
     metodosConfigurados++;

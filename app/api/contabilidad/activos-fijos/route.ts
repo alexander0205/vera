@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
   let body: {
     nombre?: string; costoCents?: number; valorResidualCents?: number;
     vidaUtilMeses?: number; fechaAdquisicion?: string;
+    cantidad?: number; ubicacion?: string | null; categoria?: string | null;
   };
   try {
     body = await req.json();
@@ -32,6 +33,9 @@ export async function POST(req: NextRequest) {
         valorResidualCents: Number(body.valorResidualCents ?? 0),
         vidaUtilMeses: Number(body.vidaUtilMeses ?? 0),
         fechaAdquisicion: String(body.fechaAdquisicion ?? ''),
+        cantidad: body.cantidad === undefined ? 1 : Number(body.cantidad),
+        ubicacion: typeof body.ubicacion === 'string' ? body.ubicacion : null,
+        categoria: typeof body.categoria === 'string' && body.categoria ? body.categoria : null,
       },
       auth.user.id,
     );

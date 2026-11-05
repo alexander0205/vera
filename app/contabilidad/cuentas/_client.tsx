@@ -50,6 +50,14 @@ function naturalezaPorTipo(tipo: string) {
   return tipo === 'activo' || tipo === 'costo' || tipo === 'gasto' ? 'deudora' : 'acreedora';
 }
 
+interface PadrePosible {
+  id: number;
+  codigo: string;
+  nombre: string;
+  /** Acepta movimientos y no tiene ninguno: se puede volver cuenta de agrupación. */
+  convertible?: boolean;
+}
+
 interface FormState {
   id?:            number;
   codigo:         string;
@@ -110,13 +118,20 @@ export function CatalogoClient({
     return out;
   }, [cuentasIniciales, colapsadas, verInactivas]);
 
-  /** Candidatas a cuenta padre: solo las de agrupación, y nunca la propia cuenta. */
+  /**
+   * Candidatas a cuenta padre: las de agrupación y, al crear una cuenta nueva,
+   * también las que aceptan movimientos pero todavía no tienen ninguno (se
+   * convierten en un clic). Nunca la propia cuenta.
+   */
   const padresPosibles = useMemo(() => {
-    const out: { id: number; codigo: string; nombre: string }[] = [];
+    const out: PadrePosible[] = [];
     const recorrer = (nodos: CuentaNodo[]) => {
       for (const n of nodos) {
-        if (!n.imputable && n.id !== dialogo?.id) {
+        if (n.id === dialogo?.id) { recorrer(n.hijas); continue; }
+        if (!n.imputable) {
           out.push({ id: n.id, codigo: n.codigo, nombre: n.nombre });
+        } else if (dialogo && dialogo.id === undefined && n.movimientos === 0 && n.activa) {
+          out.push({ id: n.id, codigo: n.codigo, nombre: n.nombre, convertible: true });
         }
         recorrer(n.hijas);
       }
@@ -483,7 +498,7 @@ function CuentaDialog({
   inicial, padresPosibles, onCerrar, onGuardada, ocupado,
 }: {
   inicial: FormState;
-  padresPosibles: { id: number; codigo: string; nombre: string }[];
+  padresPosibles: PadrePosible[];
   onCerrar: () => void;
   onGuardada: () => void;
   ocupado: boolean;
@@ -497,9 +512,13 @@ function CuentaDialog({
   const opcionesPadre = useMemo(() => [
     <MenuItem key="" value="">Ninguna (cuenta raíz)</MenuItem>,
     ...padresPosibles.map((p) => (
-      <MenuItem key={p.id} value={p.id}>{p.codigo} — {p.nombre}</MenuItem>
+      <MenuItem key={p.id} value={p.id}>
+        {p.codigo} — {p.nombre}{p.convertible ? ' (se volverá cuenta de agrupación)' : ''}
+      </MenuItem>
     )),
   ], [padresPosibles]);
+
+  const padreConvertible = padresPosibles.find((p) => p.id === form.cuentaPadreId && p.convertible);
 
   async function guardar() {
     setGuardando(true);
@@ -518,6 +537,8 @@ function CuentaDialog({
           naturaleza: form.naturaleza,
           cuentaPadreId: form.cuentaPadreId,
           imputable: form.imputable,
+          // Solo al crear: el padre elegido acepta movimientos y no tiene asientos.
+          ...(padreConvertible && !esEdicion ? { convertirPadre: true } : {}),
         }),
       },
     );
@@ -624,10 +645,18 @@ function CuentaDialog({
             >
               {opcionesPadre}
             </TextField>
-            <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: '#6b7280' }}>
-              Solo aparecen las cuentas que agrupan. Una cuenta que acepta
-              movimientos no puede tener hijas.
-            </Typography>
+            {padreConvertible ? (
+              <Alert severity="info" sx={{ mt: 1, fontSize: '0.8125rem' }}>
+                <strong>{padreConvertible.codigo} {padreConvertible.nombre}</strong> acepta movimientos
+                pero todavía no tiene ninguno. Al guardar se vuelve cuenta de agrupación y esta
+                cuenta nueva ocupa su lugar en la configuración contable.
+              </Alert>
+            ) : (
+              <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: '#6b7280' }}>
+                Aparecen las cuentas que agrupan. Una cuenta que acepta movimientos no puede
+                tener hijas, salvo que todavía no tenga asientos: esas se pueden convertir al crear.
+              </Typography>
+            )}
           </Box>
 
           <FormControlLabel

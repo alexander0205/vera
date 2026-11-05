@@ -57,7 +57,12 @@ export interface CuentaNodo extends Cuenta {
 
 /** Error de regla de negocio: la API lo traduce a 400/409 en vez de 500. */
 export class CuentaError extends Error {
-  constructor(message: string, readonly status: number = 400) {
+  constructor(
+    message: string,
+    readonly status: number = 400,
+    /** Marca para que la pantalla ofrezca una salida (p. ej. convertir el padre). */
+    readonly codigo?: 'PADRE_CONVERTIBLE',
+  ) {
     super(message);
     this.name = 'CuentaError';
   }
@@ -263,17 +268,82 @@ function validarCampos(input: { codigo?: string; nombre?: string; tipo?: string;
   }
 }
 
-/** Valida que el padre exista, sea del team y no sea imputable. */
-async function validarPadre(teamId: number, padreId: number, ex: Ejecutor = db): Promise<void> {
+/**
+ * Valida que el padre exista, sea del team y no sea imputable.
+ *
+ * Con `convertir` y un padre que acepta movimientos pero todavía no tiene
+ * ninguno, lo vuelve cuenta de agrupación en vez de rechazar: es el «un clic»
+ * de la pantalla. Devuelve `true` si lo convirtió.
+ */
+async function validarPadre(
+  teamId: number,
+  padreId: number,
+  ex: Ejecutor = db,
+  opts: { convertir?: boolean; userId?: number } = {},
+): Promise<boolean> {
+  // Al convertir se bloquea la fila del padre: un asiento que llegue a la vez espera (su FK la comparte)
+  // y la comprobación de movimientos de abajo no queda vieja.
+  if (opts.convertir) await ex.execute(sql`SELECT id FROM contabilidad_cuentas WHERE team_id = ${teamId} AND id = ${padreId} FOR UPDATE`);
   const padre = await getCuenta(teamId, padreId, ex);
   if (!padre) throw new CuentaError('La cuenta padre no existe.', 404);
-  if (padre.imputable) {
+  if (!padre.imputable) return false;
+
+  if (await tieneMovimientos(teamId, padreId, ex)) {
     throw new CuentaError(
-      `"${padre.codigo} ${padre.nombre}" acepta movimientos, así que no puede tener cuentas hijas. ` +
-      'Quítale "acepta movimientos" primero, o elige otra cuenta padre.',
+      `"${padre.codigo} ${padre.nombre}" acepta movimientos y ya tiene asientos, así que no puede tener cuentas hijas. ` +
+      'Elige otra cuenta padre, o crea una cuenta de agrupación y pasa el saldo con un asiento de reclasificación.',
       409,
     );
   }
+  if (!opts.convertir) {
+    throw new CuentaError(
+      `"${padre.codigo} ${padre.nombre}" acepta movimientos, pero todavía no tiene ninguno. ` +
+      'Puedes convertirla en cuenta de agrupación para colgarle esta hija.',
+      409,
+      'PADRE_CONVERTIBLE',
+    );
+  }
+
+  await ex.execute(sql`
+    UPDATE contabilidad_cuentas
+    SET imputable = false, updated_by = ${opts.userId ?? null}, updated_at = now()
+    WHERE team_id = ${teamId} AND id = ${padreId}
+  `);
+  return true;
+}
+
+/**
+ * Cuando una cuenta pasa a agrupar, todo lo que la apuntaba como «la cuenta de»
+ * algo (la configuración, las cuentas de salida de compras, pagos y solicitudes,
+ * las cuentas propias de un activo, el banco de un extracto…) se muda a la hija
+ * que la reemplaza: la cuenta padre ya no puede recibir asientos.
+ *
+ * Se descubre sola con las claves foráneas hacia `contabilidad_cuentas` (de una
+ * sola columna, en tablas con `team_id`), así una tabla nueva no se queda atrás.
+ * Quedan fuera los asientos y sus marcas —el padre no tiene movimientos— y los
+ * cierres, que son historia.
+ */
+export async function mudarReferenciasDeCuenta(teamId: number, deId: number, aId: number, ex: Ejecutor): Promise<number> {
+  const fks = await ex.execute(sql`
+    SELECT c.conrelid::regclass::text AS tabla, a.attname AS columna
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    WHERE c.contype = 'f' AND c.confrelid = 'contabilidad_cuentas'::regclass AND array_length(c.conkey, 1) = 1
+      AND c.conrelid::regclass::text NOT IN ('contabilidad_cuentas', 'contabilidad_asiento_lineas', 'contabilidad_conciliaciones')
+      AND c.conrelid::regclass::text NOT LIKE '%cierre%'
+      AND EXISTS (SELECT 1 FROM pg_attribute t WHERE t.attrelid = c.conrelid AND t.attname = 'team_id' AND NOT t.attisdropped)
+  `) as unknown as { tabla: string; columna: string }[];
+  let cambiadas = 0;
+  for (const fk of fks) {
+    // Los nombres salen del catálogo de Postgres, no de la entrada de nadie.
+    if (!/^[a-z_][a-z0-9_]*$/.test(fk.tabla) || !/^[a-z_][a-z0-9_]*$/.test(fk.columna)) continue;
+    const r = await ex.execute(sql`
+      UPDATE ${sql.identifier(fk.tabla)} SET ${sql.identifier(fk.columna)} = ${aId}
+      WHERE team_id = ${teamId} AND ${sql.identifier(fk.columna)} = ${deId}
+    `) as unknown as { count?: number };
+    cambiadas += r.count ?? 0;
+  }
+  return cambiadas;
 }
 
 // ─── Escritura ───────────────────────────────────────────────────────────────
@@ -286,6 +356,12 @@ export interface CrearCuentaInput {
   naturaleza?:   NaturalezaCuenta;
   cuentaPadreId?: number | null;
   imputable?:    boolean;
+  /**
+   * Si el padre acepta movimientos pero no tiene ninguno, lo convierte en
+   * cuenta de agrupación (y le muda a esta hija lo que la configuración le
+   * apuntaba). Sin esto se rechaza con `PADRE_CONVERTIBLE`.
+   */
+  convertirPadre?: boolean;
 }
 
 export async function crearCuenta(
@@ -296,13 +372,22 @@ export async function crearCuenta(
 ): Promise<Cuenta> {
   validarCampos(input);
 
+  // Convertir al padre es varios pasos (bloquear, quitarle «acepta movimientos», crear la hija, mudar lo
+  // que lo apuntaba): o pasan todos o no cambia nada. Quien ya trae su transacción (el importador) la usa.
+  if (input.convertirPadre && input.cuentaPadreId != null && ex === db) {
+    return db.transaction((tx) => crearCuenta(teamId, input, userId, tx));
+  }
+
   const codigo = input.codigo.trim();
   const nombre = input.nombre.trim();
   const naturaleza = input.naturaleza ?? naturalezaPorTipo(input.tipo);
   const imputable = input.imputable ?? true;
 
+  let padreConvertido = false;
   if (input.cuentaPadreId != null) {
-    await validarPadre(teamId, input.cuentaPadreId, ex);
+    padreConvertido = await validarPadre(teamId, input.cuentaPadreId, ex, {
+      convertir: input.convertirPadre, userId,
+    });
   }
 
   const rows = await ex.execute(sql`
@@ -321,6 +406,13 @@ export async function crearCuenta(
   const creada = (rows as unknown as Cuenta[])[0];
   if (!creada) {
     throw new CuentaError(`Ya existe una cuenta con el código ${codigo}.`, 409);
+  }
+  if (padreConvertido && input.cuentaPadreId != null) {
+    // La hija ocupa el lugar del padre en todo lo que lo apuntaba: tiene que poder recibir asientos.
+    if (!creada.imputable) {
+      throw new CuentaError('La cuenta que reemplaza al padre debe aceptar movimientos. Si es otra cuenta de agrupación, convierte el padre aparte.', 409);
+    }
+    await mudarReferenciasDeCuenta(teamId, input.cuentaPadreId, creada.id, ex);
   }
   return { ...creada, movimientos: 0 };
 }

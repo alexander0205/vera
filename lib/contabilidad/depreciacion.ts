@@ -28,7 +28,8 @@ import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import { hoyRD } from '@/lib/utils/format';
 import { getConfig } from './config';
-import { CODIGO } from './catalogo-base';
+import { CODIGO, asegurarCuentaBase } from './catalogo-base';
+import { categoriaActivo } from './activos-fijos';
 
 /** Una cuota mensual pendiente de un activo. `periodo` = 'YYYY-MM-01'. */
 export interface CuotaDepreciacion {
@@ -97,6 +98,65 @@ export function calcularCuotas(
   return cuotas;
 }
 
+export interface BajaParaCuota {
+  /** 'YYYY-MM-DD'. */
+  fecha: string;
+  unidades: number;
+}
+
+/**
+ * Las cuotas mensuales de un activo cuando se han dado de baja unidades: cada
+ * cuota se reduce en proporción a las unidades que seguían en pie al empezar
+ * ese mes. Una baja a mitad de mes afecta desde el mes siguiente (el mes de la
+ * baja ya se depreció completo, igual que el mes de la compra no depreciaba).
+ *
+ * Con `cantidad` = 1 y sin bajas es exactamente `calcularCuotas`.
+ */
+export function calcularCuotasConBajas(
+  activo: ActivoParaDepreciar & { cantidad: number },
+  bajas: readonly BajaParaCuota[],
+  mesActual: string,
+): CuotaDepreciacion[] {
+  const base = calcularCuotas(activo, mesActual);
+  if (bajas.length === 0 || activo.cantidad <= 1) return base;
+  return base
+    .map((c) => {
+      const dadas = bajas.filter((b) => b.fecha < c.periodo).reduce((s, b) => s + b.unidades, 0);
+      const quedan = Math.max(0, activo.cantidad - dadas);
+      return { periodo: c.periodo, montoCents: Math.round((c.montoCents * quedan) / activo.cantidad) };
+    })
+    .filter((c) => c.montoCents > 0);
+}
+
+/** El periodo de la última cuota de la vida útil de un activo ('YYYY-MM-01'). */
+export function periodoFinalDeVida(fechaAdquisicion: string, vidaUtilMeses: number): string {
+  return sumarMeses(sumarMeses(primerDiaDelMes(fechaAdquisicion), 1), vidaUtilMeses - 1);
+}
+
+/**
+ * Ajusta las cuotas que faltan por asentar para que la depreciación NUNCA pase
+ * de lo que se puede depreciar: `techoCents` = costo vigente − residual vigente
+ * − lo ya acumulado de lo que queda. Cada cuota se recorta a lo que reste, y la
+ * de la última mes de la vida útil cierra exacto contra el techo (absorbe los
+ * centavos de redondear cuotas proporcionales tras una baja parcial).
+ *
+ * `pendientes` va en orden de periodo y debe incluir todas las que faltan.
+ */
+export function ajustarCuotasPendientes(
+  pendientes: readonly CuotaDepreciacion[],
+  periodoFinal: string,
+  techoCents: number,
+): CuotaDepreciacion[] {
+  let resto = Math.max(0, techoCents);
+  const out: CuotaDepreciacion[] = [];
+  for (const c of pendientes) {
+    const monto = c.periodo >= periodoFinal ? resto : Math.min(c.montoCents, resto);
+    if (monto > 0) out.push({ periodo: c.periodo, montoCents: monto });
+    resto -= monto;
+  }
+  return out;
+}
+
 /** Resumen de una corrida de depreciación de un team. */
 export interface ResumenDepreciacion {
   creados:           number;
@@ -129,6 +189,30 @@ export interface NuevoActivoFijoInput {
   vidaUtilMeses:      number;
   /** 'YYYY-MM-DD'. */
   fechaAdquisicion:   string;
+  /** Unidades iguales que cubre la ficha (30 butacas). Por defecto 1. */
+  cantidad?:          number;
+  /** Dónde está (aula, oficina…). */
+  ubicacion?:         string | null;
+  /** Clave de `CATEGORIAS_ACTIVO`: decide la cuenta del activo y la de su depreciación acumulada. */
+  categoria?:         string | null;
+}
+
+const tablaCompleta = { vista: false };
+/**
+ * ¿Ya corrió la migración 0225 (cantidad, ubicación, categoría, bajas)? Se
+ * pregunta a la base y solo se recuerda el «sí»: sin ella todo sigue funcionando
+ * como antes, con una unidad y las cuentas globales.
+ */
+export async function activosCompletosDisponible(): Promise<boolean> {
+  if (tablaCompleta.vista) return true;
+  const filas = await db.execute(sql`
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'contabilidad_activos_fijos' AND column_name = 'cantidad'
+    LIMIT 1`) as unknown as unknown[];
+  const hay = filas.length > 0
+    && ((await db.execute(sql`SELECT to_regclass('public.contabilidad_activos_bajas') IS NOT NULL AS existe`)) as unknown as { existe: boolean }[])[0]?.existe === true;
+  if (hay) tablaCompleta.vista = true;
+  return hay;
 }
 
 /** Registra un activo fijo. Valida las mismas reglas que el CHECK de la tabla. */
@@ -136,6 +220,7 @@ export async function registrarActivoFijo(
   teamId: number,
   input: NuevoActivoFijoInput,
   userId: number | null,
+  extra: { enRevision?: boolean; compraId?: number; compraLinea?: number } = {},
 ): Promise<number> {
   const nombre = input.nombre.trim();
   if (!nombre) throw new ActivoFijoError('El activo necesita un nombre.');
@@ -148,43 +233,95 @@ export async function registrarActivoFijo(
   if (input.valorResidualCents >= input.costoCents) {
     throw new ActivoFijoError('El valor residual tiene que ser menor que el costo.');
   }
+  // Un terreno no se deprecia: la columna de vida útil es obligatoria, así que lleva 1 y nunca genera cuotas.
+  if (categoriaActivo(input.categoria)?.deprecia === false && !(input.vidaUtilMeses > 0)) input = { ...input, vidaUtilMeses: 1 };
   if (!Number.isInteger(input.vidaUtilMeses) || input.vidaUtilMeses <= 0) {
     throw new ActivoFijoError('La vida útil tiene que ser de al menos un mes.');
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.fechaAdquisicion)) {
     throw new ActivoFijoError('La fecha de adquisición no es válida.');
   }
+  const cantidad = input.cantidad ?? 1;
+  if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 100_000) {
+    throw new ActivoFijoError('La cantidad tiene que ser un número entero de al menos 1.');
+  }
+  const ubicacion = input.ubicacion?.replace(/\s+/g, ' ').trim().slice(0, 160) || null;
+  const categoria = input.categoria ? categoriaActivo(input.categoria) : null;
+  if (input.categoria && !categoria) throw new ActivoFijoError('La categoría del activo no es válida.');
+
+  const completas = await activosCompletosDisponible();
+  if (!completas) {
+    if (cantidad > 1 || ubicacion || categoria || extra.enRevision || extra.compraId) {
+      throw new ActivoFijoError('Cantidad, ubicación y categoría necesitan una actualización de la base que aún no se aplica.');
+    }
+    const rows = await db.execute(sql`
+      INSERT INTO contabilidad_activos_fijos
+        (team_id, nombre, costo_cents, valor_residual_cents, vida_util_meses,
+         fecha_adquisicion, created_by)
+      VALUES (${teamId}, ${nombre}, ${input.costoCents}, ${input.valorResidualCents},
+              ${input.vidaUtilMeses}, ${input.fechaAdquisicion}, ${userId})
+      RETURNING id
+    `);
+    return (rows as unknown as { id: number }[])[0].id;
+  }
+
+  // Las cuentas de su categoría (se crean si el catálogo es anterior a ellas).
+  let cuentaActivo: number | null = null;
+  let cuentaDeprec: number | null = null;
+  if (categoria && categoria.clave !== 'otros') {
+    cuentaActivo = await asegurarCuentaBase(teamId, categoria.cuentaActivo, userId ?? undefined);
+    cuentaDeprec = await asegurarCuentaBase(teamId, categoria.cuentaDeprecAcum, userId ?? undefined);
+  }
 
   const rows = await db.execute(sql`
     INSERT INTO contabilidad_activos_fijos
-      (team_id, nombre, costo_cents, valor_residual_cents, vida_util_meses,
-       fecha_adquisicion, created_by)
+      (team_id, nombre, costo_cents, valor_residual_cents, vida_util_meses, fecha_adquisicion, created_by,
+       cantidad, ubicacion, categoria, cuenta_activo_id, cuenta_deprec_acum_id, en_revision, compra_id, compra_linea)
     VALUES (${teamId}, ${nombre}, ${input.costoCents}, ${input.valorResidualCents},
-            ${input.vidaUtilMeses}, ${input.fechaAdquisicion}, ${userId})
+            ${input.vidaUtilMeses}, ${input.fechaAdquisicion}, ${userId},
+            ${cantidad}, ${ubicacion}, ${categoria?.clave ?? null}, ${cuentaActivo}, ${cuentaDeprec},
+            ${extra.enRevision ?? false}, ${extra.compraId ?? null}, ${extra.compraLinea ?? null})
+    ON CONFLICT (team_id, compra_id, compra_linea) WHERE compra_id IS NOT NULL DO NOTHING
     RETURNING id
   `);
-  return (rows as unknown as { id: number }[])[0].id;
+  return (rows as unknown as { id: number }[])[0]?.id ?? 0;
 }
 
 /** Un activo fijo con su depreciación acumulada y su valor en libros. */
 export interface ActivoFijoResumen {
   id:                 number;
   nombre:             string;
+  /** Costo ORIGINAL de todas las unidades. */
   costoCents:         number;
   valorResidualCents: number;
   vidaUtilMeses:      number;
   fechaAdquisicion:   string;
+  /** false = ya no queda ninguna unidad (todas dadas de baja). */
   activa:             boolean;
   /** Suma de las cuotas ya generadas. */
   acumuladaCents:     number;
-  /** costo − acumulada. Lo que vale el activo en los libros hoy. */
-  valorLibrosCents:   number;
   /** Cuántas cuotas mensuales lleva depreciadas. */
   cuotasHechas:       number;
+  /** Unidades que cubría la ficha al comprarse y las que quedan. */
+  cantidad:           number;
+  cantidadVigente:    number;
+  ubicacion:          string | null;
+  categoria:          string | null;
+  /** Ficha abierta desde una compra: falta confirmar categoría y vida útil. */
+  enRevision:         boolean;
+  compraId:           number | null;
+  /** Costo de lo que queda (original − bajas). */
+  costoVigenteCents:  number;
+  /** Depreciación de lo que queda (acumulada − la que se fue con las bajas). */
+  acumuladaVigenteCents: number;
+  /** costoVigente − acumuladaVigente: lo que vale en libros lo que queda. */
+  valorLibrosCents:   number;
+  bajas:              { unidades: number; costoCents: number; deprecCents: number };
 }
 
 /** Lista los activos fijos del team con acumulada y valor en libros en una consulta. */
 export async function listarActivosFijos(teamId: number): Promise<ActivoFijoResumen[]> {
+  const completas = await activosCompletosDisponible();
   const rows = (await db.execute(sql`
     SELECT a.id, a.nombre,
            a.costo_cents AS "costoCents",
@@ -194,6 +331,11 @@ export async function listarActivosFijos(teamId: number): Promise<ActivoFijoResu
            a.activa,
            COALESCE(d.acumulada, 0) AS "acumuladaCents",
            COALESCE(d.cuotas, 0)    AS "cuotasHechas"
+           ${completas ? sql`,
+           a.cantidad, a.ubicacion, a.categoria, a.en_revision AS "enRevision", a.compra_id AS "compraId",
+           COALESCE(b.unidades, 0) AS "bajasUnidades",
+           COALESCE(b.costo, 0)    AS "bajasCosto",
+           COALESCE(b.deprec, 0)   AS "bajasDeprec"` : sql``}
     FROM contabilidad_activos_fijos a
     LEFT JOIN (
       SELECT activo_id, sum(monto_cents) AS acumulada, count(*) AS cuotas
@@ -201,18 +343,35 @@ export async function listarActivosFijos(teamId: number): Promise<ActivoFijoResu
       WHERE team_id = ${teamId}
       GROUP BY activo_id
     ) d ON d.activo_id = a.id
+    ${completas ? sql`LEFT JOIN (
+      SELECT activo_id, sum(unidades) AS unidades, sum(costo_baja_cents) AS costo, sum(deprec_baja_cents) AS deprec
+      FROM contabilidad_activos_bajas
+      WHERE team_id = ${teamId}
+      GROUP BY activo_id
+    ) b ON b.activo_id = a.id` : sql``}
     WHERE a.team_id = ${teamId}
     ORDER BY a.activa DESC, a.id DESC
-  `)) as unknown as Array<Omit<ActivoFijoResumen, 'valorLibrosCents'>>;
+  `)) as unknown as Array<Record<string, unknown>>;
 
-  return rows.map((r) => ({
-    ...r,
-    costoCents: Number(r.costoCents),
-    valorResidualCents: Number(r.valorResidualCents),
-    acumuladaCents: Number(r.acumuladaCents),
-    cuotasHechas: Number(r.cuotasHechas),
-    valorLibrosCents: Number(r.costoCents) - Number(r.acumuladaCents),
-  }));
+  return rows.map((r) => {
+    const costo = Number(r.costoCents);
+    const acumulada = Number(r.acumuladaCents);
+    const cantidad = Number(r.cantidad ?? 1);
+    const bajas = { unidades: Number(r.bajasUnidades ?? 0), costoCents: Number(r.bajasCosto ?? 0), deprecCents: Number(r.bajasDeprec ?? 0) };
+    const costoVigente = costo - bajas.costoCents;
+    const acumuladaVigente = acumulada - bajas.deprecCents;
+    return {
+      id: Number(r.id), nombre: String(r.nombre),
+      costoCents: costo, valorResidualCents: Number(r.valorResidualCents), vidaUtilMeses: Number(r.vidaUtilMeses),
+      fechaAdquisicion: String(r.fechaAdquisicion), activa: Boolean(r.activa),
+      acumuladaCents: acumulada, cuotasHechas: Number(r.cuotasHechas),
+      cantidad, cantidadVigente: cantidad - bajas.unidades,
+      ubicacion: (r.ubicacion as string | null) ?? null, categoria: (r.categoria as string | null) ?? null,
+      enRevision: Boolean(r.enRevision), compraId: r.compraId == null ? null : Number(r.compraId),
+      costoVigenteCents: costoVigente, acumuladaVigenteCents: acumuladaVigente,
+      valorLibrosCents: costoVigente - acumuladaVigente, bajas,
+    };
+  });
 }
 
 /** Resuelve una cuenta por su código base cuando la config no la fija. */
@@ -247,43 +406,82 @@ export async function generarDepreciacionesPendientes(
   if (!cuentaAcum) throw new DepreciacionSinCuentaError(CODIGO.depreciacionAcum);
 
   const mesActual = hoyRD();
+  const completas = await activosCompletosDisponible();
 
   const activos = (await db.execute(sql`
     SELECT id, nombre, costo_cents AS "costoCents",
            valor_residual_cents AS "valorResidualCents",
            vida_util_meses AS "vidaUtilMeses",
            to_char(fecha_adquisicion, 'YYYY-MM-DD') AS "fechaAdquisicion"
+           ${completas ? sql`,
+           cantidad, cuenta_deprec_acum_id AS "cuentaDeprecAcumId", cuenta_gasto_deprec_id AS "cuentaGastoDeprecId"` : sql``}
     FROM contabilidad_activos_fijos
     WHERE team_id = ${teamId} AND activa = true
+      -- Un terreno no se deprecia, y una ficha sin confirmar (abierta desde una compra) tampoco hasta que se confirme.
+      ${completas ? sql`AND NOT en_revision AND COALESCE(categoria, '') <> 'terrenos'` : sql``}
     ORDER BY id
   `)) as unknown as Array<{
     id: number; nombre: string; costoCents: number; valorResidualCents: number;
     vidaUtilMeses: number; fechaAdquisicion: string;
+    cantidad?: number; cuentaDeprecAcumId?: number | null; cuentaGastoDeprecId?: number | null;
   }>;
+
+  // Las bajas por activo, para que la cuota baje con las unidades que quedan.
+  const bajasPorActivo = new Map<number, BajaParaCuota[]>();
+  const totalesBajas = new Map<number, { unidades: number; costo: number; deprec: number }>();
+  if (completas && activos.length > 0) {
+    const bajas = (await db.execute(sql`
+      SELECT activo_id AS "activoId", to_char(fecha, 'YYYY-MM-DD') AS fecha, unidades,
+             costo_baja_cents AS costo, deprec_baja_cents AS deprec
+      FROM contabilidad_activos_bajas WHERE team_id = ${teamId}
+    `)) as unknown as Array<{ activoId: number; fecha: string; unidades: number; costo: unknown; deprec: unknown }>;
+    for (const b of bajas) {
+      const lista = bajasPorActivo.get(Number(b.activoId)) ?? [];
+      lista.push({ fecha: b.fecha, unidades: Number(b.unidades) });
+      bajasPorActivo.set(Number(b.activoId), lista);
+      const t = totalesBajas.get(Number(b.activoId)) ?? { unidades: 0, costo: 0, deprec: 0 };
+      t.unidades += Number(b.unidades); t.costo += Number(b.costo); t.deprec += Number(b.deprec);
+      totalesBajas.set(Number(b.activoId), t);
+    }
+  }
 
   for (const a of activos) {
     resumen.activosProcesados++;
 
     const yaHechas = (await db.execute(sql`
-      SELECT to_char(periodo, 'YYYY-MM-DD') AS periodo
+      SELECT to_char(periodo, 'YYYY-MM-DD') AS periodo, monto_cents AS monto
       FROM contabilidad_depreciaciones
       WHERE team_id = ${teamId} AND activo_id = ${a.id}
-    `)) as unknown as Array<{ periodo: string }>;
+    `)) as unknown as Array<{ periodo: string; monto: unknown }>;
     const hechas = new Set(yaHechas.map((r) => r.periodo));
+    const acumulada = yaHechas.reduce((t, r) => t + Number(r.monto), 0);
 
-    const cuotas = calcularCuotas(
+    const cantidadOriginal = Number(a.cantidad ?? 1);
+    const tb = totalesBajas.get(a.id) ?? { unidades: 0, costo: 0, deprec: 0 };
+    const quedan = Math.max(0, cantidadOriginal - tb.unidades);
+    const pendientes = calcularCuotasConBajas(
       {
         costoCents: Number(a.costoCents),
         valorResidualCents: Number(a.valorResidualCents),
         vidaUtilMeses: Number(a.vidaUtilMeses),
         fechaAdquisicion: a.fechaAdquisicion,
+        cantidad: cantidadOriginal,
       },
+      bajasPorActivo.get(a.id) ?? [],
       mesActual,
     ).filter((c) => !hechas.has(c.periodo));
+    // Lo que todavía se puede depreciar de lo que queda: nunca más que el costo menos el residual.
+    const residualVigente = Math.round((Number(a.valorResidualCents) * quedan) / cantidadOriginal);
+    const techo = Number(a.costoCents) - tb.costo - residualVigente - (acumulada - tb.deprec);
+    const cuotas = ajustarCuotasPendientes(pendientes, periodoFinalDeVida(a.fechaAdquisicion, Number(a.vidaUtilMeses)), techo);
+
+    // La depreciación acumulada de su categoría, si la ficha la tiene; si no, la global.
+    const acumDelActivo = a.cuentaDeprecAcumId ?? cuentaAcum;
+    const gastoDelActivo = a.cuentaGastoDeprecId ?? cuentaGasto;
 
     for (const cuota of cuotas) {
       const creado = await asentarCuota(
-        teamId, a.id, a.nombre, cuota, cuentaGasto, cuentaAcum, userId,
+        teamId, a.id, a.nombre, cuota, gastoDelActivo, acumDelActivo, userId,
       );
       if (creado) resumen.creados++;
     }

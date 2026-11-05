@@ -31,6 +31,7 @@ import { conceptosParaAsiento } from '@/lib/nomina/conceptos-db';
 import { cuentaSalidaElegida, cuentasPagoNomina } from '@/lib/nomina/cuenta-pago-db';
 import type { ClaveMetodo } from './metodos';
 import { distribuirCompra } from './compras';
+import { partesDeJson } from '@/lib/compras/pago-mixto';
 import { categoriaCompra, CUENTA_CATEGORIA_GASTO_VIEJA } from '@/lib/compras/categorias';
 import { retencionesDeJson } from '@/lib/compras/formato606';
 import { partidasAsientoCompra, type BaseCuenta } from '@/lib/compras/asiento-compra';
@@ -845,6 +846,8 @@ export async function generarAsientoCompra(
   const filas = await db.execute(sql`
     SELECT id, clase, estado, monto_total AS "montoTotal", itbis_cents AS "itbisCents",
            forma_pago AS "formaPago", metodo_pago AS "metodoPago", cuenta_salida_id AS "cuentaSalidaId",
+           -- Por to_jsonb y no por la columna: una base sin la migración 0221 devuelve null en vez de fallar.
+           to_jsonb(compras_locales.*) -> 'pagos_mixtos' AS "pagosMixtos",
            to_char(fecha, 'YYYY-MM-DD') AS fecha,
            proveedor_nombre AS "proveedorNombre", referencia_encf AS ncf,
            tipo_bienes_606 AS "tipoBienes606",
@@ -912,9 +915,22 @@ export async function generarAsientoCompra(
   }
 
   const esContado = c.formaPago === 'contado';
-  const contrapartida = esContado
-    ? await cuentaSalidaFondos(teamId, String(c.metodoPago ?? 'efectivo'), numeroONull(c.cuentaSalidaId))
-    : cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  // Pago mixto: cada parte sale de su propia caja o banco; no hay una sola cuenta de salida.
+  let contrapartidas: { cuentaId: number; cents: number; descripcion?: string }[] | undefined;
+  const partesMixtas = esContado && c.metodoPago === 'mixto' ? partesDeJson(c.pagosMixtos) : null;
+  if (partesMixtas) {
+    contrapartidas = [];
+    for (const parte of partesMixtas) {
+      const cuentaParte = await cuentaSalidaFondos(teamId, parte.metodo, parte.cuentaSalidaId);
+      if (!cuentaParte) return { creado: false, motivo: 'sin-cuenta-cobro' };
+      contrapartidas.push({ cuentaId: cuentaParte, cents: parte.montoCents, descripcion: `Pago al proveedor (${parte.metodo})` });
+    }
+  }
+  const contrapartida = contrapartidas
+    ? contrapartidas[0].cuentaId
+    : esContado
+      ? await cuentaSalidaFondos(teamId, String(c.metodoPago ?? 'efectivo'), numeroONull(c.cuentaSalidaId))
+      : cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
   if (!contrapartida) return { creado: false, motivo: esContado ? 'sin-cuenta-cobro' : 'sin-cuenta-por-pagar' };
 
   const itbisRetenido = num(c.itbisRetenidoCents);
@@ -934,6 +950,7 @@ export async function generarAsientoCompra(
       itbisRetenido: itbisRetenido > 0 ? (await cuentaPorCodigo(teamId, '2113')) ?? await cuentaPorCodigo(teamId, '2103') : null,
       isrRetenido: isrRetenido > 0 ? (await cuentaPorCodigo(teamId, '2114')) ?? await cuentaPorCodigo(teamId, '2103') : null,
       contrapartida,
+      contrapartidas,
     },
   });
   if (!Array.isArray(partidas)) return { creado: false, motivo: partidas.motivo };
@@ -1190,7 +1207,9 @@ async function cuentaSalidaFondos(teamId: number, metodo: string, elegidaId: num
   if (elegida) return elegida;
   const configurada = await resolverCuentaCobro(teamId, metodo as ClaveMetodo);
   if (configurada) return configurada;
-  return cuentaPorCodigo(teamId, metodo === 'efectivo' ? '1101' : '1102');
+  if (metodo === 'efectivo') return cuentaPorCodigo(teamId, '1101');
+  // 1102 Bancos es cuenta padre en el catálogo nuevo; su hija es la que asienta.
+  return (await cuentaPorCodigo(teamId, '1102')) ?? cuentaPorCodigo(teamId, '110201');
 }
 
 /**
