@@ -74,6 +74,7 @@
     "@types/node": "^22.15.18",
     "@types/react": "19.1.4",
     "@types/react-dom": "19.1.5",
+    "@vimeo/player": "2.30.4",
     "adm-zip": "^0.5.17",
     "ai": "^7.0.107",
     "autoprefixer": "^10.4.21",

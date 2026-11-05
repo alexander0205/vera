@@ -16,10 +16,11 @@
 import Link from 'next/link';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { FileText, Store, GraduationCap, Building2, Users, BookOpen } from 'lucide-react';
+import { FileText, Store, GraduationCap, Building2, Users, BookOpen, PlayCircle } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { MODULE_LABELS, moduleUrl, type ModuleKey } from '@/lib/config/modules';
 import { anunciarCambioDeModulo } from '@/components/loader-llegada';
+import { pieDeMenu } from '@/lib/academia/menu';
 
 const ICONS: Record<ModuleKey, typeof FileText> = {
   facturacion:    FileText,
@@ -30,12 +31,14 @@ const ICONS: Record<ModuleKey, typeof FileText> = {
   contabilidad:   BookOpen,
 };
 
-export function RailModulos({ current }: { current: ModuleKey | null }) {
-  const { modules } = usePermissions();
+export function RailModulos({ current, esMenuDeLaAcademia = false }: { current: ModuleKey | null; esMenuDeLaAcademia?: boolean }) {
+  const { modules, academiaActiva } = usePermissions();
   const otros = modules.filter(m => m !== current);
-  if (otros.length === 0) return null;
-
+  const pie = pieDeMenu(otros.length, esMenuDeLaAcademia, academiaActiva);
   return (
+    <>
+    {/* Quien tiene un solo módulo no ve el bloque «Módulos»: solo la Academia, aparte. */}
+    {pie.bloqueModulos && (
     // Va DENTRO de la lista que hace scroll (después de Configuración), no
     // anclado al pie: el separador es una línea arriba y un margen, no un borde
     // de footer.
@@ -79,5 +82,29 @@ export function RailModulos({ current }: { current: ModuleKey | null }) {
         );
       })}
     </Box>
+    )}
+
+    {/* La Academia no es un módulo (no se vende ni se apaga, no depende del rol): es su
+        propio ítem, separado, igual en todos los menús, para quien tenga sesión. */}
+    {pie.academia && (
+    <Box sx={pie.separadorPropioAcademia ? { mt: 1.5, pt: 1.5, borderTop: '1px solid rgba(255,255,255,0.1)' } : { mt: 0.25 }}>
+      <Box
+        component={Link}
+        href="/academia"
+        onClick={() => anunciarCambioDeModulo('Academia')}
+        sx={{
+          display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, py: 1,
+          borderRadius: '10px', fontSize: '0.875rem', textDecoration: 'none',
+          fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.005em',
+          color: 'rgba(203,213,225,0.72)', transition: 'all 0.15s',
+          '&:hover': { bgcolor: 'rgba(255,255,255,0.12)', color: 'rgba(248,250,252,0.96)' },
+        }}
+      >
+        <PlayCircle style={{ width: 18, height: 18, flexShrink: 0 }} />
+        <Box component="span" className="nav-text" sx={{ whiteSpace: 'nowrap' }}>Academia</Box>
+      </Box>
+    </Box>
+    )}
+    </>
   );
 }

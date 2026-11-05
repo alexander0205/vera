@@ -23,7 +23,7 @@ import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
 import {
   Activity, BarChart3, Bot, Building2, ClipboardList, Gauge, LayoutDashboard, ListChecks, LogOut, Menu as MenuIcon,
-  MessageCircle, ScrollText, ShieldCheck, Undo2, Users, UserCircle, UserCog,
+  MessageCircle, PlayCircle, ScrollText, ShieldCheck, Undo2, Users, UserCircle, UserCog,
 } from 'lucide-react';
 import { IsotipoZero } from '@/components/marca-zero';
 import { CampanaNotificaciones } from '@/components/notificaciones/CampanaNotificaciones';
@@ -55,6 +55,7 @@ const GRUPOS: Grupo[] = [
       { href: '/admin/equipo', etiqueta: 'Equipo Zero', icono: UserCog },
       { href: '/admin/whatsapp', etiqueta: 'WhatsApp', icono: MessageCircle },
       { href: '/admin/ia', etiqueta: 'Inteligencia artificial', icono: Bot },
+      { href: '/admin/academia', etiqueta: 'Academia', icono: PlayCircle },
     ],
   },
 ];

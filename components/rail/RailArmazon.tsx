@@ -28,7 +28,7 @@ export function RailArmazon({
   pie,
   children,
 }: {
-  modulo: ModuleKey;
+  modulo: ModuleKey | null;
   variant?: 'rail' | 'drawer';
   /** Bloque fijo bajo la lista (la versión de Facturación, por ejemplo). */
   pie?: React.ReactNode;
@@ -65,7 +65,7 @@ export function RailArmazon({
         {/* Al final de la lista que hace scroll —no anclado al pie— y FUERA del
             orden por uso: es "irse a otro producto", no una sección más, así
             que se queda siempre en el mismo sitio. */}
-        <RailModulos current={modulo} />
+        <RailModulos current={modulo} esMenuDeLaAcademia={modulo === null} />
       </Box>
 
       {pie && (

@@ -45,6 +45,15 @@ const appVersion = JSON.parse(readFileSync('./package.json', 'utf8')).version ??
  * `default-src 'self'` y el navegador bloqueaba el `<video>`: el reproductor
  * salía negro, en 0:00. Las fotos ya pasaban por `img-src https:`.
  *
+ * `player.vimeo.com` en frame-src — los videos de la Academia van en Vimeo (no
+ * listados, sin anuncios) y se insertan con un iframe de player.vimeo.com con
+ * `dnt=1` (sin cookies de rastreo). El control del reproductor (avance, saltos a
+ * un capítulo) usa el paquete `@vimeo/player`, que se empaqueta con la app y NO
+ * carga ningún script de fuera (comprobado en su código): `script-src` no cambia.
+ * Habla con el iframe por postMessage y, al recibir un iframe ya puesto, no hace
+ * ninguna petición: `connect-src` tampoco cambia. Las miniaturas
+ * (`i.vimeocdn.com`) ya pasan por `img-src https:`. No se agrega nada más.
+ *
  * `crm.zero.com.do` en script-src y frame-src — el chat con el agente de la web
  * pública: `widget.js` crea el botón y un iframe con la conversación (ver
  * `app/(marketing)/_chat-zero.tsx`). Sus llamadas ya entran en `*.zero.com.do`.
@@ -53,7 +62,7 @@ const securityHeaders = [
   {
     key: 'Content-Security-Policy',
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com https://www.clarity.ms https://*.clarity.ms https://crm.zero.com.do; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' blob: https://*.s3.us-east-1.amazonaws.com https://*.s3.amazonaws.com; connect-src 'self' https://*.zero.com.do https://api.stripe.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.clarity.ms stun: turn: turns:; frame-src 'self' blob: https://js.stripe.com https://crm.zero.com.do; object-src 'none'; base-uri 'self'",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com https://www.clarity.ms https://*.clarity.ms https://crm.zero.com.do; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' blob: https://*.s3.us-east-1.amazonaws.com https://*.s3.amazonaws.com; connect-src 'self' https://*.zero.com.do https://api.stripe.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.clarity.ms stun: turn: turns:; frame-src 'self' blob: https://player.vimeo.com https://js.stripe.com https://crm.zero.com.do; object-src 'none'; base-uri 'self'",
   },
   {
     key: 'Strict-Transport-Security',

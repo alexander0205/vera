@@ -83,6 +83,8 @@ describe('rutas de /api/admin', () => {
       ['app', 'api', 'admin', 'equipo', '[id]', 'perfil', 'route.ts'],
       ['app', 'api', 'admin', 'notificaciones', 'leidas', 'route.ts'],
       ['app', 'api', 'admin', 'notificaciones', 'push', 'route.ts'],
+      ['app', 'api', 'admin', 'academia', 'route.ts'],
+      ['app', 'api', 'admin', 'academia', '[id]', 'route.ts'],
     ];
     for (const r of conOrigen) {
       const s = leer(join(RAIZ, ...r));

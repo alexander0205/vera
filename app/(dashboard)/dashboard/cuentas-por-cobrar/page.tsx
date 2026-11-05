@@ -9,6 +9,7 @@ import {
 import { DetallePanel } from '@/components/cuentas-por-cobrar/DetallePanel';
 import { DataTable, type DataTableColumn, type RowAction, type ExportTabla } from '@/components/data-table';
 import { NotasMoraTable } from '@/components/notas-mora-table';
+import { TutorialDePantalla } from '@/components/academia/TutorialDePantalla';
 import { fmtDOP, fmtFechaCorta, fmtCodigoCorto } from '@/lib/utils/format';
 import { PagoMetodos, pagosValidos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
 import ComprobantesUploader, { type AdjuntoSubido } from '@/components/pagos/ComprobantesUploader';
@@ -353,6 +354,7 @@ export default function CuentasPorCobrarPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <TutorialDePantalla pantalla="fact-cxc" modo="boton" />
           <button
             onClick={() => setHistoricaModal(true)}
             className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-zero-300 text-gray-700 hover:text-zero-700 text-sm font-medium rounded-lg transition-colors"
@@ -363,6 +365,9 @@ export default function CuentasPorCobrarPage() {
           </button>
         </div>
       </div>
+
+      {/* Tutorial en video de esta pantalla (no dibuja nada si no hay video publicado) */}
+      <TutorialDePantalla pantalla="fact-cxc" modo="tarjeta" />
 
       {/* Stats — reflejan el filtro activo */}
       {data && (

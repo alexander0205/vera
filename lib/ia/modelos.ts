@@ -43,7 +43,7 @@ export const MODELOS_IA: readonly ModeloIa[] = [
   { id: 'google/gemini-3-flash', nombre: 'Gemini 3 Flash', proveedor: 'Google', nota: 'Más nuevo; razona antes de contestar', entradaUsd: 0.5, salidaUsd: 3 },
 ];
 
-export type UsoIa = 'asistente' | 'analisis' | 'plantillas' | 'captura' | 'redaccion';
+export type UsoIa = 'asistente' | 'analisis' | 'plantillas' | 'captura' | 'redaccion' | 'academia';
 
 export interface UsoIaInfo {
   uso: UsoIa;
@@ -97,10 +97,18 @@ export function usosIa(env: Record<string, string | undefined> = {}): UsoIaInfo[
       principal: env.REDACCION_IA_MODELO || 'anthropic/claude-haiku-5.5',
       respaldo: env.REDACCION_IA_MODELO_RESPALDO || 'google/gemini-2.5-flash',
     },
+    {
+      uso: 'academia',
+      nombre: 'Academia: asistente de videos',
+      descripcion: 'Contesta «cómo hago…» con lo que dicen los videos y señala el minuto. Solo se llama cuando la persona lo pide; va con el modelo más barato y sin razonamiento.',
+      // Flash-Lite no razona por defecto; el respaldo sí es Flash, y la Academia le apaga el razonamiento.
+      principal: env.ACADEMIA_IA_MODELO || 'google/gemini-2.5-flash-lite',
+      respaldo: env.ACADEMIA_IA_MODELO_RESPALDO || 'google/gemini-2.5-flash',
+    },
   ];
 }
 
-export const USOS_IA: readonly UsoIa[] = ['asistente', 'analisis', 'plantillas', 'captura', 'redaccion'];
+export const USOS_IA: readonly UsoIa[] = ['asistente', 'analisis', 'plantillas', 'captura', 'redaccion', 'academia'];
 
 export interface ModelosDeUso { principal: string; respaldo: string }
 

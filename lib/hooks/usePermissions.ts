@@ -34,6 +34,7 @@ interface UserPermissionsResponse {
   permissions?: Permission[];
   modules?: ModuleKey[];
   pantallasOcultas?: string[];
+  academia?: boolean;
 }
 
 // Fetch siempre /api/user, pero bajo una SWR key PROPIA (array) que NO coincide
@@ -52,6 +53,8 @@ export interface UsePermissionsResult {
   modules: ModuleKey[];
   /** Pantallas apagadas para su rol (lib/config/pantallas.ts). */
   pantallasOcultas: string[];
+  /** ¿Hay algún video publicado en la Academia? Si no, no se muestra nada de ella (por defecto, no). */
+  academiaActiva: boolean;
   /** Rol del usuario en el team activo (null si no aplica). */
   teamRole: string | null;
   /** true mientras la primera carga está en curso. */
@@ -73,12 +76,14 @@ export function usePermissions(): UsePermissionsResult {
   const modules = data?.modules ?? [];
   const pantallasOcultas = data?.pantallasOcultas ?? [];
   const teamRole = data?.teamRole ?? null;
+  const academiaActiva = data?.academia === true;
 
   return {
     can: (permission: Permission) => permissions.includes(permission),
     permissions,
     modules,
     pantallasOcultas,
+    academiaActiva,
     teamRole,
     isLoading,
   };

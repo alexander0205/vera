@@ -4925,3 +4925,52 @@ export const equipoZeroPerfiles = pgTable('equipo_zero_perfiles', {
   actualizadoEn:  timestamp('actualizado_en').notNull().defaultNow(),
   actualizadoPor: integer('actualizado_por').references(() => users.id, { onDelete: 'set null' }),
 });
+
+// ─── Academia ─────────────────────────────────────────────────────────────────
+
+/** Un tramo de la transcripción de un video: `t` son los segundos donde empieza. */
+export type SegmentoAcademia = { t: number; texto: string };
+/** Un capítulo de un video. */
+export type CapituloAcademia = { t: number; titulo: string };
+
+/** Catálogo de videos de la Academia. Migración 0240. */
+export const academiaVideos = pgTable('academia_videos', {
+  id:            serial('id').primaryKey(),
+  slug:          varchar('slug', { length: 80 }).notNull().unique(),
+  titulo:        varchar('titulo', { length: 160 }).notNull(),
+  descripcion:   text('descripcion').notNull().default(''),
+  modulo:        varchar('modulo', { length: 20 }).notNull().default('general'),
+  pantalla:      varchar('pantalla', { length: 60 }),
+  duracionSeg:   integer('duracion_seg').notNull().default(0),
+  vimeoId:       varchar('vimeo_id', { length: 20 }).notNull().unique(),
+  vimeoHash:     varchar('vimeo_hash', { length: 40 }),
+  miniaturaUrl:  text('miniatura_url'),
+  publicado:     boolean('publicado').notNull().default(false),
+  orden:         integer('orden').notNull().default(0),
+  capitulos:     jsonb('capitulos').$type<CapituloAcademia[]>().notNull().default(sql`'[]'::jsonb`),
+  transcripcion: jsonb('transcripcion').$type<SegmentoAcademia[]>().notNull().default(sql`'[]'::jsonb`),
+  creadoEn:      timestamp('creado_en').notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
+});
+
+/** Avance de cada persona en cada video. */
+export const academiaProgreso = pgTable('academia_progreso', {
+  userId:        integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  videoId:       integer('video_id').notNull().references(() => academiaVideos.id, { onDelete: 'cascade' }),
+  avanceSeg:     integer('avance_seg').notNull().default(0),
+  visto:         boolean('visto').notNull().default(false),
+  actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.userId, t.videoId] })]);
+
+/** Estado de la tarjeta de tutorial de cada pantalla, por persona. */
+export const academiaTarjetas = pgTable('academia_tarjetas', {
+  userId:        integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  pantalla:      varchar('pantalla', { length: 60 }).notNull(),
+  ocultaHasta:   timestamp('oculta_hasta'),
+  nunca:         boolean('nunca').notNull().default(false),
+  vecesMostrada: integer('veces_mostrada').notNull().default(0),
+  mostradaEn:    timestamp('mostrada_en'),
+  actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.userId, t.pantalla] })]);
+
+export type AcademiaVideo = typeof academiaVideos.$inferSelect;
