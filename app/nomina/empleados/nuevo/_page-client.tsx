@@ -1,7 +1,6 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useRutaNomina } from '@/lib/nomina/rutas';
 import { UserPlus } from 'lucide-react';
 import { EmpleadoWizard } from '../wizard';
 
@@ -12,8 +11,7 @@ import { EmpleadoWizard } from '../wizard';
  */
 export default function NuevoEmpleadoClient() {
   const router = useRouter();
-  const ruta = useRutaNomina();
-  const volver = () => router.push(ruta('/empleados'));
+  const volver = () => router.push('/nomina/empleados');
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-6 sm:px-6">
@@ -29,7 +27,7 @@ export default function NuevoEmpleadoClient() {
       <EmpleadoWizard
         editando={null}
         onCancel={volver}
-        onSaved={() => router.push(ruta('/empleados'))}
+        onSaved={() => router.push('/nomina/empleados')}
       />
     </div>
   );

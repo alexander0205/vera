@@ -110,6 +110,10 @@ const nextConfig: NextConfig = {
       // El cobro a un grupo volvió, en su propia ruta: el enlace viejo va ahí.
       { source: '/escolar/cargos/lote', destination: '/escolar/cobrar-grupo', permanent: false },
       { source: '/escolar/cargos/:resto*', destination: '/escolar/responsables?filtro=con-deuda', permanent: false },
+      // La nómina se quitó de Gobernanza: vive solo en su módulo. Los enlaces
+      // viejos a /escolar/nomina llegan a la misma pantalla allá.
+      { source: '/escolar/nomina', destination: '/nomina', permanent: false },
+      { source: '/escolar/nomina/:resto*', destination: '/nomina/:resto*', permanent: false },
     ];
   },
   // Desactivar el indicador de dev para evitar conflicto con extensiones del browser
