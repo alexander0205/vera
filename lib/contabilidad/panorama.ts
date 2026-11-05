@@ -96,6 +96,8 @@ export const MODULOS_CONTABLES: ModuloContable[] = [
       { origen: 'provision_nomina', label: 'Provisiones (regalía, vacaciones, cesantía)', pendientes: ['nomina_provision'] },
       { origen: 'pago_sueldos', label: 'Pago de sueldos', pendientes: ['nomina_pagos_sueldos', 'nomina_pagados_sin_pago'] },
       { origen: 'pago_nomina', label: 'Pago de TSS, ISR e INFOTEP', pendientes: ['nomina_obligaciones'] },
+      // Se asienta al registrar el préstamo (según de dónde salió el dinero): no hay barrido de pendientes.
+      { origen: 'prestamo_empleado', label: 'Préstamos y avances a empleados', pendientes: [] },
     ],
   },
   {

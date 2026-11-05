@@ -303,6 +303,8 @@ export async function generarAsientosPendientes(
           ON a.team_id = c.team_id AND a.origen_tipo = 'provision_nomina' AND a.origen_id = c.id
         WHERE c.team_id = ${teamId} AND a.id IS NULL
           AND c.estado IN ('aprobada', 'pagada') AND c.total_bruto_cents > 0
+          -- La regalía y la liquidación no provisionan: usan o liberan la reserva, no la crean.
+          AND c.tipo NOT IN ('regalia', 'liquidacion')
         ORDER BY c.fecha_fin, c.id
         LIMIT ${TOPE_POR_BARRIDO}
       `)
@@ -428,7 +430,7 @@ export interface LineaDetalle {
  *  diario deja filtrar. */
 export const ORIGENES = [
   'factura', 'pago', 'nota', 'anulacion', 'manual', 'compra', 'gasto_caja', 'gasto_doc', 'depreciacion',
-  'pago_proveedor', 'cierre', 'nomina', 'provision_nomina', 'pago_sueldos', 'pago_nomina', 'compra_anulada',
+  'pago_proveedor', 'cierre', 'nomina', 'provision_nomina', 'pago_sueldos', 'pago_nomina', 'compra_anulada', 'prestamo_empleado',
 ] as const;
 export type OrigenTipo = (typeof ORIGENES)[number];
 
@@ -767,7 +769,8 @@ export async function contarPendientesPorOrigen(teamId: number): Promise<Pendien
         LEFT JOIN contabilidad_asientos a
           ON a.team_id = c.team_id AND a.origen_tipo = 'provision_nomina' AND a.origen_id = c.id
         WHERE c.team_id = ${teamId} AND a.id IS NULL AND ${cfg.provisionarNomina}
-          AND c.estado IN ('aprobada', 'pagada') AND c.total_bruto_cents > 0)::int AS nomina_provision,
+          AND c.estado IN ('aprobada', 'pagada') AND c.total_bruto_cents > 0
+          AND c.tipo NOT IN ('regalia', 'liquidacion'))::int AS nomina_provision,
       -- Nómina: empleados pagados que todavía no tienen su pago registrado (uno por corrida)
       (SELECT count(*) FROM (
         SELECT l.corrida_id FROM nomina_lineas l

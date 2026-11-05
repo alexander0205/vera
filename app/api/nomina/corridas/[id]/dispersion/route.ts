@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { empleados, nominaCorridas, nominaLineas } from '@/lib/db/schema';
@@ -13,6 +13,11 @@ export const dynamic = 'force-dynamic';
  * toma de su ficha ACTUAL (no del snapshot): la cuenta a la que se paga es la
  * vigente al momento de pagar. `?preview=1` devuelve JSON con el resumen en
  * vez del archivo (para mostrar antes de descargar).
+ *
+ * Solo entra quien todavía no cobró: un empleado ya pagado (por banco o en
+ * efectivo) no debe volver a salir en un archivo que el banco ejecutará. Con
+ * `?lineas=1,2,3` el archivo se limita a esas líneas de la corrida — el resto,
+ * desmarcado, se paga aparte en efectivo.
  */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireModuleAndPermission('nomina', 'nomina:pagar');
@@ -33,6 +38,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ error: 'La corrida debe estar aprobada para dispersar' }, { status: 409 });
   }
 
+  const lineasParam = new URL(req.url).searchParams.get('lineas');
+  let soloLineas: number[] | null = null;
+  if (lineasParam !== null) {
+    if (!/^\d{1,9}(,\d{1,9}){0,999}$/.test(lineasParam)) {
+      return NextResponse.json({ error: 'El parámetro lineas debe ser una lista de IDs' }, { status: 400 });
+    }
+    soloLineas = lineasParam.split(',').map(Number);
+  }
+
   const filas = await db
     .select({
       empleadoId: nominaLineas.empleadoId,
@@ -45,8 +59,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     })
     .from(nominaLineas)
     .innerJoin(empleados, eq(empleados.id, nominaLineas.empleadoId))
-    .where(eq(nominaLineas.corridaId, id))
+    .where(and(
+      eq(nominaLineas.corridaId, id),
+      eq(nominaLineas.teamId, auth.teamId),
+      eq(nominaLineas.pagada, false),
+      soloLineas ? inArray(nominaLineas.id, soloLineas) : undefined,
+    ))
     .orderBy(asc(nominaLineas.nombre));
+
 
   const url = new URL(req.url);
   const archivo = generarArchivoDispersion(filas, {
@@ -55,6 +75,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     referencia: `Nomina ${corrida.periodo}`,
     formatoKey: url.searchParams.get('formato') ?? undefined,
   });
+
+  if (filas.length === 0 && url.searchParams.get('preview') !== '1') {
+    return NextResponse.json({ error: 'No hay empleados pendientes de pago para incluir en el archivo' }, { status: 409 });
+  }
 
   if (url.searchParams.get('preview') === '1') {
     return NextResponse.json({

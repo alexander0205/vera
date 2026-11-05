@@ -15,7 +15,7 @@ import { toast } from '@/lib/toast';
 import { fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import {
   Users, Search, Loader2, IdCard, Phone, Briefcase,
-  Plus, Pencil, Trash2, UserPlus, GraduationCap, Check, FileText, HeartPulse, Clock, Copy,
+  Plus, Pencil, Trash2, UserPlus, GraduationCap, Check, FileText, FileSpreadsheet, HandCoins, CalendarOff, LogOut, HeartPulse, Clock, Copy,
 } from 'lucide-react';
 import {
   Empleado, fetcher, pesos, nombreCompleto, iniciales, esActivo, LABEL_FRECUENCIA, LABEL_CONTRATO,
@@ -49,6 +49,7 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
   const router = useRouter();
   const { can } = usePermissions();
   const puedeGestionar = can('empleados:gestionar');
+  const puedeCorrer = can('nomina:correr');
   const { data, isLoading, mutate } = useSWR<{ empleados: Empleado[] }>('/api/nomina/empleados', fetcher);
 
   const [busca, setBusca] = useState('');
@@ -80,9 +81,13 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
   // Alta, edición y contrato viven en su propia página (no modal): cerrar por
   // accidente no borra lo tecleado (pedido de Alex).
   const irNuevo = () => router.push('/nomina/empleados/nuevo');
+  const irImportar = () => router.push('/nomina/empleados/importar');
   const irEditar = (id: number) => router.push(`/nomina/empleados/${id}/editar`);
   const irContrato = (id: number) => router.push(`/nomina/empleados/${id}/contrato`);
   const irDependientes = (id: number) => router.push(`/nomina/empleados/${id}/dependientes`);
+  const irConceptos = (id: number) => router.push(`/nomina/empleados/${id}/conceptos`);
+  const irAusencias = (id: number) => router.push(`/nomina/empleados/${id}/ausencias`);
+  const irLiquidar = (id: number) => router.push(`/nomina/empleados/${id}/liquidar`);
 
   function pedirEnlace(e: Empleado) {
     setEnlaceUrl(null);
@@ -159,6 +164,9 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
                 <GraduationCap className="h-4 w-4" /> Importar del colegio
               </Button>
             )}
+            <Button variant="outline" onClick={irImportar} className="gap-1.5">
+              <FileSpreadsheet className="h-4 w-4" /> Importar desde Excel
+            </Button>
             <Button onClick={irNuevo} className="gap-1.5">
               <Plus className="h-4 w-4" /> Nuevo empleado
             </Button>
@@ -253,9 +261,20 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
                   <Button variant="ghost" size="icon" onClick={() => irContrato(e.id)} aria-label="Contrato" title="Contrato">
                     <FileText className="h-4 w-4" />
                   </Button>
+                  <Button variant="ghost" size="icon" onClick={() => irConceptos(e.id)} aria-label="Ingresos y descuentos" title="Incentivos, descuentos y préstamos">
+                    <HandCoins className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => irAusencias(e.id)} aria-label="Faltas y licencias" title="Faltas y licencias">
+                    <CalendarOff className="h-4 w-4" />
+                  </Button>
                   <Button variant="ghost" size="icon" onClick={() => irDependientes(e.id)} aria-label="Dependientes" title="Dependientes del seguro de salud">
                     <HeartPulse className="h-4 w-4" />
                   </Button>
+                  {puedeCorrer && esActivo(e.estado) && (
+                    <Button variant="ghost" size="icon" onClick={() => irLiquidar(e.id)} aria-label="Liquidar" title="Dar de baja y liquidar (preaviso, cesantía, vacaciones, regalía)">
+                      <LogOut className="h-4 w-4" />
+                    </Button>
+                  )}
                   {puedeGestionar && cobraPorHora(e) && esActivo(e.estado) && (
                     <Button variant="ghost" size="icon" onClick={() => pedirEnlace(e)} aria-label="Enlace de horas" title="Enlace para que registre sus horas">
                       <Clock className="h-4 w-4" />

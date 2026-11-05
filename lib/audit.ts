@@ -100,6 +100,12 @@ export type AuditAction =
   // Contabilidad: un catálogo importado de Excel cambia de golpe cómo se
   // clasifica todo lo que viene después. Se traza quién y cuánto.
   | 'CONTABILIDAD_CATALOGO_IMPORTADO'
+  // Nómina: una carga masiva de empleados cambia salarios y cuentas de banco de golpe.
+  | 'NOMINA_EMPLEADOS_IMPORTADOS'
+  // Nómina: una liquidación da de baja al empleado y genera un pago grande.
+  | 'NOMINA_LIQUIDACION_CREADA'
+  // Nómina: un cambio en «Avanzado» (divisor, faltas, regalía, vacaciones) cambia cómo se calcula todo lo que sigue.
+  | 'NOMINA_AVANZADO_CAMBIADO'
   // Un correo de suscripción ya enviado (cuenta activada, prueba por vencer,
   // pago recibido). Su `resource` es la llave que evita mandarlo dos veces:
   // ver `claveAviso` en lib/suscripcion/datos-aviso.ts.

@@ -34,6 +34,8 @@ export interface TasasProvisiones {
    * usa 23.83 (promedio de días laborables al mes) para vacaciones y cesantía.
    */
   divisorSalarioDiario: number;
+  /** Días de vacaciones al año desde los 5 años de servicio (default de ley: 18). */
+  diasVacacionesMas5Anios?: number;
 }
 
 export const PROVISIONES_DEFAULT: TasasProvisiones = {

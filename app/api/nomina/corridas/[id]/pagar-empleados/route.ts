@@ -7,6 +7,7 @@ import { generarAsientoPagoSueldos } from '@/lib/contabilidad/asientos';
 import { refrescarEstadoCorrida } from '@/lib/nomina/obligaciones-db';
 import { asegurarDevengoCorrida } from '@/lib/nomina/contabilidad-db';
 import { hoyRD } from '@/lib/utils/format';
+import { guardarCuentaSalida, validarCuentaSalida } from '@/lib/nomina/cuenta-pago-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,8 @@ type Metodo = (typeof METODOS)[number];
  * si la contabilidad está activa lleva su asiento (DEBE sueldos por pagar · HABER
  * caja o banco). Solo toma las líneas aún pendientes: un segundo clic no paga dos
  * veces. `{ pagada: false }` desmarca, salvo que el pago ya esté asentado.
+ * `cuentaSalidaId` (opcional) es la caja o el banco de donde salió el dinero;
+ * sin ella sale de la de por defecto de la nómina.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireModuleAndPermission('nomina', 'nomina:pagar');
@@ -56,6 +59,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (body?.pagada === false) return desmarcar(auth.teamId, id, cond);
 
   const metodo: Metodo = METODOS.includes(body?.metodo) ? body.metodo : 'transferencia';
+  const cuenta = await validarCuentaSalida(auth.teamId, body?.cuentaSalidaId);
+  if (!cuenta.ok) return NextResponse.json({ error: cuenta.error }, { status: 400 });
 
   const pago = await db.transaction(async (tx) => {
     const pendientes = await tx
@@ -86,6 +91,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   let asiento = null;
   if (pago.pagoId) {
+    // La cuenta se guarda antes del asiento: es de donde el asiento la lee.
+    await guardarCuentaSalida('nomina_pagos', auth.teamId, pago.pagoId, cuenta.id);
     await asegurarDevengoCorrida(auth.teamId, id, auth.user.id);
     asiento = await generarAsientoPagoSueldos(auth.teamId, pago.pagoId, auth.user.id);
     if (asiento.creado && asiento.asientoId) {
