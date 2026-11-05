@@ -43,6 +43,14 @@ export interface VolanteNominaData {
   dependientesAdicionales:         number;
   dependientesAdicionalesCantidad: number;
   otrasDeducciones: number;
+  /** Regalía, liquidación: el concepto que se paga, en vez de «Salario del período». */
+  etiquetaDevengado?: string | null;
+  /** Regalía y liquidación no llevan AFP ni SFS: se omiten esas filas. */
+  sinTss?: boolean;
+  /** Ingresos adicionales (incentivos, comisiones…) que ya van dentro del bruto. */
+  ingresosExtra?: { nombre: string; monto: number }[];
+  /** Descuentos con nombre (avance, préstamo, seguro…) que ya van dentro de otras deducciones. */
+  descuentosDetalle?: { nombre: string; monto: number; comentario?: string | null }[];
   totalDeducciones: number;
   neto:             number;
   // Informativo (aportes de la empresa)
@@ -151,16 +159,25 @@ export function VolanteNominaPDF({ data }: { data: VolanteNominaData }) {
 
         {/* Devengado */}
         <Text style={S.seccionTitulo}>Ingresos</Text>
-        <View style={S.fila}>
-          <Text style={S.filaLabel}>
-            {data.horasTexto
-              ? `Pago por horas (${data.horasTexto})`
-              : `Salario del período${data.diasPagados != null && data.diasPeriodo != null && data.diasPagados < data.diasPeriodo
-                ? ` (${data.diasPagados} de ${data.diasPeriodo} días)`
-                : ''}`}
-          </Text>
-          <Text style={S.filaMonto}>{fmt(data.bruto)}</Text>
-        </View>
+        {/* En una liquidación todo el pago son conceptos: la fila del salario en cero no se enseña. */}
+        {data.bruto - (data.ingresosExtra ?? []).reduce((t, x) => t + x.monto, 0) > 0.005 || (data.ingresosExtra ?? []).length === 0 ? (
+          <View style={S.fila}>
+            <Text style={S.filaLabel}>
+              {data.etiquetaDevengado ? data.etiquetaDevengado : data.horasTexto
+                ? `Pago por horas (${data.horasTexto})`
+                : `Salario del período${data.diasPagados != null && data.diasPeriodo != null && data.diasPagados < data.diasPeriodo
+                  ? ` (${data.diasPagados} de ${data.diasPeriodo} días)`
+                  : ''}`}
+            </Text>
+            <Text style={S.filaMonto}>{fmt(data.bruto - (data.ingresosExtra ?? []).reduce((t, x) => t + x.monto, 0))}</Text>
+          </View>
+        ) : null}
+        {(data.ingresosExtra ?? []).map((x, i) => (
+          <View key={`ing-${i}`} style={S.fila}>
+            <Text style={S.filaLabel}>{x.nombre}</Text>
+            <Text style={S.filaMonto}>{fmt(x.monto)}</Text>
+          </View>
+        ))}
         <View style={S.filaTotal}>
           <Text style={S.filaTotalLabel}>Total devengado</Text>
           <Text style={S.filaTotalMonto}>{fmt(data.bruto)}</Text>
@@ -168,14 +185,18 @@ export function VolanteNominaPDF({ data }: { data: VolanteNominaData }) {
 
         {/* Deducciones */}
         <Text style={S.seccionTitulo}>Deducciones de ley</Text>
-        <View style={S.fila}>
-          <Text style={S.filaLabel}>AFP (pensión, 2.87%)</Text>
-          <Text style={S.filaMonto}>-{fmt(data.afpEmpleado)}</Text>
-        </View>
-        <View style={S.fila}>
-          <Text style={S.filaLabel}>SFS (salud, 3.04%)</Text>
-          <Text style={S.filaMonto}>-{fmt(data.sfsEmpleado)}</Text>
-        </View>
+        {data.sinTss ? null : (
+          <View style={S.fila}>
+            <Text style={S.filaLabel}>AFP (pensión, 2.87%)</Text>
+            <Text style={S.filaMonto}>-{fmt(data.afpEmpleado)}</Text>
+          </View>
+        )}
+        {data.sinTss ? null : (
+          <View style={S.fila}>
+            <Text style={S.filaLabel}>SFS (salud, 3.04%)</Text>
+            <Text style={S.filaMonto}>-{fmt(data.sfsEmpleado)}</Text>
+          </View>
+        )}
         <View style={S.fila}>
           <Text style={S.filaLabel}>ISR (retención)</Text>
           <Text style={S.filaMonto}>-{fmt(data.isr)}</Text>
@@ -188,10 +209,16 @@ export function VolanteNominaPDF({ data }: { data: VolanteNominaData }) {
             <Text style={S.filaMonto}>-{fmt(data.dependientesAdicionales)}</Text>
           </View>
         ) : null}
-        {data.otrasDeducciones > 0 ? (
+        {(data.descuentosDetalle ?? []).map((x, i) => (
+          <View key={`desc-${i}`} style={S.fila}>
+            <Text style={S.filaLabel}>{x.comentario ? `${x.nombre} (${x.comentario})` : x.nombre}</Text>
+            <Text style={S.filaMonto}>-{fmt(x.monto)}</Text>
+          </View>
+        ))}
+        {data.otrasDeducciones - (data.descuentosDetalle ?? []).reduce((t, x) => t + x.monto, 0) > 0.004 ? (
           <View style={S.fila}>
             <Text style={S.filaLabel}>Otras deducciones</Text>
-            <Text style={S.filaMonto}>-{fmt(data.otrasDeducciones)}</Text>
+            <Text style={S.filaMonto}>-{fmt(data.otrasDeducciones - (data.descuentosDetalle ?? []).reduce((t, x) => t + x.monto, 0))}</Text>
           </View>
         ) : null}
         <View style={S.filaTotal}>

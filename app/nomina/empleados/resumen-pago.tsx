@@ -7,6 +7,8 @@ import { rangoDelMes } from '@/lib/nomina/periodos';
 import { horasSemana, valorHoraCents, type HorarioSemanal } from '@/lib/nomina/jornada';
 import { fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { partesDeHoras, totalHorasTexto, type ResumenHoras } from '@/lib/nomina/horas';
+import { AVANZADO_DEFAULT, type AvanzadoNomina } from '@/lib/nomina/avanzado';
+import { PROVISIONES_DEFAULT } from '@/lib/config/nomina-provisiones';
 import { pesos } from './shared';
 
 const pct = (fraccion: number) => `${(fraccion * 100).toFixed(2).replace(/\.?0+$/, '')}%`;
@@ -16,6 +18,8 @@ export interface AjustesResumen {
   pisoCotizableCents: number | null;
   srlTasa: number | null;
   capitaDependienteCents: number;
+  /** Valores «Avanzado» de la empresa; sin ellos, los de ley. */
+  avanzado?: AvanzadoNomina;
 }
 
 /**
@@ -47,6 +51,7 @@ export function ResumenPago({
   /** Quien cobra por hora: la semana de su horario con la que se estimó el mes. */
   porHoras?: ResumenHoras | null;
 }) {
+  const av = ajustes?.avanzado ?? AVANZADO_DEFAULT;
   const anio = Number(hoyRD().slice(0, 4));
   const tasas = tasasDelAnio(anio);
   const srl = ajustes?.srlTasa ?? tasas.srlPatronal;
@@ -67,7 +72,14 @@ export function ResumenPago({
     inicio: mes.inicio,
     fin: mes.fin,
     diasVacacionesEmpleado: diasVacaciones,
-    topeRegaliaAnualCents: ajustes?.pisoCotizableCents ? 5 * ajustes.pisoCotizableCents : null,
+    topeRegaliaAnualCents: null,
+    params: {
+      ...PROVISIONES_DEFAULT,
+      divisorSalarioDiario: av.divisorSalarioDiario,
+      diasVacaciones: av.diasVacaciones,
+      diasVacacionesMas5Anios: av.diasVacacionesMas5Anios,
+      diasCesantiaPorAnio: av.diasCesantiaProvision,
+    },
   });
   const costoReal = d.brutoCents + d.totalPatronalCents + prov.totalCents;
   const sobrecosto = d.brutoCents > 0 ? (costoReal / d.brutoCents - 1) * 100 : 0;
@@ -134,13 +146,13 @@ export function ResumenPago({
           <div className="mt-1.5 space-y-1">
             <p>
               {prov.mesesServicio === null
-                ? 'Sin fecha de ingreso: se estima la cesantía a 21 días por año.'
+                ? `Sin fecha de ingreso: se estima la cesantía a ${av.diasCesantiaProvision} días por año.`
                 : `Antigüedad este mes: ${prov.mesesServicio} mes${prov.mesesServicio === 1 ? '' : 'es'}${fechaIngreso ? ` (desde el ${fmtFechaCorta(fechaIngreso)})` : ''}.`}
             </p>
-            <p>Salario diario: {pesos(salarioMensualCents)} ÷ 23.83 = {pesos(prov.salarioDiarioCents)}.</p>
+            <p>Salario diario: {pesos(salarioMensualCents)} ÷ {av.divisorSalarioDiario} = {pesos(prov.salarioDiarioCents)}.</p>
             <p>
               Regalía: salario ÷ 12 = {pesos(prov.regaliaCents)}
-              {prov.regaliaTopada ? ' (tope de 5 salarios mínimos al año, art. 219)' : ''}.
+              {prov.regaliaTopada ? ` (tope de 5 salarios mínimos al año, art. 219)` : ''}.
             </p>
             <p>
               Vacaciones: {prov.diasVacacionesAnio} días × salario diario ÷ 12 = {pesos(prov.vacacionesCents)}
@@ -148,7 +160,7 @@ export function ResumenPago({
             </p>
             <p>
               {prov.mesesServicio === null
-                ? `Cesantía: 21 días × salario diario ÷ 12 = ${pesos(prov.cesantiaCents)}.`
+                ? `Cesantía: ${av.diasCesantiaProvision} días × salario diario ÷ 12 = ${pesos(prov.cesantiaCents)}.`
                 : prov.diasCesantiaDespues === 0
                   ? 'Cesantía: todavía nada; a los 3 meses se ganan 6 días, 13 a los 6 meses, 21 por año desde el primero y 23 por año desde los 5 (art. 80).'
                   : `Cesantía: lo ganado sube de ${prov.diasCesantiaAntes.toFixed(2)} a ${prov.diasCesantiaDespues.toFixed(2)} días × salario diario = ${pesos(prov.cesantiaCents)} (art. 80).`}

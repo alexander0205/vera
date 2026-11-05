@@ -11,6 +11,7 @@
  * responsabilidad de quien llama (la ruta o el guard de permisos).
  */
 import { renderToBuffer } from '@react-pdf/renderer';
+import { toleraMigracionPendiente } from '@/lib/nomina/migracion-pendiente';
 import { partesDeHoras, totalHorasTexto, type ResumenHoras } from '@/lib/nomina/horas';
 import { createElement } from 'react';
 import QRCode from 'qrcode';
@@ -24,6 +25,7 @@ import {
   users,
   cotizaciones,
   nominaLineas,
+  nominaLineaConceptos,
   nominaCorridas,
   nominaContratos,
 } from '@/lib/db/schema';
@@ -552,6 +554,11 @@ export async function generarVolanteNominaPdf(opts: {
   if (!row) return null;
   const { linea, corrida, team } = row;
   const c = (n: number) => n / 100;
+  // Sin la migración 0230 no hay desglose de conceptos: el volante sale como antes.
+  const conceptos = await toleraMigracionPendiente(() => db
+    .select()
+    .from(nominaLineaConceptos)
+    .where(and(eq(nominaLineaConceptos.lineaId, linea.id), eq(nominaLineaConceptos.teamId, teamId))), []);
 
   const data: VolanteNominaData = {
     emisor: {
@@ -568,6 +575,8 @@ export async function generarVolanteNominaPdf(opts: {
     diasPagados:  linea.diasPagados,
     diasPeriodo:  linea.diasPeriodo,
     horasTexto:   linea.horasDetalle ? textoHorasVolante(linea.horasDetalle) : null,
+    etiquetaDevengado: corrida.tipo === 'regalia' ? `Regalía pascual ${corrida.fechaInicio.slice(0, 4)} (1/12 de lo devengado)` : corrida.tipo === 'liquidacion' ? 'Liquidación' : null,
+    sinTss: corrida.tipo === 'regalia' || corrida.tipo === 'liquidacion',
     descripcion:  corrida.descripcion,
     fechaPago:    corrida.fechaPago ?? null,
     bruto:            c(linea.brutoCents),
@@ -577,6 +586,12 @@ export async function generarVolanteNominaPdf(opts: {
     dependientesAdicionales:         c(linea.dependientesAdicionalesCents),
     dependientesAdicionalesCantidad: linea.dependientesAdicionales,
     otrasDeducciones: c(linea.otrasDeduccionesCents),
+    ingresosExtra: conceptos
+      .filter((x) => x.tipo === 'ingreso' && x.montoCents > 0)
+      .map((x) => ({ nombre: x.nombre, monto: c(x.montoCents) })),
+    descuentosDetalle: conceptos
+      .filter((x) => x.tipo === 'descuento' && x.montoCents > 0)
+      .map((x) => ({ nombre: x.nombre, monto: c(x.montoCents), comentario: x.comentario })),
     totalDeducciones: c(linea.totalDeduccionesCents),
     neto:             c(linea.netoCents),
     totalPatronal:    c(linea.totalPatronalCents),

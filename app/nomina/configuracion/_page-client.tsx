@@ -14,6 +14,9 @@ import {
   type SalarioMinimoSector, type TamanoEmpresa,
 } from '@/lib/config/nomina-tasas';
 import { fmtFechaCorta } from '@/lib/utils/format';
+import { ConceptosNomina } from './_conceptos';
+import { CuentasPagoNomina } from './_cuentas-pago';
+import { SeccionAvanzado } from './_avanzado';
 
 interface Programacion {
   activa: boolean;
@@ -329,6 +332,12 @@ export default function ConfiguracionClient() {
           </p>
         </CardContent>
       </Card>
+
+      <CuentasPagoNomina />
+
+      <ConceptosNomina />
+
+      <SeccionAvanzado />
 
       <div className="flex justify-end">
         <Button onClick={guardar} disabled={guardando} className="gap-1.5">

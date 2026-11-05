@@ -88,8 +88,26 @@ export function diasCesantiaGanados(meses: number): number {
   return (meses < 60 ? 21 : 23) * (meses / 12);
 }
 
+/**
+ * Días de auxilio de cesantía que corresponden al salir (art. 80 del Código de Trabajo):
+ *   · 3 a 6 meses: 6 días; 6 meses a 1 año: 13 días.
+ *   · Desde 1 año: 21 días por año completo (23 desde 5 años), más 6 días si la fracción de año llega
+ *     a 3 meses o 13 días si llega a 6 (mismos bordes que el primer año).
+ * Es la cifra de una LIQUIDACIÓN. La provisión mensual usa `diasCesantiaGanados`, lineal, que es una
+ * estimación.
+ */
+export function diasCesantiaLey(meses: number): number {
+  if (meses < 3) return 0;
+  if (meses < 6) return 6;
+  if (meses < 12) return 13;
+  const anios = Math.floor(meses / 12);
+  const fraccion = meses % 12;
+  const porAnio = meses >= 60 ? 23 : 21;
+  return porAnio * anios + (fraccion >= 6 ? 13 : fraccion >= 3 ? 6 : 0);
+}
+
 /** Días de vacaciones al año por ley (art. 177): 14 hasta los 5 años, 18 desde ahí. */
-export const diasVacacionesDeLey = (meses: number) => (meses >= 60 ? 18 : 14);
+export const diasVacacionesDeLey = (meses: number, base = 14, masDe5Anios = 18) => (meses >= 60 ? masDe5Anios : base);
 
 export interface ParametrosProvisionPeriodo {
   /** Lo devengado en el período. */
@@ -149,7 +167,7 @@ export function calcularProvisionesPeriodo(p: ParametrosProvisionPeriodo): Desgl
   const hasta = p.fechaSalida && p.fechaSalida < p.fin ? p.fechaSalida : p.fin;
   const meses = p.fechaIngreso ? mesesDeServicio(p.fechaIngreso, hasta) : null;
 
-  const diasLey = diasVacacionesDeLey(meses ?? 12);
+  const diasLey = diasVacacionesDeLey(meses ?? 12, t.diasVacaciones, t.diasVacacionesMas5Anios ?? 18);
   const diasVac = Math.max(diasLey, p.diasVacacionesEmpleado ?? 0);
   const vacaciones = (diasVac * (bruto / divisor)) / 12;
 

@@ -26,6 +26,25 @@ export interface SumasCorrida {
   infotepCents: number;
   /** El desglose, para mandar cada concepto a su cuenta. Falta → todo junto. */
   detalle?: DetalleTss;
+  /**
+   * Ingresos y descuentos variables que tienen cuenta PROPIA. Los que no la
+   * tienen no se listan: siguen dentro de `brutoCents` (sueldos) y de
+   * `otrasDeduccionesCents` (otras deducciones por pagar).
+   */
+  conceptos?: ConceptoAsiento[];
+}
+
+export interface ConceptoAsiento {
+  cuentaId: number;
+  tipo: 'ingreso' | 'descuento';
+  montoCents: number;
+  nombre: string;
+  /** Ingreso que se paga primero contra una reserva (vacaciones, regalía o cesantía por pagar). */
+  reservaCuentaId?: number | null;
+  /** Qué reserva consume: solo cuenta lo provisionado como tal. */
+  reservaClave?: 'regalia' | 'vacaciones' | 'cesantia' | null;
+  /** Cuánto de `montoCents` sale de esa reserva (lo que alcance); el resto va a `cuentaId`. */
+  reservaUsadaCents?: number;
 }
 
 /**
@@ -100,15 +119,52 @@ function fusionar(lineas: LineaAsiento[], general: string): LineaAsiento[] {
  * Cuadra porque bruto = neto + deducciones.
  */
 export function lineasDevengoNomina(s: SumasCorrida, c: CuentasNomina): LineaAsiento[] {
+  const propios = (tipo: ConceptoAsiento['tipo']) => (s.conceptos ?? []).filter((x) => x.tipo === tipo && x.montoCents > 0);
+  const ingresos = propios('ingreso');
+  const descuentos = propios('descuento');
+  const sumaIngresos = ingresos.reduce((t, x) => t + x.montoCents, 0);
+  const sumaDescuentos = descuentos.reduce((t, x) => t + x.montoCents, 0);
   return sinCeros([
-    { cuentaId: c.gastoSueldos, debeCents: s.brutoCents, haberCents: 0, descripcion: 'Sueldos del período' },
+    { cuentaId: c.gastoSueldos, debeCents: s.brutoCents - sumaIngresos, haberCents: 0, descripcion: 'Sueldos del período' },
+    ...ingresos.flatMap((x) => {
+      const reserva = x.reservaCuentaId && x.reservaUsadaCents ? Math.max(0, Math.min(x.reservaUsadaCents, x.montoCents)) : 0;
+      return [
+        ...(reserva > 0 ? [{ cuentaId: x.reservaCuentaId as number, debeCents: reserva, haberCents: 0, descripcion: `Reserva de ${x.reservaClave ?? 'provisión'} usada: ${x.nombre}` }] : []),
+        { cuentaId: x.cuentaId, debeCents: x.montoCents - reserva, haberCents: 0, descripcion: x.nombre },
+      ];
+    }),
     ...gastoDeAportes(s, c),
     ...retencionesDelEmpleado(s, c),
     { cuentaId: c.isr, debeCents: 0, haberCents: s.isrCents, descripcion: 'ISR de asalariados por pagar (DGII)' },
-    { cuentaId: c.otrasDeducciones, debeCents: 0, haberCents: s.otrasDeduccionesCents, descripcion: 'Otras deducciones por pagar' },
+    { cuentaId: c.otrasDeducciones, debeCents: 0, haberCents: s.otrasDeduccionesCents - sumaDescuentos, descripcion: 'Otras deducciones por pagar' },
+    ...descuentos.map((x) => ({ cuentaId: x.cuentaId, debeCents: 0, haberCents: x.montoCents, descripcion: x.nombre })),
     { cuentaId: c.aportesTss, debeCents: 0, haberCents: s.aportesTssCents, descripcion: 'Aportes patronales TSS por pagar' },
     { cuentaId: c.infotep, debeCents: 0, haberCents: s.infotepCents, descripcion: 'INFOTEP por pagar' },
     { cuentaId: c.sueldosPorPagar, debeCents: 0, haberCents: s.netoCents, descripcion: 'Sueldos por pagar' },
+  ]);
+}
+
+/**
+ * Devengo de una corrida de REGALÍA pascual:
+ *
+ *   DEBE  Regalía por pagar (la reserva)   lo que ya se había provisionado, hasta el bruto
+ *   DEBE  Gasto de regalía                 lo que falta: el bruto menos la reserva usada
+ *   HABER ISR de asalariados por pagar     el ISR de lo gravado
+ *   HABER Sueldos por pagar                el neto
+ *
+ * La regalía no lleva TSS ni aportes patronales. Si no hay reserva (la empresa no
+ * provisiona, o ya se gastó), todo va al gasto.
+ */
+export function lineasDevengoRegalia(
+  s: { brutoCents: number; reservaCents: number; isrCents: number; netoCents: number },
+  c: { gastoRegalia: number; regaliaPorPagar: number | null; isr: number; sueldosPorPagar: number },
+): LineaAsiento[] {
+  const reserva = c.regaliaPorPagar === null ? 0 : Math.max(0, Math.min(s.reservaCents, s.brutoCents));
+  return sinCeros([
+    { cuentaId: c.regaliaPorPagar ?? c.gastoRegalia, debeCents: reserva, haberCents: 0, descripcion: 'Regalía pascual: se usa la reserva acumulada' },
+    { cuentaId: c.gastoRegalia, debeCents: s.brutoCents - reserva, haberCents: 0, descripcion: 'Regalía pascual (gasto no provisionado)' },
+    { cuentaId: c.isr, debeCents: 0, haberCents: s.isrCents, descripcion: 'ISR de la regalía por pagar (DGII)' },
+    { cuentaId: c.sueldosPorPagar, debeCents: 0, haberCents: s.netoCents, descripcion: 'Regalía por pagar a los empleados' },
   ]);
 }
 
@@ -233,3 +289,14 @@ export function lineasProvisionNomina(
     { cuentaId: c.cesantiaPasivo, debeCents: 0, haberCents: p.cesantiaCents, descripcion: 'Cesantía provisionada' },
   ]);
 }
+
+/**
+ * Cómo se reconocen en el libro las líneas de cada reserva: la descripción con que se PROVISIONA y las
+ * (patrones de) descripciones con que se CONSUME. El saldo disponible de una reserva se mide con ellas,
+ * no con el saldo de la cuenta de pasivo, que puede ser compartida con proveedores.
+ */
+export const RESERVAS = {
+  regalia: { provision: 'Regalía pascual por pagar', consumos: ['Regalía pascual: se usa la reserva%', 'Reserva de regalia usada:%'] },
+  vacaciones: { provision: 'Vacaciones por pagar', consumos: ['Reserva de vacaciones usada:%'] },
+  cesantia: { provision: 'Cesantía provisionada', consumos: ['Reserva de cesantia usada:%'] },
+} as const;

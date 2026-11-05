@@ -76,6 +76,8 @@ export const CATALOGO_BASE: CuentaBase[] = [
   // menor ingreso — la venta fue por el total.
   { codigo: '1107', nombre: 'Retenciones por cobrar',      tipo: 'activo', imputable: true },
   // Activo no corriente: los bienes de larga vida y su depreciación (Nivel 4.2).
+  // Avances de sueldo y préstamos a empleados: el descuento de nómina los va saldando.
+  { codigo: '1108', nombre: 'Cuentas por cobrar a empleados', tipo: 'activo', imputable: true },
   { codigo: '12',   nombre: 'Activo no corriente',          tipo: 'activo', imputable: false },
   { codigo: '1201', nombre: 'Activos fijos',                tipo: 'activo', imputable: true },
   // Contra-activo: es activo pero RESTA (acumula lo depreciado). Naturaleza
@@ -295,4 +297,5 @@ export const CODIGO = {
   gastoRegalia:       '6106',
   gastoVacaciones:    '6107',
   gastoCesantia:      '6108',
+  cuentaPorCobrarEmpleados: '1108',
 } as const;

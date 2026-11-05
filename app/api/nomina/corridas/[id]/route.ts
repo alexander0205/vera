@@ -4,6 +4,9 @@ import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { empleados, nominaCorridas, nominaHoras, nominaLineas, nominaObligaciones } from '@/lib/db/schema';
 import { frecuenciaDeTipo, normalizarTipoCorrida } from '@/lib/nomina/corrida';
+import { conceptosDeCorrida } from '@/lib/nomina/conceptos-db';
+import { hoyRD } from '@/lib/utils/format';
+import { reponerEnRegaliaTrasRevertir, revertirLiquidacionDeCorrida } from '@/lib/nomina/liquidacion-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,7 +56,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         ))
     : [{ pendientes: 0 }];
 
-  return NextResponse.json({ corrida, lineas, obligaciones, horasPendientes: pendientes });
+  const conceptos = await conceptosDeCorrida(auth.teamId, id);
+
+  return NextResponse.json({ corrida, lineas, obligaciones, conceptos, horasPendientes: pendientes });
 }
 
 /**
@@ -68,18 +73,29 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const id = Number(idRaw);
   if (!Number.isInteger(id)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
-  const [corrida] = await db
-    .select()
-    .from(nominaCorridas)
-    .where(and(eq(nominaCorridas.id, id), eq(nominaCorridas.teamId, auth.teamId)))
-    .limit(1);
-
-  if (!corrida) return NextResponse.json({ error: 'Corrida no encontrada' }, { status: 404 });
-  if (corrida.estado !== 'borrador') {
-    return NextResponse.json({ error: 'Solo se puede eliminar una corrida en borrador' }, { status: 409 });
-  }
-
-  // Las líneas caen por ON DELETE CASCADE.
-  await db.delete(nominaCorridas).where(eq(nominaCorridas.id, id));
-  return NextResponse.json({ ok: true });
+  // Todo en una transacción con la corrida bloqueada: borrar la liquidación y devolver al empleado a
+  // como estaba (activo, sin fecha de salida) es una sola operación; si algo falla, no queda a medias.
+  const resultado = await db.transaction(async (tx) => {
+    const [corrida] = await tx
+      .select()
+      .from(nominaCorridas)
+      .where(and(eq(nominaCorridas.id, id), eq(nominaCorridas.teamId, auth.teamId)))
+      .limit(1)
+      .for('update');
+    if (!corrida) return 'no-existe' as const;
+    if (corrida.estado !== 'borrador') return 'no-borrador' as const;
+    const revertida = corrida.tipo === 'liquidacion' ? await revertirLiquidacionDeCorrida(auth.teamId, id, tx) : null;
+    // Las líneas caen por ON DELETE CASCADE.
+    await tx.delete(nominaCorridas).where(and(eq(nominaCorridas.id, id), eq(nominaCorridas.teamId, auth.teamId)));
+    return { ok: true as const, anio: revertida?.anio ?? null, empleadoId: revertida?.empleadoId };
+  });
+  if (resultado === 'no-existe') return NextResponse.json({ error: 'Corrida no encontrada' }, { status: 404 });
+  if (resultado === 'no-borrador') return NextResponse.json({ error: 'Solo se puede eliminar una corrida en borrador' }, { status: 409 });
+  // El empleado vuelve a la regalía de su año: si hay una corrida en borrador se recalcula; si no, hay que generarla.
+  const aviso = resultado.anio ? await reponerEnRegaliaTrasRevertir(auth.teamId, resultado.anio, hoyRD(), resultado.empleadoId) : null;
+  return NextResponse.json({
+    ok: true,
+    ...(aviso?.pagarAparte ? { aviso: `La regalía de ${resultado.anio} ya está aprobada y este empleado no está en ella: hay que pagarle su regalía del año aparte.` } : {}),
+    ...(aviso?.hayQueRegenerar ? { aviso: `El empleado vuelve a la regalía de ${resultado.anio}: si ya no hay una corrida de regalía en borrador, genérala de nuevo para incluirlo.` } : {}),
+  });
 }
