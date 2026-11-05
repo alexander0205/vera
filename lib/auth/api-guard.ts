@@ -15,6 +15,7 @@ import { getUser, getTeamIdForUser, getTeamRoleForUser } from '@/lib/db/queries'
 import { type Permission } from '@/lib/config/roles';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { userHasModule, type ModuleKey } from '@/lib/auth/modules';
+import { auditarAccionPlataforma } from '@/lib/auth/plataforma-auditoria';
 import { bloquearSiSoloLectura } from '@/lib/suscripcion/guard';
 
 type SessionUser = NonNullable<Awaited<ReturnType<typeof getUser>>>;
@@ -73,6 +74,9 @@ export async function requirePermission(
   if (!(await userCanForTeam(teamId, user.platformRole, teamRole, permission))) {
     return { ok: false, response: NextResponse.json({ error: 'Sin permiso' }, { status: 403 }) };
   }
+
+  // El equipo de Zero entra a cualquier empresa; lo que cambia queda con su usuario.
+  auditarAccionPlataforma(user, teamId, permission);
 
   if (opts.escritura) {
     const bloqueo = await bloquearSiSoloLectura(teamId);

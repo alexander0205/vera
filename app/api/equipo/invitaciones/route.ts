@@ -11,6 +11,8 @@ import { eq, and, count } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { sendInvitationEmail } from '@/lib/email';
 import { listTeamRoles } from '@/lib/auth/permissions';
+import { rolEfectivoEnEmpresa } from '@/lib/auth/plataforma';
+import { auditarAccionPlataforma } from '@/lib/auth/plataforma-auditoria';
 import { puedeAgregarUsuario } from '@/lib/config/plans';
 import { bloquearSiSoloLectura } from '@/lib/suscripcion/guard';
 import { baseDeEnlaces } from '@/lib/config/enlaces';
@@ -41,10 +43,12 @@ export async function POST(req: NextRequest) {
       ))
       .limit(1);
 
-    if (!caller) return NextResponse.json({ error: 'No eres miembro de este equipo' }, { status: 403 });
-    if (caller.role !== 'owner' && caller.role !== 'admin') {
+    const rolCaller = rolEfectivoEnEmpresa(user, caller?.role);
+    if (!rolCaller) return NextResponse.json({ error: 'No eres miembro de este equipo' }, { status: 403 });
+    if (rolCaller !== 'owner' && rolCaller !== 'admin') {
       return NextResponse.json({ error: 'Sin permiso para invitar miembros' }, { status: 403 });
     }
+    auditarAccionPlataforma(user, teamId, 'equipo:invitar');
 
     // Sin plan vivo no se suma gente al equipo. Va antes del límite de
     // usuarios porque son dos preguntas distintas y en este orden: primero

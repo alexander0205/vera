@@ -21,6 +21,7 @@ import { db } from '@/lib/db/drizzle';
 import { teamRolePantallasOcultas, teamRoles } from '@/lib/db/schema';
 import { listTeamRoles } from '@/lib/auth/permissions';
 import { normalizeRoleKey } from '@/lib/config/roles';
+import { esAdminPlataforma } from '@/lib/auth/plataforma';
 import { esPantalla } from '@/lib/config/pantallas';
 import { cachearPorTag, invalidarPantallas, tagPantallas } from '@/lib/cache/escolar';
 
@@ -57,7 +58,7 @@ export const pantallasOcultasDe = cache(async (
   teamRole: string | null | undefined,
 ): Promise<string[]> => {
   const key = normalizeRoleKey(teamRole);
-  if (platformRole === 'admin' || !key || key === 'owner') return [];
+  if (esAdminPlataforma({ platformRole }) || !key || key === 'owner') return [];
   try {
     return await cachearPorTag(
       () => leerOcultas(teamId, key),

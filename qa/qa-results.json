@@ -1325,7 +1325,7 @@
   {
     "id": "PERM-08",
     "status": "pass",
-    "notes": "Platform admin (alexander.ferreras@yisraeltech.com / Admin1234!) accede a /admin correctamente. Dashboard Admin muestra: 5 usuarios, 5 empresas, 21 e-CFs, 21 este mes. Tabs: Dashboard, Usuarios, Empresas, Logs. Full panel accesible.",
+    "notes": "Platform admin (<correo-de-prueba> / <contraseña-de-prueba>) accede a /admin correctamente. Dashboard Admin muestra: 5 usuarios, 5 empresas, 21 e-CFs, 21 este mes. Tabs: Dashboard, Usuarios, Empresas, Logs. Full panel accesible.",
     "screenshot": null,
     "ts": "2026-05-16T23:07:42Z"
   },

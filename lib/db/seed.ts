@@ -9,14 +9,18 @@ import { db } from './drizzle';
 import { users, teams, teamMembers, clients, sequences } from './schema';
 import { hashPassword } from '@/lib/auth/session';
 import { TEST_CONTRIBUYENTE } from '@/lib/config/test-data';
+import { credencialDeSiembra, mostrarCredencialUnaVez } from './credenciales-seed';
 
 async function seed() {
   console.log('🌱 Iniciando seed de EmiteDO...\n');
 
   // ─── Usuario de prueba ────────────────────────────────────────────────────
-  const email = 'admin@emitedo.test';
-  const password = 'Admin1234!';
-  const passwordHash = await hashPassword(password);
+  // Sin contraseñas escritas en el código: de SEED_PASSWORD (mín. 12 caracteres)
+  // o, si no está, una al azar que se muestra una sola vez al terminar.
+  const email = process.env.SEED_ADMIN_EMAIL?.trim() || 'admin@emitedo.test';
+  const ownerEmail = process.env.SEED_OWNER_EMAIL?.trim() || 'owner@emitedo.test';
+  const credencial = credencialDeSiembra('SEED_PASSWORD');
+  const passwordHash = await hashPassword(credencial.valor);
 
   const [user] = await db
     .insert(users)
@@ -28,7 +32,7 @@ async function seed() {
     })
     .returning();
 
-  console.log(`✓ Usuario creado: ${email} / ${password}`);
+  console.log(`✓ Usuario creado: ${email}`);
 
   // ─── Empresa / Tenant (RNC de prueba) ────────────────────────────────────
   const [team] = await db
@@ -61,8 +65,8 @@ async function seed() {
     .insert(users)
     .values({
       name: 'Owner EmiteDO',
-      email: 'owner@emitedo.test',
-      passwordHash,                 // mismo password: Admin1234!
+      email: ownerEmail,
+      passwordHash,                 // misma contraseña que el admin (la de SEED_PASSWORD o la generada)
       platformRole: 'member',
     })
     .returning();
@@ -71,7 +75,8 @@ async function seed() {
     userId: ownerUser.id,
     role: 'owner',
   });
-  console.log('✓ Usuario owner creado: owner@emitedo.test / Admin1234!');
+  console.log(`✓ Usuario owner creado: ${ownerEmail}`);
+  mostrarCredencialUnaVez('Contraseña de ambos usuarios', credencial);
 
   // ─── Cliente de prueba ────────────────────────────────────────────────────
   const clientesData = [
@@ -119,7 +124,7 @@ async function seed() {
   console.log('\n─────────────────────────────────────────');
   console.log('✅ Seed completado. Credenciales de prueba:');
   console.log(`   Email:    ${email}`);
-  console.log(`   Password: ${password}`);
+  console.log(credencial.generada ? '   Password: la generada arriba (no se vuelve a mostrar)' : '   Password: la de SEED_PASSWORD');
   console.log(`   URL:      http://localhost:3000/sign-in`);
   console.log('─────────────────────────────────────────\n');
 }

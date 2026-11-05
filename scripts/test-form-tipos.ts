@@ -5,8 +5,8 @@
 import { chromium, type Browser, type Page } from '@playwright/test';
 
 const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:3002';
-const EMAIL = 'alexander.ferreras@yisraeltech.com';
-const PASSWORD = 'Admin1234!';
+const EMAIL = process.env.E2E_EMAIL ?? '';
+const PASSWORD = process.env.E2E_PASSWORD ?? '';
 
 interface R { tipo: string; step: string; ok: boolean; detail?: string; }
 const results: R[] = [];

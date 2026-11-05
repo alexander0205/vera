@@ -19,6 +19,7 @@ import { descontarInventario } from '@/lib/inventario/descuento';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { auditarAccionPlataforma } from '@/lib/auth/plataforma-auditoria';
 import { getDgiiReadiness } from '@/lib/ecf/readiness';
 import { requireTurnoAbierto, configCaja } from '@/lib/caja/guard';
 import { calcularTotales } from '@/lib/ecf/types';
@@ -109,6 +110,7 @@ export async function POST(
       db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
       db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
     ]);
+    auditarAccionPlataforma(user, teamId, 'facturas:emitir-dgii');
     if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'facturas:emitir-dgii')) {
       return NextResponse.json({ error: 'Sin permiso para emitir a la DGII' }, { status: 403 });
     }

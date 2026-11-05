@@ -14,6 +14,7 @@
 
 import { cache } from 'react';
 import { eq, inArray } from 'drizzle-orm';
+import { esAdminPlataforma } from '@/lib/auth/plataforma';
 import { db } from '@/lib/db/drizzle';
 import { teamRoles, teamRolePermissions } from '@/lib/db/schema';
 import {
@@ -97,7 +98,7 @@ export async function userCanForTeam(
   teamRole: string | null | undefined,
   permission: Permission,
 ): Promise<boolean> {
-  if (platformRole === 'admin') return true;
+  if (esAdminPlataforma({ platformRole })) return true;
   const perms = await getEffectivePermissions(teamId, teamRole);
   return perms.includes(permission);
 }

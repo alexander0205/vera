@@ -7,6 +7,8 @@ import { db } from '@/lib/db/drizzle';
 import { teamMembers, invitations } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { rolEfectivoEnEmpresa } from '@/lib/auth/plataforma';
+import { auditarAccionPlataforma } from '@/lib/auth/plataforma-auditoria';
 
 export async function DELETE(
   _req: NextRequest,
@@ -26,10 +28,12 @@ export async function DELETE(
       .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
       .limit(1);
 
-    if (!callerMember) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
-    if (callerMember.role !== 'owner' && callerMember.role !== 'admin') {
+    const rolCaller = rolEfectivoEnEmpresa(user, callerMember?.role);
+    if (!rolCaller) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+    if (rolCaller !== 'owner' && rolCaller !== 'admin') {
       return NextResponse.json({ error: 'Sin permiso' }, { status: 403 });
     }
+    auditarAccionPlataforma(user, teamId, 'equipo:cancelar-invitacion');
 
     const { id } = await params;
     const invId = parseInt(id);

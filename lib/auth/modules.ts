@@ -9,7 +9,8 @@
  *
  *   acceso efectivo = módulo activo en la empresa ∩ permiso del rol
  *
- * platform admin → siempre todos los módulos de la empresa (espejo de userCan).
+ * platform admin → TODOS los módulos del catálogo, estén o no activos en la
+ * empresa (espejo de userCan).
  * Catálogo y helpers puros (client-safe) en lib/config/modules.ts.
  * Memoizado por request vía React cache().
  */
@@ -21,7 +22,9 @@ import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { getEffectivePermissions } from '@/lib/auth/permissions';
 import type { Permission } from '@/lib/config/roles';
+import { esAdminPlataforma } from '@/lib/auth/plataforma';
 import {
+  MODULES,
   sanitizeModules,
   withBaseModules,
   withDependencies,
@@ -119,8 +122,11 @@ export async function getUserModules(
   platformRole: string | null | undefined,
   teamRole: string | null | undefined,
 ): Promise<ModuleKey[]> {
+  // El equipo de Zero ve TODOS los módulos de cualquier empresa, los tenga
+  // activos o no: que el cliente no lo haya contratado es un asunto de plan, no
+  // una razón para no poder mirarlo. No cambia lo que la empresa tiene activo.
+  if (esAdminPlataforma({ platformRole })) return [...MODULES];
   const teamMods = await getTeamModules(teamId);
-  if (platformRole === 'admin') return teamMods;
   const perms = await getEffectivePermissions(teamId, teamRole);
   return teamMods.filter(m => perms.includes(MODULE_PERMISSION[m]));
 }

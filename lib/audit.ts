@@ -132,7 +132,11 @@ export type AuditAction =
   | 'ADMIN_PLATAFORMA_INVITADO'
   | 'ADMIN_PLATAFORMA_QUITADO'
   | 'ADMIN_PLATAFORMA_ENLACE'
-  | 'ADMIN_PLATAFORMA_PERFIL';
+  | 'ADMIN_PLATAFORMA_PERFIL'
+  // Alguien del equipo de Zero hizo una acción que cambia algo DENTRO de la
+  // empresa de un cliente (sin ser miembro). `team_id` es la empresa, `actor` y
+  // `user_id` son la persona real, `resource` es `permiso:<permiso>`.
+  | 'ADMIN_PLATAFORMA_EN_EMPRESA';
 
 export interface AuditParams {
   teamId:    number;

@@ -10,6 +10,7 @@
  */
 
 import { BILLING_ENABLED } from '@/lib/config/billing';
+import { esAdminPlataforma } from '@/lib/auth/plataforma';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -429,7 +430,7 @@ export function userCan(
   teamMemberRole: string | null | undefined,
   permission: Permission,
 ): boolean {
-  if (platformRole === 'admin') return true;
+  if (esAdminPlataforma({ platformRole })) return true;
   return roleHasPermission(teamMemberRole, permission);
 }
 

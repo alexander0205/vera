@@ -6,6 +6,8 @@
 import { test, expect } from '@playwright/test';
 
 const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
+// La contraseña del usuario sembrado sale del entorno (la de `pnpm db:seed`): no se escribe en el código.
+const E2E_PASSWORD = process.env.E2E_PASSWORD ?? '';
 const TEST_EMAIL = `test_${Date.now()}@emitedo.test`;
 const TEST_PASS = 'TestPass123!';
 
@@ -59,7 +61,7 @@ test('dashboard carga correctamente con sesión activa', async ({ page }) => {
   // Sign-in primero
   await page.goto(`${BASE}/sign-in`);
   await page.fill('input[name="email"]', 'owner@emitedo.test');
-  await page.fill('input[name="password"]', 'Admin1234!');
+  await page.fill('input[name="password"]', E2E_PASSWORD);
 
   await Promise.all([
     page.waitForURL(`${BASE}/dashboard`, { timeout: 10000 }),
@@ -79,7 +81,7 @@ test('sign-in con credenciales de prueba funciona', async ({ page }) => {
   await page.goto(`${BASE}/sign-in`);
 
   await page.fill('input[name="email"]', 'owner@emitedo.test');
-  await page.fill('input[name="password"]', 'Admin1234!');
+  await page.fill('input[name="password"]', E2E_PASSWORD);
 
   await Promise.all([
     page.waitForURL(`${BASE}/dashboard`, { timeout: 10000 }),
@@ -110,7 +112,7 @@ test('logout cierra sesión y redirige al home', async ({ page }) => {
   // Login primero
   await page.goto(`${BASE}/sign-in`);
   await page.fill('input[name="email"]', 'owner@emitedo.test');
-  await page.fill('input[name="password"]', 'Admin1234!');
+  await page.fill('input[name="password"]', E2E_PASSWORD);
 
   await Promise.all([
     page.waitForURL(`${BASE}/dashboard`, { timeout: 10000 }),
