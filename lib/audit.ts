@@ -117,10 +117,12 @@ export type AuditAction =
   // nuevo. Es de la plataforma, no de una empresa: va con team_id vacío, el
   // `actor` es quien lo hizo y el `resource` es `user:<id>` de a quién. Se
   // escribe en la misma transacción que el cambio (lib/auth/equipo-zero.ts).
+  // `ADMIN_PLATAFORMA_PERFIL`: cambió la foto o el cargo de alguien del equipo.
   | 'ADMIN_PLATAFORMA_AGREGADO'
   | 'ADMIN_PLATAFORMA_INVITADO'
   | 'ADMIN_PLATAFORMA_QUITADO'
-  | 'ADMIN_PLATAFORMA_ENLACE';
+  | 'ADMIN_PLATAFORMA_ENLACE'
+  | 'ADMIN_PLATAFORMA_PERFIL';
 
 export interface AuditParams {
   teamId:    number;

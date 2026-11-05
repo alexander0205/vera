@@ -80,6 +80,7 @@ describe('rutas de /api/admin', () => {
     const conOrigen = [
       ['app', 'api', 'admin', 'equipo', 'route.ts'],
       ['app', 'api', 'admin', 'equipo', '[id]', 'route.ts'],
+      ['app', 'api', 'admin', 'equipo', '[id]', 'perfil', 'route.ts'],
       ['app', 'api', 'admin', 'notificaciones', 'leidas', 'route.ts'],
       ['app', 'api', 'admin', 'notificaciones', 'push', 'route.ts'],
     ];

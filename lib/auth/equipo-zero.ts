@@ -21,6 +21,7 @@ import { and, asc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLogs, passwordResetTokens, platformOwners, users } from '@/lib/db/schema';
 import { hashPassword } from '@/lib/auth/session';
+import { perfilesDelEquipo } from './equipo-zero-perfil';
 import type { AuditAction } from '@/lib/audit';
 import {
   evaluarCambioDeEquipo, metaDeAuditoria,
@@ -55,6 +56,10 @@ export interface MiembroEquipo {
   creadoEn: Date;
   /** Tiene un enlace para crear o cambiar contraseña sin usar y vigente. */
   enlacePendienteHasta: Date | null;
+  /** Su cargo en el equipo («Soporte técnico»…), si lo puso (0218). */
+  cargo: string | null;
+  /** Versión de su foto, o `null` si no tiene (0218). */
+  fotoVersion: number | null;
 }
 
 /**
@@ -100,9 +105,11 @@ export async function listarEquipo(): Promise<{ miembros: MiembroEquipo[]; migra
     .where(and(inArray(passwordResetTokens.userId, ids), isNull(passwordResetTokens.usedAt), gt(passwordResetTokens.expiresAt, new Date())))
     .groupBy(passwordResetTokens.userId);
   const pendiente = new Map(enlaces.map((e) => [e.userId, new Date(e.hasta)]));
+  const perfiles = await perfilesDelEquipo(ids);
 
   const miembros = filas.map((f): MiembroEquipo => ({
     ...f, esDueno: duenos.has(f.id), enlacePendienteHasta: pendiente.get(f.id) ?? null,
+    cargo: perfiles.get(f.id)?.cargo ?? null, fotoVersion: perfiles.get(f.id)?.fotoVersion ?? null,
   })).sort((a, b) => Number(b.esDueno) - Number(a.esDueno) || a.id - b.id);
   return { miembros, migracionPendiente };
 }
