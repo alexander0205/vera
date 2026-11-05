@@ -23,7 +23,7 @@ import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
 import {
   Activity, BarChart3, Bot, Building2, ClipboardList, Gauge, LayoutDashboard, ListChecks, LogOut, Menu as MenuIcon,
-  MessageCircle, ScrollText, ShieldCheck, Undo2, Users, UserCog,
+  MessageCircle, ScrollText, ShieldCheck, Undo2, Users, UserCircle, UserCog,
 } from 'lucide-react';
 import { IsotipoZero } from '@/components/marca-zero';
 import { CampanaNotificaciones } from '@/components/notificaciones/CampanaNotificaciones';
@@ -65,7 +65,7 @@ function activa(pathname: string, href: string): boolean {
   return href === '/admin' ? pathname === '/admin' : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export interface UsuarioShell { nombre: string | null; email: string; esDueno: boolean }
+export interface UsuarioShell { nombre: string | null; email: string; esDueno: boolean; cargo?: string | null; fotoUrl?: string | null }
 
 function Navegacion({ pathname, alNavegar }: { pathname: string; alNavegar?: () => void }) {
   return (
@@ -165,21 +165,29 @@ export function AdminShell({ usuario, estado, children }: { usuario: UsuarioShel
           <CampanaNotificaciones ambito="plataforma" />
           <Tooltip title={usuario.email}>
             <IconButton onClick={(e) => setAncla(e.currentTarget)} aria-label="Menú de tu cuenta" aria-haspopup="menu" size="small" sx={{ ml: 0.5 }}>
-              <Box sx={{ width: 32, height: 32, borderRadius: '50%', bgcolor: '#3658e1', color: '#fff', display: 'grid', placeItems: 'center', fontSize: '0.8125rem', fontWeight: 700 }}>
-                {inicial}
-              </Box>
+              {usuario.fotoUrl ? (
+                <Box component="img" src={usuario.fotoUrl} alt="" sx={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
+              ) : (
+                <Box sx={{ width: 32, height: 32, borderRadius: '50%', bgcolor: '#3658e1', color: '#fff', display: 'grid', placeItems: 'center', fontSize: '0.8125rem', fontWeight: 700 }}>
+                  {inicial}
+                </Box>
+              )}
             </IconButton>
           </Tooltip>
           <Menu anchorEl={ancla} open={Boolean(ancla)} onClose={() => setAncla(null)}
             slotProps={{ paper: { sx: { mt: 1, minWidth: 240, borderRadius: '12px', border: '1px solid #e5e7eb' } } }}>
             <Box sx={{ px: 2, py: 1.25 }}>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>{usuario.nombre?.trim() || 'Administrador'}</Typography>
+              {usuario.cargo && <Typography sx={{ fontSize: '0.75rem', color: '#374151' }}>{usuario.cargo}</Typography>}
               <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', wordBreak: 'break-all' }}>{usuario.email}</Typography>
               <Box sx={{ mt: 0.75, display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.25, borderRadius: '999px', bgcolor: usuario.esDueno ? '#eef2fe' : '#f3f4f6', color: usuario.esDueno ? '#2a45c4' : '#4b5563', fontSize: '0.6875rem', fontWeight: 600 }}>
                 <ShieldCheck size={12} /> {usuario.esDueno ? 'Dueño de la plataforma' : 'Administrador'}
               </Box>
             </Box>
             <Divider />
+            <MenuItem component={Link} href="/admin/equipo?perfil=1" onClick={() => setAncla(null)}>
+              <ListItemIcon><UserCircle size={16} /></ListItemIcon> Mi foto y cargo
+            </MenuItem>
             <MenuItem component={Link} href="/dashboard" onClick={() => setAncla(null)}>
               <ListItemIcon><ClipboardList size={16} /></ListItemIcon> Ir a mis empresas
             </MenuItem>

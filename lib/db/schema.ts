@@ -17,6 +17,7 @@ import {
   jsonb,
   numeric,
   primaryKey,
+  customType,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
@@ -4735,4 +4736,23 @@ export const platformOwners = pgTable('platform_owners', {
 export const notificacionesPlataformaLeidas = pgTable('notificaciones_plataforma_leidas', {
   userId:     integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
   leidoHasta: timestamp('leido_hasta').notNull().defaultNow(),
+});
+
+/** Bytes crudos de Postgres (`bytea`) como `Buffer`. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
+
+/**
+ * Foto y cargo de cada administrador de la plataforma (migración 0218). Aparte
+ * de `users` por lo mismo que `platformOwners`. La foto (256×256, pocos KB) va
+ * en la base y la sirve `/api/admin/equipo/:id/foto`; NUNCA se selecciona en
+ * los listados: ahí basta `fotoVersion`.
+ */
+export const equipoZeroPerfiles = pgTable('equipo_zero_perfiles', {
+  userId:         integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  cargo:          varchar('cargo', { length: 80 }),
+  foto:           bytea('foto'),
+  fotoTipo:       varchar('foto_tipo', { length: 20 }),
+  fotoVersion:    integer('foto_version').notNull().default(0),
+  actualizadoEn:  timestamp('actualizado_en').notNull().defaultNow(),
+  actualizadoPor: integer('actualizado_por').references(() => users.id, { onDelete: 'set null' }),
 });
