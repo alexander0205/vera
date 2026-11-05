@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useRutaNomina } from '@/lib/nomina/rutas';
 import useSWR from 'swr';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -78,7 +77,6 @@ const formInicial = () => ({
 
 export default function CorridasClient() {
   const router = useRouter();
-  const ruta = useRutaNomina();
   const { can } = usePermissions();
   const puedeCorrer = can('nomina:correr');
   const { data, isLoading, mutate } = useSWR<{ corridas: Corrida[] }>('/api/nomina/corridas', fetcher);
@@ -121,7 +119,7 @@ export default function CorridasClient() {
       setAbierto(false);
       setForm(formInicial());
       mutate();
-      if (j.corrida?.id) router.push(ruta(`/corridas/${j.corrida.id}`));
+      if (j.corrida?.id) router.push(`/nomina/corridas/${j.corrida.id}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
@@ -177,7 +175,7 @@ export default function CorridasClient() {
             const b = BADGE[c.estado] ?? BADGE.borrador;
             return (
               <Card key={c.id} className="cursor-pointer transition-colors hover:bg-muted/40"
-                onClick={() => router.push(ruta(`/corridas/${c.id}`))}>
+                onClick={() => router.push(`/nomina/corridas/${c.id}`)}>
                 <CardContent className="flex items-center gap-3 p-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">

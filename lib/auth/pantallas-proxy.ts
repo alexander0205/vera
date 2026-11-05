@@ -9,7 +9,7 @@
  *
  * Corre en CADA petición de página, así que tiene que ser barato:
  *  - Solo mira la base si la ruta es de una pantalla del catálogo
- *    (`pantallasDeRuta`, en memoria). El resto pasa sin consultar nada.
+ *    (`pantallaDeRuta`, en memoria). El resto pasa sin consultar nada.
  *  - Lo leído se guarda en memoria de la instancia `TTL_MS`: quien navega por
  *    el sistema no paga una consulta por clic. Un cambio en el panel se aplica
  *    en, como mucho, ese tiempo (el panel lo dice).
@@ -24,7 +24,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers, teamRolePantallasOcultas, teamRoles, users } from '@/lib/db/schema';
 import { normalizeRoleKey } from '@/lib/config/roles';
-import { esPantalla, pantallasDeRuta, type PantallaDef } from '@/lib/config/pantallas';
+import { esPantalla, pantallaDeRuta, type PantallaDef } from '@/lib/config/pantallas';
 
 const TTL_MS = 15_000;
 
@@ -75,9 +75,8 @@ export async function pantallaOcultaPara(
   activeTeamId: number | null | undefined,
   ruta: string,
 ): Promise<PantallaDef | null> {
-  // La suya y, si es espejo de otro módulo, la de allá (ver `pantallasDeRuta`).
-  const pantallas = pantallasDeRuta(ruta);
-  if (pantallas.length === 0) return null;
+  const pantalla = pantallaDeRuta(ruta);
+  if (!pantalla) return null;
   try {
     const m = await miembro(userId);
     if (m.platformRole === 'admin') return null;
@@ -86,10 +85,8 @@ export async function pantallaOcultaPara(
     const key = normalizeRoleKey(equipo?.role);
     if (!equipo || !key || key === 'owner') return null;
     const filas = await ocultasDelEquipo(equipo.teamId);
-    const delRol = new Set(filas
-      .filter(f => normalizeRoleKey(f.key) === key && esPantalla(f.pantalla))
-      .map(f => f.pantalla));
-    return pantallas.find(p => delRol.has(p.id)) ?? null;
+    const oculta = filas.some(f => f.pantalla === pantalla.id && normalizeRoleKey(f.key) === key && esPantalla(f.pantalla));
+    return oculta ? pantalla : null;
   } catch (err) {
     console.error('[pantallas/proxy] no se pudo comprobar; se deja pasar', err instanceof Error ? err.message : err);
     return null;

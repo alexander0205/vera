@@ -3,7 +3,6 @@ import { ModuleShell } from '@/components/module-shell';
 import { GuardPantalla } from '@/components/gobernanza/Gobernanza';
 import { requireModule, requirePermission } from '@/lib/auth/page-guard';
 import { pantallasOcultasDe } from '@/lib/auth/pantallas';
-import { getUserModules } from '@/lib/auth/modules';
 import { getTeamIdForUser, getTeamRoleForUser, getUser } from '@/lib/db/queries';
 import { exigirOnboarding } from '@/lib/onboarding/muro';
 
@@ -32,21 +31,14 @@ export default async function EscolarLayout({ children }: { children: React.Reac
   const [user, teamId, teamRole] = await Promise.all([
     getUser(), getTeamIdForUser(), getTeamRoleForUser(),
   ]);
-  const [ocultas, modulos] = teamId
-    ? await Promise.all([
-      pantallasOcultasDe(teamId, user?.platformRole, teamRole),
-      getUserModules(teamId, user?.platformRole, teamRole),
-    ])
-    : [[], []];
-  // La nómina vive también dentro de Gobernanza (/escolar/nomina).
-  const conNomina = modulos.includes('nomina');
+  const ocultas = teamId ? await pantallasOcultasDe(teamId, user?.platformRole, teamRole) : [];
 
   return (
     <ModuleShell
       current="escolar"
       user={user ?? null}
-      rail={<EscolarNavRail ocultas={ocultas} conNomina={conNomina} />}
-      railMovil={<EscolarNavRail variant="drawer" ocultas={ocultas} conNomina={conNomina} />}
+      rail={<EscolarNavRail ocultas={ocultas} />}
+      railMovil={<EscolarNavRail variant="drawer" ocultas={ocultas} />}
     >
       {/* `inicio`: en colegio.zero.com.do la barra dice «/» estando en /escolar. */}
       <GuardPantalla ocultas={ocultas} inicio="/escolar">{children}</GuardPantalla>

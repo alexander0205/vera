@@ -1,7 +1,6 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useRutaNomina } from '@/lib/nomina/rutas';
 import useSWR from 'swr';
 import { Loader2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,8 +13,7 @@ import { Plantilla, fetcher } from '../../shared';
  */
 export default function EditarPlantillaClient({ id }: { id: string }) {
   const router = useRouter();
-  const ruta = useRutaNomina();
-  const volver = () => router.push(ruta('/contratos'));
+  const volver = () => router.push('/nomina/contratos');
   const { data, isLoading } = useSWR<{ plantillas: Plantilla[] }>('/api/nomina/contratos/plantillas', fetcher);
   const plantilla = (data?.plantillas ?? []).find((p) => String(p.id) === id) ?? null;
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  PANTALLAS, esPantalla, pantallaDeRuta, pantallaOcultaEnRuta, pantallasDeRuta, primeraVisible, rutaOculta, veLaPantalla,
+  PANTALLAS, esPantalla, pantallaDeRuta, primeraVisible, rutaOculta, veLaPantalla,
 } from '@/lib/config/pantallas';
 
 /**
@@ -144,37 +144,5 @@ describe('el menú de Gobernanza y el catálogo de pantallas', () => {
     const linea = rail.split('\n').find((l) => l.includes("id: 'escolar-facturar'")) ?? '';
     expect(linea).toContain("href: '/escolar/facturar'");
     expect(linea).toContain("permiso: 'administracion-escolar:gestionar'");
-  });
-});
-
-describe('la nómina dentro de Gobernanza es espejo de Nómina', () => {
-  const ids = (ruta: string) => pantallasDeRuta(ruta).map(p => p.id);
-
-  it('cada ruta espejo cuenta para las dos pantallas', () => {
-    expect(ids('/escolar/nomina/empleados')).toEqual(['escolar-nomina', 'nomina-empleados']);
-    expect(ids('/escolar/nomina/corridas/9')).toEqual(['escolar-nomina', 'nomina-corridas']);
-    expect(ids('/escolar/nomina')).toEqual(['escolar-nomina', 'nomina-panorama']);
-    expect(ids('/nomina/contratos/nueva')).toEqual(['nomina-contratos', 'escolar-nomina']);
-  });
-
-  it('ocultar «Empleados» de Nómina la oculta también entrando por Gobernanza', () => {
-    expect(rutaOculta('/escolar/nomina/empleados', ['nomina-empleados'])).toBe(true);
-    expect(rutaOculta('/escolar/nomina/empleados/3', ['nomina-empleados'])).toBe(true);
-    expect(pantallaOcultaEnRuta('/escolar/nomina/empleados', ['nomina-empleados'])?.id).toBe('nomina-empleados');
-  });
-
-  it('ocultar la Nómina de Gobernanza también cierra el módulo Nómina', () => {
-    expect(rutaOculta('/nomina/corridas', ['escolar-nomina'])).toBe(true);
-    expect(rutaOculta('/nomina', ['escolar-nomina'])).toBe(true);
-  });
-
-  it('ocultar una pantalla de nómina no tapa las demás', () => {
-    expect(rutaOculta('/escolar/nomina/corridas', ['nomina-empleados'])).toBe(false);
-    expect(rutaOculta('/escolar/estudiantes', ['nomina-empleados', 'escolar-nomina'])).toBe(false);
-  });
-
-  it('el aviso de pantalla oculta nunca se tapa a sí mismo', () => {
-    expect(rutaOculta('/nomina/pantalla-oculta', ['escolar-nomina', 'nomina-panorama'])).toBe(false);
-    expect(rutaOculta('/escolar/pantalla-oculta', ['escolar-nomina', 'nomina-panorama'])).toBe(false);
   });
 });
