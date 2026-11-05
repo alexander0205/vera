@@ -83,7 +83,7 @@ describe('que nadie pueda copiar el video', () => {
   it('la pantalla del admin explica cómo cerrar el video en Vimeo', () => {
     const s = leer('app', 'admin', 'academia', '_academia-client.tsx');
     assert.match(s, /No listado/);
-    assert.match(s, /apaga las descargas/);
+    assert.match(s, /apagar las descargas/);
     assert.match(s, /dominio de Zero/);
   });
 });
