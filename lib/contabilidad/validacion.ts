@@ -150,6 +150,8 @@ async function getMetodosUsadosSinCuenta(teamId: number): Promise<ClaveMetodo[]>
       LEFT JOIN payment_links pl
         ON pl.pago_recibido_id = p.id AND pl.team_id = p.team_id
       WHERE p.team_id = ${teamId}
+        -- Los cobros de migración no se asientan: no piden cuenta.
+        AND NOT p.de_migracion
     )
     SELECT u.clave
     FROM usados u

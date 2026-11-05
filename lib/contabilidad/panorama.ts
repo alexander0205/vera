@@ -65,7 +65,7 @@ export const MODULOS_CONTABLES: ModuloContable[] = [
     clave: 'facturacion', label: 'Facturación',
     descripcion: 'Cada factura, nota de crédito, cobro y anulación genera su asiento.',
     fuentes: [
-      { origen: 'factura', label: 'Facturas de venta', pendientes: ['ventas'] },
+      { origen: 'factura', label: 'Facturas de venta', pendientes: ['ventas', 'saldos_iniciales'] },
       { origen: 'nota', label: 'Notas de crédito', pendientes: ['notas'] },
       { origen: 'pago', label: 'Cobros', pendientes: ['cobros'] },
       { origen: 'anulacion', label: 'Anulaciones', pendientes: ['anulaciones'] },

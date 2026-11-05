@@ -120,6 +120,8 @@ export async function POST(req: NextRequest) {
         fechaPago:     d.fechaEmision,
         notas:         'Pago previo (importado con cuenta histórica)',
         createdBy:     user.id,
+        // Se cobró en el sistema anterior: contabilidad no lo asienta.
+        deMigracion:   true,
       });
       pagoInicial = result.pago;
     }
