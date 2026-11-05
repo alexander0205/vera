@@ -110,6 +110,10 @@ export type AuditAction =
   | 'CONTABILIDAD_MOVIMIENTO_BANCARIO'
   // Contabilidad: la baja de un activo fijo (saca costo y depreciación del libro).
   | 'CONTABILIDAD_ACTIVO_BAJA'
+  // Gobernanza: unidades de un activo pasan de un aula a otra (a veces dividen la ficha).
+  | 'ESCOLAR_ACTIVO_TRASLADO'
+  // Gobernanza: se creó, cambió o borró un espacio de la planta física, o se asignaron sus secciones.
+  | 'ESCOLAR_ESPACIO_CAMBIO'
   // Un correo de suscripción ya enviado (cuenta activada, prueba por vencer,
   // pago recibido). Su `resource` es la llave que evita mandarlo dos veces:
   // ver `claveAviso` en lib/suscripcion/datos-aviso.ts.
