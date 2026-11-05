@@ -67,6 +67,47 @@ export async function sendPasswordResetEmail(
 }
 
 /**
+ * Aviso a quien acaba de recibir acceso de administrador de la plataforma
+ * (`/admin/equipo`). Con `token` es una cuenta nueva: el botón lleva a crear su
+ * contraseña (el mismo enlace de restablecer, de un solo uso). Sin `token` es
+ * una cuenta que ya existía: solo se le avisa, y vale también como alarma si
+ * alguien se enteró de un acceso que no esperaba.
+ */
+export async function sendAdminAccessEmail(
+  email: string,
+  nombre: string | null,
+  opts: { token?: string | null; otorgadoPor: string | null },
+) {
+  const base = baseDeEnlaces();
+  const url = opts.token
+    ? `${base}/reset-password?token=${encodeURIComponent(opts.token)}`
+    : `${base}/admin`;
+  const safeName = escapeHtml(nombre);
+  const quien = escapeHtml(opts.otorgadoPor) || 'El dueño de Zero';
+  const res = await resend.emails.send({
+    from: 'Zero <noreply@zero.com.do>',
+    to: email,
+    subject: 'Acceso al panel de administración de Zero',
+    html: `
+      <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
+        <h2 style="color: #2a45c4;">Eres administrador de Zero</h2>
+        <p>Hola${safeName ? ` ${safeName}` : ''},</p>
+        <p>${quien} te dio acceso de administrador a la plataforma Zero: ves todas las empresas, puedes crear nuevas y usar el panel interno.</p>
+        <p>
+          <a href="${escapeHtml(url)}" style="background:#2a45c4;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
+            ${opts.token ? 'Crear mi contraseña' : 'Abrir el panel'}
+          </a>
+        </p>
+        <p style="color:#6b7280;font-size:14px;">${opts.token
+          ? 'Este enlace es de un solo uso y expira en 1 hora. Si ya venció, pide uno nuevo a quien te invitó.'
+          : 'Si no esperabas este acceso, responde a este correo.'}</p>
+      </div>
+    `,
+  });
+  assertSent(res, 'sendAdminAccessEmail');
+}
+
+/**
  * Alerta de errores por email a devs — complemento de enviarAlertaSlack
  * (lib/slack.ts). Fire-and-forget: nunca lanza, solo loguea si falla, para
  * no romper el flujo que la dispara (ver alertar-error/route.ts).

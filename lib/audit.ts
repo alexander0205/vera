@@ -111,7 +111,16 @@ export type AuditAction =
   // a otro porque la descarga de SIGERD lo pone en el segundo. Cambia lo que se
   // le cobra de ahí en adelante, así que cada movimiento deja su fila: el
   // `resource` es `matricula:<id>` y el meta lleva curso de origen y de destino.
-  | 'ESCOLAR_MATRICULA_MOVIDA_SIGERD';
+  | 'ESCOLAR_MATRICULA_MOVIDA_SIGERD'
+  // Equipo de Zero (/admin/equipo): un administrador de la plataforma se agrega,
+  // se invita con una cuenta nueva, se quita, o se le manda un enlace de acceso
+  // nuevo. Es de la plataforma, no de una empresa: va con team_id vacío, el
+  // `actor` es quien lo hizo y el `resource` es `user:<id>` de a quién. Se
+  // escribe en la misma transacción que el cambio (lib/auth/equipo-zero.ts).
+  | 'ADMIN_PLATAFORMA_AGREGADO'
+  | 'ADMIN_PLATAFORMA_INVITADO'
+  | 'ADMIN_PLATAFORMA_QUITADO'
+  | 'ADMIN_PLATAFORMA_ENLACE';
 
 export interface AuditParams {
   teamId:    number;

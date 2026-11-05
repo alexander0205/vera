@@ -19,6 +19,7 @@ import { SOPORTE } from '@/lib/config/soporte';
 import { armarCorreoResumenIa, armarCorreoTarea, enviarAvisoTarea, urlDeTarea, type CorreoTarea } from '@/lib/email/escolar-tareas';
 import { avisarTareaEnSlack } from './tareas-slack';
 import { notificarTarea } from '@/lib/notificaciones/tareas';
+import { notificarEquipoZeroDeTarea } from '@/lib/notificaciones/plataforma';
 import { avisarTareaPorWhatsApp } from '@/lib/notificaciones/whatsapp-tareas';
 import {
   aQuienAvisar, AUTOR_SOPORTE, DE_COLEGIO, esFirmaSoporte, DESTINO, etiquetaAsignada, HORAS_SIN_RESPUESTA, PENDIENTES,
@@ -410,6 +411,14 @@ export async function avisarDeTarea(
     await notificarTarea(teamId, usuarios, {
       cambio: aviso, tareaId, titulo: t.titulo, autor: autor.nombre, texto,
     }, fila.colegio);
+    // Cuando le toca a Soporte, también a la campana del panel de TODO el equipo
+    // de Zero (no solo a la dirección compartida del correo). Campana y push,
+    // nunca WhatsApp: ver lib/notificaciones/plataforma.ts.
+    if (soporte) {
+      await notificarEquipoZeroDeTarea(teamId, {
+        cambio: aviso, tareaId, titulo: t.titulo, autor: autor.nombre, texto,
+      }, fila.colegio, { autorUserId: autor.userId, yaAvisados: usuarios });
+    }
     await avisarTareaPorWhatsApp(usuarios, {
       colegio: fila.colegio, cambio: aviso, autor: autor.nombre, titulo: t.titulo, url: urlDeTarea(tareaId),
     });

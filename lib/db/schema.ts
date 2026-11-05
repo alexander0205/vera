@@ -4718,3 +4718,21 @@ export const pushSuscripciones = pgTable('push_suscripciones', {
 
 export type Notificacion = typeof notificaciones.$inferSelect;
 export type PushSuscripcion = typeof pushSuscripciones.$inferSelect;
+
+// ─── Equipo Zero: dueños de la plataforma y campana del panel (0216) ─────────
+
+/**
+ * Los DUEÑOS de la plataforma: admins que además pueden agregar y quitar a
+ * otros admins desde `/admin/equipo`. Aparte de `users` a propósito (ver la
+ * migración 0216). Se administra a mano; la pantalla solo lo lee.
+ */
+export const platformOwners = pgTable('platform_owners', {
+  userId:    integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+/** Hasta cuándo ha visto cada admin la campana del panel (todas las empresas). */
+export const notificacionesPlataformaLeidas = pgTable('notificaciones_plataforma_leidas', {
+  userId:     integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  leidoHasta: timestamp('leido_hasta').notNull().defaultNow(),
+});
