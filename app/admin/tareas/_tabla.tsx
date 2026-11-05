@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Avatar from '@mui/material/Avatar';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
@@ -12,6 +13,7 @@ import type { GridColDef } from '@mui/x-data-grid';
 import { ExternalLink, Sparkles } from 'lucide-react';
 import { TablaServidor, type EstadoTabla, type FiltroUI } from '@/components/admin/TablaServidor';
 import type { FilaTarea } from '@/lib/admin/tablas';
+import { etiquetaAtiende, inicialesDe } from '@/lib/administracion-escolar/tareas-equipo';
 import { fechaDeDia, fechaRelativa as cuandoLlego } from '@/lib/admin/fecha';
 
 const ESTADO = {
@@ -77,6 +79,20 @@ export function TablaTareas(p: {
         : <Typography noWrap sx={{ fontSize: '0.8125rem', color: '#374151' }}>{row.asignadaNombre ?? 'Una persona del colegio'}</Typography>,
     },
     {
+      field: 'atiende', headerName: 'La atiende', width: 170, sortable: false,
+      valueGetter: (_v, row) => (row.atiende ? etiquetaAtiende(row.atiende) : ''),
+      renderCell: ({ row }) => row.atiende
+        ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+            <Avatar src={row.atiende.fotoUrl ?? undefined} alt="" sx={{ width: 22, height: 22, fontSize: '0.625rem', bgcolor: '#eef2fe', color: '#2a45c4', fontWeight: 700 }}>
+              {inicialesDe(row.atiende.nombre)}
+            </Avatar>
+            <Typography noWrap sx={{ fontSize: '0.8125rem', color: '#374151' }}>{etiquetaAtiende(row.atiende)}</Typography>
+          </Box>
+        )
+        : <Box component="span" sx={{ color: '#9ca3af' }}>—</Box>,
+    },
+    {
       field: 'estado', headerName: 'Estado', width: 115,
       renderCell: ({ row }) => <Chip size="small" label={ESTADO[row.estado].texto} sx={{ bgcolor: ESTADO[row.estado].fondo, color: ESTADO[row.estado].color, fontWeight: 600, fontSize: '0.6875rem', height: 22 }} />,
     },
@@ -108,6 +124,7 @@ export function TablaTareas(p: {
         { valor: 'en_proceso', etiqueta: 'En proceso' }, { valor: 'en_revision', etiqueta: 'En revisión' }, { valor: 'completada', etiqueta: 'Completadas' }, { valor: 'todas', etiqueta: 'Todas' },
       ],
     },
+    { id: 'atiende', etiqueta: 'Atiende', tipo: 'select', todos: 'Todas', opciones: [{ valor: 'mias', etiqueta: 'Mis tareas' }] },
     { id: 'colegio', etiqueta: 'Colegio', tipo: 'select', todos: 'Todos los colegios', opciones: p.colegios.map((c) => ({ valor: String(c.id), etiqueta: c.nombre })) },
     { id: 'asignada', etiqueta: 'Asignada a', tipo: 'select', todos: 'Cualquiera', opciones: [{ valor: 'soporte', etiqueta: 'Soporte IT · Zero' }, { valor: 'persona', etiqueta: 'Una persona del colegio' }] },
     { id: 'vence', etiqueta: 'Vencimiento', tipo: 'select', todos: 'Cualquiera', opciones: [{ valor: 'vencidas', etiqueta: 'Vencidas' }, { valor: 'hoy', etiqueta: 'Vencen hoy' }, { valor: '7dias', etiqueta: 'Próximos 7 días' }, { valor: 'sin_fecha', etiqueta: 'Sin fecha' }] },
@@ -123,7 +140,7 @@ export function TablaTareas(p: {
               <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#2a45c4' }}>Tarea #{r.id} · {r.colegio}</Typography>
               <Typography sx={{ fontWeight: 600, color: '#111827' }}>{r.titulo}</Typography>
               <Typography sx={{ fontSize: '0.8125rem', color: '#4b5563' }}>
-                {ESTADO[r.estado].texto} · {r.asignadaA === 'soporte' ? 'Soporte IT · Zero' : (r.asignadaNombre ?? 'una persona del colegio')} · última actividad {cuandoLlego(r.actividad)}
+                {ESTADO[r.estado].texto} · {r.asignadaA === 'soporte' ? 'Soporte IT · Zero' : (r.asignadaNombre ?? 'una persona del colegio')}{r.atiende ? ` · la atiende ${etiquetaAtiende(r.atiende)}` : ''} · última actividad {cuandoLlego(r.actividad)}
               </Typography>
             </Box>
             <BotonAbrir fila={r} grande />
@@ -135,7 +152,7 @@ export function TablaTareas(p: {
         campoDeOrden={{ actividad: 'actividad', vence: 'vence', creada: 'creada', colegio: 'colegio', estado: 'estado' }}
         ordenPorDefecto={{ campo: 'actividad', dir: 'desc' }} filtrosPorDefecto={{ estado: 'pendientes' }}
         filtros={filtros} busqueda="Buscar en el título de la tarea…"
-        ocultasEnMovil={['de', 'asignada', 'vence', 'actividad']}
+        ocultasEnMovil={['de', 'asignada', 'atiende', 'vence', 'actividad']}
         resaltarId={r?.id ?? null}
         vacio={{ titulo: 'No hay tareas pendientes', detalle: 'Cuando un colegio abra una tarea para Soporte, aparece aquí.' }}
       />

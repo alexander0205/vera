@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import { Check, Loader2, Plus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { PanelNuevaTarea, PanelTarea, Segmento, traer, TurnoChip } from '@/components/administracion-escolar/TareasEstudiante';
+import { PanelNuevaTarea, PanelTarea, QuienAtiende, Segmento, traer, TurnoChip } from '@/components/administracion-escolar/TareasEstudiante';
 import { PedirWhatsApp } from '@/components/notificaciones/PedirWhatsApp';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { ZERO_AI_TAREAS } from '@/lib/administracion-escolar/tareas-reglas';
@@ -235,6 +235,7 @@ export default function PorRevisarClient() {
                         {t.estado === 'en_proceso' && <span className="rounded bg-violet-50 px-1.5 py-0.5 font-semibold text-violet-800">En proceso</span>}
                         {t.estado === 'en_revision' && <span className="rounded bg-sky-50 px-1.5 py-0.5 font-semibold text-sky-800">En revisión</span>}
                         <TurnoChip turno={t.turno} />
+                        <QuienAtiende persona={t.atiende} chica />
                         <span className="rounded bg-gray-100 px-1.5 py-0.5">{t.de}</span>
                         <span className="inline-flex items-center gap-1">
                           <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold ${

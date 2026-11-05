@@ -70,5 +70,19 @@ export function puedeEditarPerfil(actor: { id: number; esDueno: boolean }, objet
   return actor.id === objetivoId || actor.esDueno;
 }
 
+/**
+ * La foto que se le sirve a un colegio: SOLO la de una cuenta que hoy es del
+ * equipo de Zero (administrador de plataforma, no borrada). La foto de
+ * cualquier otro usuario, o de alguien que ya no es del equipo, no sale.
+ */
+export function fotoServibleAColegios(
+  f: { platformRole: string | null; deletedAt: Date | null; foto: Uint8Array | null } | null | undefined,
+): { foto: Uint8Array; tipo: TipoFoto } | null {
+  if (!f || f.platformRole !== 'admin' || f.deletedAt != null || !f.foto) return null;
+  // El tipo se saca de los bytes: nunca se sirve como imagen algo que no lo es.
+  const tipo = tipoDeFoto(f.foto);
+  return tipo ? { foto: f.foto, tipo } : null;
+}
+
 /** La URL de la foto, con la versión para que el navegador la cachee sin enseñar una vieja. */
 export const urlFotoEquipo = (userId: number, version: number) => `/api/admin/equipo/${userId}/foto?v=${version}`;

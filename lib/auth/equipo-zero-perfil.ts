@@ -10,7 +10,7 @@ import 'server-only';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { auditLogs, equipoZeroPerfiles, platformOwners, users } from '@/lib/db/schema';
-import { puedeEditarPerfil, type TipoFoto } from './equipo-zero-perfil-reglas';
+import { fotoServibleAColegios, puedeEditarPerfil, type TipoFoto } from './equipo-zero-perfil-reglas';
 
 export interface PerfilEquipo {
   cargo: string | null;
@@ -47,6 +47,25 @@ export async function leerFotoEquipo(userId: number): Promise<{ foto: Buffer; ti
     }).from(equipoZeroPerfiles).where(eq(equipoZeroPerfiles.userId, userId)).limit(1);
     if (!f?.foto || !f.tipo) return null;
     return { foto: f.foto, tipo: f.tipo, version: f.version };
+  } catch (e) {
+    console.error('[equipo-zero] no se pudo leer la foto:', e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/**
+ * La foto de una persona del equipo para los colegios: `null` si esa cuenta no
+ * es del equipo de Zero, no tiene foto o falta la tabla. Nunca devuelve el
+ * correo ni otro dato de la persona.
+ */
+export async function leerFotoParaColegios(userId: number): Promise<{ foto: Uint8Array; tipo: TipoFoto } | null> {
+  try {
+    const [f] = await db.select({
+      platformRole: users.platformRole, deletedAt: users.deletedAt, foto: equipoZeroPerfiles.foto,
+    }).from(users)
+      .innerJoin(equipoZeroPerfiles, eq(equipoZeroPerfiles.userId, users.id))
+      .where(eq(users.id, userId)).limit(1);
+    return fotoServibleAColegios(f);
   } catch (e) {
     console.error('[equipo-zero] no se pudo leer la foto:', e instanceof Error ? e.message : e);
     return null;
