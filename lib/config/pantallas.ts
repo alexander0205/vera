@@ -123,8 +123,8 @@ export const PANTALLAS: PantallaDef[] = [
   fac({ grupo: 'Caja', id: 'fact-caja-aprobaciones', label: 'Aprobaciones', href: '/dashboard/caja/aprobaciones', descripcion: 'Cierres con descuadre' }),
   fac({ grupo: 'Caja', id: 'fact-caja-historial',    label: 'Historial de caja', href: '/dashboard/caja/historial', descripcion: 'Turnos anteriores' }),
 
-  fac({ grupo: 'Comprobantes', id: 'fact-secuencias-comp', label: 'Secuencias de comprobantes', href: '/dashboard/contabilidad/secuencias', descripcion: 'Rangos de e-NCF autorizados' }),
-  fac({ grupo: 'Comprobantes', id: 'fact-consulta-ncf',    label: 'Consulta de e-NCF', href: '/dashboard/contabilidad/consulta-ncf', descripcion: 'Verificar un comprobante ante la DGII' }),
+  fac({ grupo: 'Comprobantes', id: 'fact-secuencias-comp', label: 'Secuencias de comprobantes', href: '/dashboard/contabilidad/secuencias', rutas: ['/contabilidad/secuencias'], descripcion: 'Rangos de e-NCF autorizados' }),
+  fac({ grupo: 'Comprobantes', id: 'fact-consulta-ncf',    label: 'Consulta de e-NCF', href: '/dashboard/contabilidad/consulta-ncf', rutas: ['/contabilidad/consulta-ncf'], descripcion: 'Verificar un comprobante ante la DGII' }),
 
   fac({ grupo: 'Configuración', id: 'fact-empresa',      label: 'Mi empresa', href: '/dashboard/configuracion', exacta: true, descripcion: 'Datos fiscales y preferencias' }),
   fac({ grupo: 'Configuración', id: 'fact-maestros',     label: 'Maestros', href: '/dashboard/maestros', descripcion: 'Listas propias de atributos' }),
@@ -154,6 +154,7 @@ export const PANTALLAS: PantallaDef[] = [
   con({ grupo: 'Reportes', id: 'contabilidad-balance',          label: 'Balance de comprobación', href: '/contabilidad/balance', descripcion: 'Saldos por cuenta' }),
   con({ grupo: 'Reportes', id: 'contabilidad-resultados',       label: 'Estado de resultados', href: '/contabilidad/estado-resultados', descripcion: 'Ingresos, costos y gastos' }),
   con({ grupo: 'Reportes', id: 'contabilidad-balance-general',  label: 'Balance general', href: '/contabilidad/balance-general', descripcion: 'Activos, pasivos y capital' }),
+  con({ id: 'contabilidad-bancos',    label: 'Bancos y caja', href: '/contabilidad/bancos', descripcion: 'Libro banco, depósitos, transferencias y conciliación' }),
   con({ id: 'contabilidad-cxp',      label: 'Cuentas por pagar', href: '/contabilidad/cuentas-por-pagar', descripcion: 'Lo que se debe a proveedores' }),
   con({ id: 'contabilidad-activos',  label: 'Activos fijos', href: '/contabilidad/activos-fijos', descripcion: 'Bienes y depreciación' }),
   con({ id: 'contabilidad-cierre',   label: 'Cierre de ejercicio', href: '/contabilidad/cierre-ejercicio', descripcion: 'Cerrar el año contable' }),

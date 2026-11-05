@@ -106,6 +106,10 @@ export type AuditAction =
   | 'NOMINA_LIQUIDACION_CREADA'
   // Nómina: un cambio en «Avanzado» (divisor, faltas, regalía, vacaciones) cambia cómo se calcula todo lo que sigue.
   | 'NOMINA_AVANZADO_CAMBIADO'
+  // Contabilidad: transferencias, cargos, depósitos y retiros de banco, y la conciliación.
+  | 'CONTABILIDAD_MOVIMIENTO_BANCARIO'
+  // Contabilidad: la baja de un activo fijo (saca costo y depreciación del libro).
+  | 'CONTABILIDAD_ACTIVO_BAJA'
   // Un correo de suscripción ya enviado (cuenta activada, prueba por vencer,
   // pago recibido). Su `resource` es la llave que evita mandarlo dos veces:
   // ver `claveAviso` en lib/suscripcion/datos-aviso.ts.

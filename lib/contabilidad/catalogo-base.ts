@@ -38,7 +38,7 @@ export function naturalezaPorTipo(tipo: TipoCuenta): NaturalezaCuenta {
     : 'acreedora';
 }
 
-interface CuentaBase {
+export interface CuentaBase {
   codigo:     string;
   nombre:     string;
   tipo:       TipoCuenta;
@@ -61,7 +61,13 @@ export const CATALOGO_BASE: CuentaBase[] = [
   { codigo: '1',    nombre: 'Activo',                      tipo: 'activo', imputable: false },
   { codigo: '11',   nombre: 'Activo corriente',            tipo: 'activo', imputable: false },
   { codigo: '1101', nombre: 'Caja',                        tipo: 'activo', imputable: true },
-  { codigo: '1102', nombre: 'Bancos',                      tipo: 'activo', imputable: true },
+  // Cuenta PADRE: agrupa los bancos de la empresa (una subcuenta por banco o por
+  // cuenta bancaria). Lo que recibe los asientos es `110201 Banco principal`.
+  // Un team sembrado antes de este cambio conserva 1102 imputable (ver
+  // `insertarCuentasBase`, que no le cuelga hijas a una padre que acepta
+  // movimientos).
+  { codigo: '1102', nombre: 'Bancos',                      tipo: 'activo', imputable: false },
+  { codigo: '110201', nombre: 'Banco principal',           tipo: 'activo', imputable: true },
   { codigo: '1103', nombre: 'Cuentas por cobrar',          tipo: 'activo', imputable: true },
   // ITBIS pagado en las compras: se compensa contra el 2102 al liquidar.
   { codigo: '1104', nombre: 'ITBIS adelantado',            tipo: 'activo', imputable: true },
@@ -79,6 +85,10 @@ export const CATALOGO_BASE: CuentaBase[] = [
   // Avances de sueldo y préstamos a empleados: el descuento de nómina los va saldando.
   { codigo: '1108', nombre: 'Cuentas por cobrar a empleados', tipo: 'activo', imputable: true },
   { codigo: '12',   nombre: 'Activo no corriente',          tipo: 'activo', imputable: false },
+  // «Activos fijos» y «Depreciación acumulada» se quedan como las cuentas
+  // generales (las que la configuración y las compras ya usan, y por eso su
+  // código no cambia). Los tipos de activo van como hermanas 1203–1211, para no
+  // volver padre una cuenta que ya tiene movimientos en las empresas existentes.
   { codigo: '1201', nombre: 'Activos fijos',                tipo: 'activo', imputable: true },
   // Contra-activo: es activo pero RESTA (acumula lo depreciado). Naturaleza
   // acreedora, invertida respecto a su clase, igual que 4103 en ingresos.
@@ -89,6 +99,17 @@ export const CATALOGO_BASE: CuentaBase[] = [
     naturaleza: 'acreedora',
     imputable: true,
   },
+  // Subclasificación por tipo (reunión de contabilidad). El terreno no se
+  // deprecia, por eso no tiene contra-cuenta.
+  { codigo: '1203', nombre: 'Terrenos',                           tipo: 'activo', imputable: true },
+  { codigo: '1204', nombre: 'Edificios',                          tipo: 'activo', imputable: true },
+  { codigo: '1205', nombre: 'Mobiliario y equipo de oficina',     tipo: 'activo', imputable: true },
+  { codigo: '1206', nombre: 'Equipo de transporte',               tipo: 'activo', imputable: true },
+  { codigo: '1207', nombre: 'Equipo de cómputo',                  tipo: 'activo', imputable: true },
+  { codigo: '1208', nombre: 'Depreciación acumulada de edificios',                      tipo: 'activo', naturaleza: 'acreedora', imputable: true },
+  { codigo: '1209', nombre: 'Depreciación acumulada de mobiliario y equipo de oficina', tipo: 'activo', naturaleza: 'acreedora', imputable: true },
+  { codigo: '1210', nombre: 'Depreciación acumulada de equipo de transporte',           tipo: 'activo', naturaleza: 'acreedora', imputable: true },
+  { codigo: '1211', nombre: 'Depreciación acumulada de equipo de cómputo',              tipo: 'activo', naturaleza: 'acreedora', imputable: true },
 
   // ─── 2 Pasivo ───────────────────────────────────────────────────────────
   { codigo: '2',    nombre: 'Pasivo',                      tipo: 'pasivo', imputable: false },
@@ -116,6 +137,9 @@ export const CATALOGO_BASE: CuentaBase[] = [
   // debe a la DGII. El ITBIS va en el IT-1 y el ISR en el IR-17, por eso van aparte.
   { codigo: '2113', nombre: 'ITBIS retenido a terceros por pagar', tipo: 'pasivo', imputable: true },
   { codigo: '2114', nombre: 'ISR retenido a terceros por pagar',   tipo: 'pasivo', imputable: true },
+  // Plata que entró al banco y todavía no se sabe de quién es (conciliación bancaria).
+  // Es un pasivo transitorio: se vacía cuando el depósito se asigna a un cliente.
+  { codigo: '2115', nombre: 'Depósitos por identificar',           tipo: 'pasivo', imputable: true },
 
   // ─── 3 Patrimonio ───────────────────────────────────────────────────────
   { codigo: '3',    nombre: 'Patrimonio',                  tipo: 'patrimonio', imputable: false },
@@ -142,6 +166,8 @@ export const CATALOGO_BASE: CuentaBase[] = [
     naturaleza: 'deudora',
     imputable: true,
   },
+  // Lo que se cobra de más al vender un activo fijo frente a lo que valía en libros.
+  { codigo: '4105', nombre: 'Ganancia en venta de activos fijos', tipo: 'ingreso', imputable: true },
 
   // ─── 5 Costos ───────────────────────────────────────────────────────────
   { codigo: '5',    nombre: 'Costos',                      tipo: 'costo', imputable: false },
@@ -175,6 +201,10 @@ export const CATALOGO_BASE: CuentaBase[] = [
   { codigo: '6116', nombre: 'Gastos de representación',           tipo: 'gasto', imputable: true },
   { codigo: '6117', nombre: 'Gastos financieros y comisiones bancarias', tipo: 'gasto', imputable: true },
   { codigo: '6118', nombre: 'Publicidad y mercadeo',              tipo: 'gasto', imputable: true },
+  // Un almuerzo o una celebración del equipo. El dinero a un empleado es salario y va por nómina, no aquí.
+  { codigo: '6119', nombre: 'Atención y beneficios al empleado',  tipo: 'gasto', imputable: true },
+  // Lo que se pierde al dar de baja un activo fijo que valía más en libros que lo cobrado.
+  { codigo: '6120', nombre: 'Pérdida en baja de activos fijos',   tipo: 'gasto', imputable: true },
 ];
 
 /**
@@ -230,32 +260,153 @@ export async function sembrarCuentasBaseFaltantes(
   return insertarCuentasBase(teamId, userId);
 }
 
+/** Los códigos de las subcuentas de activos fijos y sus depreciaciones. */
+export const CODIGOS_ACTIVOS_FIJOS: readonly string[] = [
+  '1203', '1204', '1205', '1206', '1207', '1208', '1209', '1210', '1211',
+];
+
 /**
- * El INSERT en sí. Recorre el catálogo en orden para que cada cuenta encuentre
- * a su padre ya insertado, y deja pasar los conflictos: lo que ya existe no se
- * toca.
+ * Garantiza que una cuenta del catálogo base exista en el team (con su padre) y
+ * devuelve su id, o null si ese código no es de la base. Idempotente: si ya
+ * existe, sea como sea, no la toca. Es lo que usan las funciones que necesitan
+ * una cuenta que un catálogo anterior no tenía (p. ej. 2115).
  */
-async function insertarCuentasBase(teamId: number, userId?: number): Promise<number> {
+export async function asegurarCuentaBase(teamId: number, codigo: string, userId?: number): Promise<number | null> {
+  return (await asegurarCuentaBaseDetalle(teamId, codigo, userId))?.id ?? null;
+}
+
+export interface CuentaBaseAsegurada {
+  id: number;
+  /** El código con el que quedó (el pedido, o uno alterno si el pedido ya tenía otro uso). */
+  codigo: string;
+  /** Se usó un código alterno: la pantalla se lo dice al usuario. */
+  aviso: string | null;
+}
+
+/**
+ * Como `asegurarCuentaBase`, pero dice con qué código quedó la cuenta.
+ *
+ * Una cuenta existente solo se adopta si es de la base (`es_base`), del mismo
+ * tipo, activa e imputable. Un catálogo propio (importado, o armado por su
+ * contador) puede usar 2115 o 1203 para otra cosa, aunque el tipo coincida: esa
+ * cuenta no se toca ni se usa, y se crea una nueva con un código libre bajo el
+ * mismo padre.
+ */
+export async function asegurarCuentaBaseDetalle(teamId: number, codigo: string, userId?: number): Promise<CuentaBaseAsegurada | null> {
+  const base = CATALOGO_BASE.find((c) => c.codigo === codigo);
+  if (!base) return null;
+
+  type Fila = { id: number; tipo: string; imputable: boolean; activa: boolean; codigo: string; esBase: boolean };
+  const buscar = async (cod: string): Promise<Fila | null> => {
+    const filas = await db.execute(sql`SELECT id, tipo, imputable, activa, codigo, es_base AS "esBase" FROM contabilidad_cuentas WHERE team_id = ${teamId} AND codigo = ${cod} LIMIT 1`);
+    return (filas as unknown as Fila[])[0] ?? null;
+  };
+  const sirve = (f: Fila | null): f is Fila => !!f && f.esBase && f.tipo === base.tipo && f.imputable && f.activa;
+
+  const existente = await buscar(codigo);
+  if (sirve(existente)) return { id: existente.id, codigo, aviso: null };
+
+  if (!existente) {
+    const padre = codigoPadreEnCatalogo(codigo);
+    const lista = CATALOGO_BASE.filter((c) => c.codigo === codigo || c.codigo === padre);
+    await insertarCuentasBase(teamId, userId, lista);
+    const nueva = await buscar(codigo);
+    if (sirve(nueva)) return { id: nueva.id, codigo, aviso: null };
+  }
+
+  // El código lo usa la empresa para otra cosa: no se toma. Se reusa la nuestra de un intento anterior o se crea una.
+  const codigoPadre = codigoPadreEnCatalogo(codigo);
+  for (let n = 2; n <= 20; n++) {
+    const alterno = `${codigo}-${n}`;
+    const previa = await buscar(alterno);
+    if (sirve(previa)) return { id: previa.id, codigo: alterno, aviso: avisoAlterno(codigo, alterno, base.nombre) };
+    if (previa) continue;
+    const res = await db.execute(sql`
+      INSERT INTO contabilidad_cuentas
+        (team_id, codigo, nombre, tipo, naturaleza, cuenta_padre_id, imputable, activa, es_base, created_by, updated_by)
+      VALUES (${teamId}, ${alterno}, ${base.nombre}, ${base.tipo}, ${base.naturaleza ?? naturalezaPorTipo(base.tipo)},
+              ${codigoPadre === null ? sql`NULL::int` : sql`(SELECT id FROM contabilidad_cuentas WHERE team_id = ${teamId} AND codigo = ${codigoPadre} AND NOT imputable)`},
+              true, true, true, ${userId ?? null}, ${userId ?? null})
+      ON CONFLICT (team_id, codigo) DO NOTHING
+      RETURNING id`) as unknown as { id: number }[];
+    if (res[0]) return { id: res[0].id, codigo: alterno, aviso: avisoAlterno(codigo, alterno, base.nombre) };
+  }
+  return null;
+}
+
+function avisoAlterno(codigo: string, alterno: string, nombre: string): string {
+  return `La cuenta ${codigo} de tu catálogo se usa para otra cosa, así que se creó «${alterno} ${nombre}» para esto. Revísala con tu contable.`;
+}
+
+/**
+ * Agrega a un team que ya tiene catálogo las subcuentas de activos fijos que le
+ * falten. Idempotente y **no toca nada que exista**: si el team ya usa 1203
+ * para otra cosa, se queda con la suya.
+ *
+ * @returns cuántas cuentas se insertaron.
+ */
+export async function sembrarActivosFijosFaltantes(
+  teamId: number,
+  userId?: number,
+): Promise<number> {
+  const lista = CATALOGO_BASE.filter(
+    (c) => c.codigo === '12' || CODIGOS_ACTIVOS_FIJOS.includes(c.codigo),
+  );
+  return insertarCuentasBase(teamId, userId, lista);
+}
+
+/**
+ * El código del padre de una cuenta del catálogo: el prefijo más largo, más
+ * corto que ella, que sea otra cuenta de la lista. 1101 → 11, 110201 → 1102.
+ * Pura, para probar la jerarquía sin base de datos.
+ */
+export function codigoPadreEnCatalogo(
+  codigo: string,
+  catalogo: readonly { codigo: string }[] = CATALOGO_BASE,
+): string | null {
+  const codigos = new Set(catalogo.map((c) => c.codigo));
+  for (let n = codigo.length - 1; n >= 1; n--) {
+    const prefijo = codigo.slice(0, n);
+    if (codigos.has(prefijo)) return prefijo;
+  }
+  return null;
+}
+
+/**
+ * El INSERT en sí. Recorre la lista en orden para que cada cuenta encuentre a
+ * su padre ya insertado, y deja pasar los conflictos: lo que ya existe no se
+ * toca.
+ *
+ * Una cuenta no se cuelga de un padre que acepta movimientos: en un team
+ * sembrado antes de que `1102 Bancos` pasara a ser padre, `110201` se omite
+ * para no dejar un padre con asientos y con hijas a la vez.
+ */
+async function insertarCuentasBase(
+  teamId: number,
+  userId?: number,
+  lista: readonly CuentaBase[] = CATALOGO_BASE,
+): Promise<number> {
   let insertadas = 0;
-  for (const c of CATALOGO_BASE) {
+  for (const c of lista) {
     const naturaleza = c.naturaleza ?? naturalezaPorTipo(c.tipo);
-    // El padre es la cuenta cuyo código es el prefijo inmediato: 1101 → 11 → 1.
-    const codigoPadre = c.codigo.length > 1
-      ? c.codigo.slice(0, c.codigo.length === 4 ? 2 : 1)
-      : null;
+    const codigoPadre = codigoPadreEnCatalogo(c.codigo);
 
     const res = await db.execute(sql`
       INSERT INTO contabilidad_cuentas
         (team_id, codigo, nombre, tipo, naturaleza, cuenta_padre_id,
          imputable, activa, es_base, created_by, updated_by)
-      VALUES (
+      SELECT
         ${teamId}, ${c.codigo}, ${c.nombre}, ${c.tipo}, ${naturaleza},
         ${codigoPadre === null
-          ? sql`NULL`
+          ? sql`NULL::int`
           : sql`(SELECT id FROM contabilidad_cuentas
                  WHERE team_id = ${teamId} AND codigo = ${codigoPadre})`},
         ${c.imputable}, true, true, ${userId ?? null}, ${userId ?? null}
-      )
+      WHERE ${codigoPadre === null
+        ? sql`true`
+        : sql`NOT EXISTS (SELECT 1 FROM contabilidad_cuentas
+                          WHERE team_id = ${teamId} AND codigo = ${codigoPadre}
+                            AND imputable)`}
       ON CONFLICT (team_id, codigo) DO NOTHING
     `);
     insertadas += res.count ?? 0;
@@ -277,7 +428,10 @@ export const CODIGO = {
   ingresosMora:       '4102',
   descuentos:         '4103',
   caja:               '1101',
+  /** Cuenta padre: agrupa los bancos; no recibe asientos en el catálogo nuevo. */
   bancos:             '1102',
+  /** La cuenta imputable que cuelga de Bancos en el catálogo nuevo. */
+  bancoPrincipal:     '110201',
   comisionCobro:      '6102',
   activoFijo:         '1201',
   depreciacionAcum:   '1202',
@@ -290,6 +444,7 @@ export const CODIGO = {
   provisionRegalia:   '2110',
   provisionVacaciones:'2111',
   provisionCesantia:  '2112',
+  depositosPorIdentificar: '2115',
   itbisRetenidoTerceros: '2113',
   isrRetenidoTerceros:   '2114',
   sueldosSalarios:    '6104',
@@ -298,4 +453,7 @@ export const CODIGO = {
   gastoVacaciones:    '6107',
   gastoCesantia:      '6108',
   cuentaPorCobrarEmpleados: '1108',
+  atencionEmpleados:  '6119',
+  gananciaActivos:    '4105',
+  perdidaActivos:     '6120',
 } as const;

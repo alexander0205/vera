@@ -10,6 +10,7 @@ import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
 import Alert from '@mui/material/Alert';
+import Snackbar from '@mui/material/Snackbar';
 import Table from '@mui/material/Table';
 import TableHead from '@mui/material/TableHead';
 import TableBody from '@mui/material/TableBody';
@@ -135,6 +136,8 @@ export function ConfigClient({
 
   const metodoPorClave = new Map(metodosIniciales.map((m) => [m.clave, m]));
   const [aviso, setAviso] = useState<string | null>(null);
+  /** «Guardado» tras cada cambio: la configuración guarda sola, y sin esto nadie lo sabe. */
+  const [guardado, setGuardado] = useState(false);
 
   async function aplicarRecomendada() {
     setGuardando(true);
@@ -163,6 +166,7 @@ export function ConfigClient({
   async function enviar(payload: Record<string, unknown>) {
     setGuardando(true);
     setError(null);
+    setGuardado(false);
     const res = await fetch('/api/contabilidad/config', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -175,6 +179,7 @@ export function ConfigClient({
       setError(body.error ?? 'No se pudo guardar.');
       return false;
     }
+    setGuardado(true);
     startTransition(() => router.refresh());
     return true;
   }
@@ -201,6 +206,16 @@ export function ConfigClient({
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {error && <Alert severity="error">{error}</Alert>}
       {aviso && <Alert severity="success" onClose={() => setAviso(null)}>{aviso}</Alert>}
+      <Snackbar
+        open={guardado}
+        autoHideDuration={2500}
+        onClose={(_, motivo) => { if (motivo !== 'clickaway') setGuardado(false); }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success" variant="filled" icon={<CheckCircle2 size={18} />} role="status" sx={{ fontSize: '0.8125rem' }}>
+          Guardado
+        </Alert>
+      </Snackbar>
 
       {/* ─── Configuración recomendada ─────────────────────────────────── */}
       {puedeConfigurar && (

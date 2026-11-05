@@ -7,6 +7,7 @@ import useSWR, { mutate as mutarSWR } from 'swr';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
@@ -184,6 +185,11 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
   const [metodoPago, setMetodoPago] = useState(ini?.metodoPago ?? 'transferencia');
   // '' = la cuenta del método, que es como funcionaba antes de poder elegirla.
   const [cuentaSalida, setCuentaSalida] = useState('');
+  // Pago mixto: cuánto se paga con cada método y de qué caja o banco sale cada parte.
+  const [partes, setPartes] = useState<{ key: number; metodo: string; cuenta: string; monto: string }[]>([
+    { key: 1, metodo: 'efectivo', cuenta: '', monto: '' },
+    { key: 2, metodo: 'transferencia', cuenta: '', monto: '' },
+  ]);
   const [fechaPago, setFechaPago] = useState(contexto.hoy);
   const [fechaVencimiento, setFechaVencimiento] = useState(ini?.fechaVencimiento ?? '');
   const [notas, setNotas] = useState('');
@@ -314,6 +320,13 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
   }
   problemas.push(...erroresCompra({ baseCents: totales.baseCents, imp, formaPago, fechaPago: formaPago === 'contado' ? fechaPago : null }));
   if (isrRetenidoCents > 0 && !isrTipoFinal) problemas.push('Elige el tipo de retención de ISR');
+  const esMixto = formaPago === 'contado' && metodoPago === 'mixto';
+  const partesCents = partes.map((p) => aCentavos(p.monto));
+  const restanteMixto = resumen.netoAPagarCents - partesCents.reduce<number>((s, c) => s + (c ?? 0), 0);
+  if (esMixto) {
+    if (partesCents.some((c) => c === null || c <= 0)) problemas.push('Pago mixto: escribe el monto de cada parte');
+    else if (restanteMixto !== 0) problemas.push(`Pago mixto: ${restanteMixto > 0 ? 'faltan' : 'sobran'} ${pesos(Math.abs(restanteMixto))} para llegar a lo que se paga`);
+  }
 
   // Lo que se avisa sin impedir guardar: en ámbar, encima de los problemas.
   const avisosResumen: string[] = [];
@@ -379,7 +392,10 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
           propinaCents: imp.propinaCents,
           formaPago,
           metodoPago,
-          cuentaSalidaId: formaPago === 'contado' && cuentaSalida ? Number(cuentaSalida) : null,
+          cuentaSalidaId: formaPago === 'contado' && !esMixto && cuentaSalida ? Number(cuentaSalida) : null,
+          pagosMixtos: esMixto
+            ? partes.map((p, i) => ({ metodo: p.metodo, cuentaSalidaId: p.cuenta ? Number(p.cuenta) : null, montoCents: partesCents[i] ?? 0 }))
+            : null,
           fechaPago: formaPago === 'contado' ? fechaPago : null,
           fechaVencimiento: formaPago === 'credito' ? fechaVencimiento || null : null,
           almacenId: almacenId ? Number(almacenId) : null,
@@ -462,6 +478,11 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           El comprobante que te dio el proveedor. Con él se arma la línea del 606, el ITBIS que adelantas, las retenciones y el asiento.
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground" data-testid="ayuda-compra-gasto">
+          {esGasto
+            ? <>Un <strong>gasto</strong> es lo que cuesta operar: combustible, luz, alquiler, reparaciones. Si lo que compraste es mercancía o materiales que usas para producir o vender, regístralo como <Link href="/dashboard/compras/registrar" className="underline">compra</Link>.</>
+            : <>Una <strong>compra</strong> es la mercancía o los materiales con los que produces o vendes (suben el inventario o el costo de venta). Combustible, luz o alquiler son <Link href="/dashboard/compras/registrar?clase=gasto" className="underline">gastos</Link>. La categoría de cada línea decide a qué cuenta va.</>}
         </p>
       </div>
       {contexto.avisoEcf && (
@@ -685,18 +706,21 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                       {g.clave !== 'inventario' && g.clave !== 'sin' && contexto.cuentasGasto.length > 0 && (
                         <span className="flex items-center gap-1">
                           · va a
-                          <NativeSelect aria-label={`Cuenta contable de ${g.label}`} data-testid={`cuenta-${g.clave}`} value={g.cuentaId}
-                            style={{ width: 'auto', height: 26, fontSize: 12, paddingLeft: 6, paddingRight: 2 }}
-                            onChange={(e) => setLineas((ls) => ls.map((l) => (
-                              l.tipo === 'concepto' && l.categoria === g.clave ? { ...l, cuentaId: e.target.value } : l
-                            )))}>
-                            <option value="">
-                              {porDefecto ? `${porDefecto.cuenta.codigo} ${porDefecto.cuenta.nombre}` : 'sin cuenta en el catálogo'}
-                            </option>
-                            {contexto.cuentasGasto.filter((c) => c.id !== porDefecto?.cuenta.id).map((c) => (
-                              <option key={c.id} value={c.id}>{c.codigo} {c.nombre}</option>
-                            ))}
-                          </NativeSelect>
+                          <span className="inline-block w-[22rem] max-w-full align-middle" data-testid={`cuenta-${g.clave}`}>
+                            <BuscadorSelect
+                              id={`cuenta-${g.clave}`}
+                              value={g.cuentaId === '' ? '__defecto' : g.cuentaId}
+                              onChange={(v) => setLineas((ls) => ls.map((l) => (
+                                l.tipo === 'concepto' && l.categoria === g.clave ? { ...l, cuentaId: v === '__defecto' ? '' : v } : l
+                              )))}
+                              placeholder="Busca la cuenta por código o nombre…"
+                              vacio="Ninguna cuenta coincide"
+                              opciones={[
+                                { valor: '__defecto', etiqueta: porDefecto ? `${porDefecto.cuenta.codigo} ${porDefecto.cuenta.nombre} (la de siempre)` : 'Sin cuenta en el catálogo' },
+                                ...contexto.cuentasGasto.filter((c) => c.id !== porDefecto?.cuenta.id).map((c) => ({ valor: String(c.id), etiqueta: `${c.codigo} ${c.nombre}` })),
+                              ]}
+                            />
+                          </span>
                         </span>
                       )}
                     </div>
@@ -862,6 +886,7 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                         <option value="cheque">Cheque</option>
                         <option value="tarjeta">Tarjeta</option>
                         <option value="deposito">Depósito</option>
+                        <option value="mixto">Mixto (varios métodos)</option>
                       </NativeSelect>
                     </div>
                     <div className="space-y-1.5">
@@ -876,7 +901,42 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                   </div>
                 )}
               </div>
-              {formaPago === 'contado' && contexto.cuentasSalida.length > 0 && (
+              {esMixto && (
+                <div className="space-y-2 rounded-md border p-3" data-testid="pago-mixto">
+                  <Label>Cómo se pagó</Label>
+                  {partes.map((p, i) => (
+                    <div key={p.key} className="grid grid-cols-12 items-center gap-2">
+                      <NativeSelect className="col-span-3" aria-label={`Método de la parte ${i + 1}`} value={p.metodo}
+                        onChange={(e) => setPartes((ps) => ps.map((x) => (x.key === p.key ? { ...x, metodo: e.target.value } : x)))}>
+                        <option value="efectivo">Efectivo</option>
+                        <option value="transferencia">Transferencia</option>
+                        <option value="cheque">Cheque</option>
+                        <option value="tarjeta">Tarjeta</option>
+                        <option value="deposito">Depósito</option>
+                      </NativeSelect>
+                      <NativeSelect className="col-span-5" aria-label={`Cuenta de la parte ${i + 1}`} value={p.cuenta}
+                        onChange={(e) => setPartes((ps) => ps.map((x) => (x.key === p.key ? { ...x, cuenta: e.target.value } : x)))}>
+                        <option value="">Cuenta del método (por defecto)</option>
+                        {contexto.cuentasSalida.map((c) => <option key={c.id} value={String(c.id)}>{c.codigo} · {c.nombre}</option>)}
+                      </NativeSelect>
+                      <MoneyInput className="col-span-3" aria-label={`Monto de la parte ${i + 1}`} value={p.monto}
+                        onChange={(v) => setPartes((ps) => ps.map((x) => (x.key === p.key ? { ...x, monto: v } : x)))} />
+                      <button type="button" className="col-span-1 text-muted-foreground hover:text-destructive disabled:opacity-30" aria-label={`Quitar la parte ${i + 1}`}
+                        disabled={partes.length <= 2} onClick={() => setPartes((ps) => ps.filter((x) => x.key !== p.key))}>×</button>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between text-sm">
+                    <Button type="button" variant="outline" size="sm" disabled={partes.length >= 6}
+                      onClick={() => setPartes((ps) => [...ps, { key: Math.max(...ps.map((x) => x.key)) + 1, metodo: 'transferencia', cuenta: '', monto: restanteMixto > 0 ? (restanteMixto / 100).toFixed(2) : '' }])}>
+                      + Agregar parte
+                    </Button>
+                    <span data-testid="restante-mixto" className={restanteMixto === 0 && resumen.netoAPagarCents > 0 ? 'text-emerald-700' : 'text-amber-700'}>
+                      {restanteMixto === 0 && resumen.netoAPagarCents > 0 ? 'Cuadra ✓' : restanteMixto > 0 ? `Faltan ${pesos(restanteMixto)}` : `Sobran ${pesos(-restanteMixto)}`}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {formaPago === 'contado' && !esMixto && contexto.cuentasSalida.length > 0 && (
                 <div className="space-y-1.5">
                   <Label htmlFor="cuenta-salida">Sale de</Label>
                   <NativeSelect
