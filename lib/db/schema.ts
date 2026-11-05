@@ -4836,7 +4836,7 @@ export type CapturaFactura = typeof capturaFacturas.$inferSelect;
 /**
  * Lo decidido en una pantalla larga antes de guardarlo de verdad («Matricular
  * desde SIGERD»), para que recargar o abrirla en otra computadora vuelva al
- * mismo punto. Uno por colegio, año y pantalla (`clave`). Migración 0216.
+ * mismo punto. Uno por colegio, año y pantalla (`clave`). Migración 0236.
  */
 export const adminEscolarBorradores = pgTable('admin_escolar_borradores', {
   id:        serial('id').primaryKey(),
@@ -4854,7 +4854,7 @@ export const adminEscolarBorradores = pgTable('admin_escolar_borradores', {
 /**
  * Un trabajo largo que sigue aunque se cierre la pantalla (hoy: completar las
  * familias desde SIGERD alumno por alumno). Lo avanza el servidor al empezar y
- * el cron después, desde `cursorId`. Migración 0216.
+ * el cron después, desde `cursorId`. Migración 0236.
  */
 export const adminEscolarTrabajos = pgTable('admin_escolar_trabajos', {
   id:           serial('id').primaryKey(),
