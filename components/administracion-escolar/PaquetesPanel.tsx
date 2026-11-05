@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { Loader2, Package, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 /**
  * Configuración › Paquetes.
@@ -26,7 +27,9 @@ export interface Paquete {
 
 interface ConceptoMin { id: number; nombre: string; activo: boolean; opcional?: boolean; categoria?: string | null }
 
-const traer = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(new Error('No se pudo cargar'))));
+// `no-store`: el navegador tiene su propio caché HTTP y, tras guardar, `mutate()`
+// revalidaba contra la respuesta vieja.
+const traer = (url: string) => fetch(url, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : Promise.reject(new Error('No se pudo cargar'))));
 
 export function PaquetesPanel() {
   const { data, mutate, isLoading } = useSWR<{ paquetes: Paquete[] }>('/api/administracion-escolar/paquetes', traer);
@@ -35,6 +38,9 @@ export function PaquetesPanel() {
   const [editando, setEditando] = useState<Partial<Paquete> | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [porQuitar, setPorQuitar] = useState<Paquete | null>(null);
+  const [quitando, setQuitando] = useState(false);
+  const [errorQuitar, setErrorQuitar] = useState<string | null>(null);
 
   const nombreDe = (id: number) => conceptos.find((c) => c.id === id)?.nombre ?? `#${id}`;
 
@@ -59,10 +65,29 @@ export function PaquetesPanel() {
     }
   }
 
-  async function borrar(p: Paquete) {
-    if (!confirm(`¿Quitar el paquete «${p.nombre}»? Los niños que ya lo tienen conservan sus conceptos.`)) return;
-    await fetch(`/api/administracion-escolar/paquetes?id=${p.id}`, { method: 'DELETE' });
-    await mutate();
+  /**
+   * Con confirmación propia y no `window.confirm`: en el navegador embebido de
+   * la app devuelve `false` sin enseñar nada, y la papelera no hacía nada.
+   */
+  async function quitar() {
+    if (!porQuitar) return;
+    setQuitando(true);
+    setErrorQuitar(null);
+    try {
+      const r = await fetch(`/api/administracion-escolar/paquetes?id=${porQuitar.id}`, { method: 'DELETE' });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setErrorQuitar(j.error ?? 'No se pudo quitar el paquete.');
+        return;
+      }
+      // Sale de la lista al instante y se revalida por detrás.
+      await mutate((d) => ({ paquetes: (d?.paquetes ?? []).filter((x) => x.id !== porQuitar.id) }), { revalidate: true });
+      setPorQuitar(null);
+    } catch {
+      setErrorQuitar('No hay conexión con el servidor. Inténtalo otra vez.');
+    } finally {
+      setQuitando(false);
+    }
   }
 
   const alternar = (id: number) => setEditando((e) => {
@@ -100,7 +125,8 @@ export function PaquetesPanel() {
             <label className="space-y-1">
               <span className="text-xs font-medium text-gray-600">Nombre</span>
               <Input autoFocus value={editando.nombre ?? ''} maxLength={80} placeholder="Ej.: Horario extendido"
-                onChange={(e) => setEditando({ ...editando, nombre: e.target.value })} />
+                onChange={(e) => setEditando({ ...editando, nombre: e.target.value })}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void guardar(); } }} />
             </label>
             <label className="space-y-1">
               <span className="text-xs font-medium text-gray-600">Descripción (opcional)</span>
@@ -123,10 +149,14 @@ export function PaquetesPanel() {
               })}
             </div>
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {conceptos.length === 0 && (
+            <p className="text-xs text-amber-700">No hay conceptos activos todavía. Créalos en la pestaña <b>Conceptos</b> para armar un paquete.</p>
+          )}
+          {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => { setEditando(null); setError(null); }}>Cancelar</Button>
-            <Button size="sm" className="bg-zero-600 hover:bg-zero-700" onClick={() => void guardar()} disabled={guardando}>
+            <Button size="sm" className="bg-zero-600 hover:bg-zero-700" onClick={() => void guardar()}
+              disabled={guardando || !(editando.nombre ?? '').trim() || (editando.conceptosIds ?? []).length === 0}>
               {guardando ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}Guardar paquete
             </Button>
           </div>
@@ -164,7 +194,7 @@ export function PaquetesPanel() {
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
                       <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => setEditando(p)}>Editar</Button>
-                      <button type="button" aria-label={`Quitar ${p.nombre}`} onClick={() => void borrar(p)}
+                      <button type="button" aria-label={`Quitar ${p.nombre}`} onClick={() => { setErrorQuitar(null); setPorQuitar(p); }}
                         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-red-50 hover:text-red-600">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -176,6 +206,23 @@ export function PaquetesPanel() {
           </table>
         </div>
       )}
+
+      <ConfirmDialog
+        open={porQuitar !== null}
+        onOpenChange={(o: boolean) => { if (!o) { setPorQuitar(null); setErrorQuitar(null); } }}
+        title="Quitar paquete"
+        description={
+          <>
+            ¿Quitar el paquete «{porQuitar?.nombre}»? Los niños que ya lo tienen conservan sus conceptos.
+            {errorQuitar && (
+              <span className="mt-2 block rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">{errorQuitar}</span>
+            )}
+          </>
+        }
+        confirmLabel="Quitar"
+        destructive
+        loading={quitando}
+        onConfirm={() => void quitar()} />
     </div>
   );
 }

@@ -110,7 +110,9 @@ describe('el diálogo rellena el monto y lo deja editable', () => {
   });
 
   it('el campo de monto sigue siendo editable', () => {
-    expect(dialogo).toContain('onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))}');
+    // InputMoneda entrega el número crudo («2500.50», sin comas), que es lo que
+    // `montoACentavos` y la comparación con la sugerencia esperan.
+    expect(dialogo).toContain('<InputMoneda value={form.monto} onValueChange={(v) => setForm((f) => ({ ...f, monto: v }))} />');
   });
 
   it('sin precio avisa que se escribe a mano', () => {

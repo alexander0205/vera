@@ -79,12 +79,12 @@ export function DatosEstudiante<T extends DatosBasicos>({
   return (
     <Categoria icon={User} titulo="Datos del estudiante" hint="Información principal" requerido>
       <Field label="Nombres *">
-        <Input autoFocus={autoFocus} value={form.nombres}
+        <Input autoFocus={autoFocus} value={form.nombres} maxLength={100} autoComplete="off"
           error={campoError === 'nombres'}
           onChange={(e) => onChange({ nombres: e.target.value })} />
       </Field>
       <Field label="Apellidos *">
-        <Input value={form.apellidos}
+        <Input value={form.apellidos} maxLength={100} autoComplete="off"
           error={campoError === 'apellidos'}
           onChange={(e) => onChange({ apellidos: e.target.value })} />
       </Field>
@@ -129,6 +129,9 @@ export function CamposSigerd({ valores, onChange }: {
               <Field key={c.key} label={c.label}>
                 <Input
                   type={c.tipo === 'tel' ? 'tel' : 'text'}
+                  inputMode={c.tipo === 'tel' ? 'tel' : undefined}
+                  maxLength={c.tipo === 'tel' ? 20 : 150}
+                  autoComplete="off"
                   value={valores[c.key] ?? ''}
                   placeholder={c.placeholder}
                   onChange={(e) => onChange(c.key, e.target.value)}
