@@ -18,6 +18,10 @@
  *    Si hay otra de cualquier colegio, se rechaza con `otra-en-curso` → "espera".
  *  - Si SIGERD falla (caído/red/sesión), queda en `error` con mensaje
  *    "continuaremos cuando vuelva SIGERD"; el colegio reintenta luego.
+ *  - Si SIGERD contesta a medias (secciones sin leer, o cero estudiantes o
+ *    empleados donde había), también queda en `error` y se conserva la
+ *    anterior: ver `motivoDescargaIncompleta`. Se decide al traer la
+ *    estructura y el personal, antes de pedir las fichas.
  *
  * El candado es la fila de `sigerd_importaciones` en estado `corriendo`. Una
  * fila `corriendo` sin señal de vida (`updated_at`) en `LOCK_TTL_MIN` se
@@ -39,6 +43,7 @@ import { sigerdImportaciones, sigerdPersonal } from '@/lib/db/schema';
 import { invalidarSigerd } from '@/lib/cache/escolar';
 import type { DumpCentro } from '@/lib/sigerd/descargar';
 import { armarDump, avanzarDescarga, iniciarDescarga, type DescargaParcial } from '@/lib/sigerd/descargar';
+import { motivoDescargaIncompleta, type TotalesDescarga } from '@/lib/sigerd/descarga-incompleta';
 import type { SigerdClient } from '@/lib/sigerd/client';
 import { SigerdError } from '@/lib/sigerd/types';
 
@@ -281,6 +286,15 @@ export async function obtenerInformacion(
       // quedaba en «corriendo» para siempre. Además en prod no traían nada:
       // las últimas descargas buenas llegaron sin ningún responsable.
     });
+    // Una descarga a medias no pisa una buena. Lo que decide (secciones sin
+    // leer, alumnos y personal) ya está aquí: se corta antes de pedir cientos
+    // de fichas, y la anterior sigue sirviendo para matricular.
+    const anterior = await totalesAnteriores(teamId, anoAcademico);
+    const motivo = motivoDescargaIncompleta(totalesDe(base), anterior);
+    if (motivo && anterior) {
+      return await cerrarConError(importacionId, `${motivo} Se conserva la descarga anterior; intenta de nuevo en un rato.`);
+    }
+
     const parcial: ParcialGuardado = {
       ...base,
       idRegional: ctx.idRegional,
@@ -370,7 +384,10 @@ async function avanzarYGuardar(
   // Proyección + snapshot en una transacción. Reemplaza el volcado entero:
   // el `__parcial` desaparece con él.
   const dump = armarDump(parcial);
-  await guardarMirror(teamId, importacionId, parcial.idRegional, parcial.idDistrito, dump);
+  // Sin descarga anterior que proteger se guarda lo que llegó, con el aviso de
+  // lo que faltó (si faltó algo).
+  const aviso = motivoDescargaIncompleta(totalesDe(parcial), null);
+  await guardarMirror(teamId, importacionId, parcial.idRegional, parcial.idDistrito, dump, aviso);
 
   // El plan del asistente (`/api/sigerd/plan`) se sirve de caché por etiqueta y
   // solo el cruce la invalidaba. Sin esto, una descarga recién terminada seguía
@@ -402,6 +419,36 @@ async function guardarParcial(importacionId: number, parcial: ParcialGuardado): 
   `);
 }
 
+/** Lo que decide si una descarga está completa: sale de la estructura y del personal. */
+function totalesDe(d: Pick<DescargaParcial, 'estructura' | 'personal'>): TotalesDescarga {
+  return {
+    secciones: d.estructura.totales.secciones,
+    estudiantes: d.estructura.totales.estudiantes,
+    empleados: d.personal.length,
+    seccionesConError: d.estructura.totales.seccionesConError,
+  };
+}
+
+/**
+ * Los totales de la descarga buena con la que comparar, o `null` si el colegio
+ * nunca tuvo una. Prefiere la del mismo año escolar (`ano_academico` es el id del año en SIGERD). Si solo hay de otro año
+ * devuelve `{}`: se protege contra secciones con error, no contra el cero de un
+ * año que empieza. Solo el JSON de totales: el volcado entero pesa megas.
+ */
+async function totalesAnteriores(teamId: number, anoAcademico: number): Promise<Partial<TotalesDescarga> | null> {
+  const filas = await db.execute(sql`
+    SELECT dump -> 'totales' AS totales, ano_academico = ${anoAcademico} AS "mismoAno"
+      FROM sigerd_importaciones
+     WHERE team_id = ${teamId} AND dump -> 'totales' IS NOT NULL
+     ORDER BY (ano_academico = ${anoAcademico}) DESC, completado_en DESC NULLS LAST
+     LIMIT 1
+  `);
+  const fila = (filas as unknown as { totales: Partial<TotalesDescarga> | string; mismoAno: boolean }[])[0];
+  if (!fila) return null;
+  if (!fila.mismoAno) return {};
+  return typeof fila.totales === 'string' ? JSON.parse(fila.totales) : fila.totales;
+}
+
 /** Error de SIGERD o de guardado: la fila queda en `error` con la descarga anterior intacta. */
 async function marcarError(importacionId: number, e: unknown): Promise<{ estado: 'error'; mensaje: string }> {
   console.error('[obtener-sigerd] fallo al guardar:', e);
@@ -409,7 +456,11 @@ async function marcarError(importacionId: number, e: unknown): Promise<{ estado:
     e instanceof SigerdError
       ? 'SIGERD no está disponible ahora. Continuaremos automáticamente cuando vuelva; intenta de nuevo en unos minutos.'
       : 'Ocurrió un error guardando la información. Intenta de nuevo.';
+  return cerrarConError(importacionId, mensaje);
+}
 
+/** La fila queda en `error` con `mensaje`; se quita el avance y se conserva el volcado anterior. */
+async function cerrarConError(importacionId: number, mensaje: string): Promise<{ estado: 'error'; mensaje: string }> {
   await db.execute(sql`
     UPDATE sigerd_importaciones
        SET estado = 'error', mensaje = ${mensaje},
@@ -426,7 +477,8 @@ async function marcarError(importacionId: number, e: unknown): Promise<{ estado:
 /**
  * Guarda el MIRROR: personal desglosado + snapshot fiel. NO toca el módulo
  * escolar (`admin_escolar_*`); eso es el paso aparte de sincronización.
- * Todo en una transacción.
+ * Todo en una transacción. `aviso`: lo que faltó en una primera descarga que
+ * se guarda igual por no haber otra.
  */
 async function guardarMirror(
   teamId: number,
@@ -434,6 +486,7 @@ async function guardarMirror(
   idRegional: number,
   idDistrito: number,
   dump: DumpCentro,
+  aviso: string | null,
 ): Promise<void> {
   await db.transaction(async (tx) => {
     // ── Personal: se reemplaza entero (pocas filas, siempre fresco) ──
@@ -473,7 +526,7 @@ async function guardarMirror(
       .update(sigerdImportaciones)
       .set({
         estado: 'completado',
-        mensaje: null,
+        mensaje: aviso,
         idCentro: dump.contexto.idCentro,
         idRegional,
         idDistrito,
