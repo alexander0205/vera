@@ -112,6 +112,8 @@ const MOTIVO_TEXTO: Record<string, string> = {
   'no-es-gasto':             'no son compras ni gastos de caja',
   'compra-anulada':          'la compra está anulada',
   'sin-cuenta-retenciones-por-pagar': 'falta la cuenta de retenciones por pagar (2113 o 2114)',
+  'sin-cuenta-resultados-acumulados': 'falta la cuenta 3102 de resultados acumulados (saldo inicial de las facturas históricas)',
+  'cobro-de-migracion':      'se cobraron en el sistema anterior, antes de pasar a Zero',
 };
 
 export function LibroDiarioClient({

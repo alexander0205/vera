@@ -940,6 +940,13 @@ export const pagosRecibidos = pgTable('pagos_recibidos', {
   turnoCajaId:     integer('turno_caja_id').references(() => cajaTurnos.id),
   /** Usuario que registró el pago. */
   createdBy:       integer('created_by').references(() => users.id),
+  /**
+   * Cobro que llegó con una factura histórica: se cobró en el sistema anterior
+   * y ese dinero ya está en sus libros. Contabilidad no lo asienta (ver
+   * `generarAsientoSaldoInicial`). Lo marcan solo el importador y «Cuenta
+   * histórica»; todo cobro registrado en Zero queda en false. Migración 0217.
+   */
+  deMigracion:     boolean('de_migracion').notNull().default(false),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   index('pagos_team_doc_idx').on(t.teamId, t.ecfDocumentId),

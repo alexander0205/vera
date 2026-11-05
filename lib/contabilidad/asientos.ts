@@ -54,14 +54,24 @@ const TIPO_NOTA_CREDITO = '34';
 const TIPO_SIN_NCF = 'sin-ncf';
 
 /**
+ * Factura traída de otro sistema (Alegra, un Excel). No es una venta del
+ * período: su ingreso ya está en los libros de allá. Entra como saldo inicial
+ * (ver `generarAsientoSaldoInicial`), nunca como venta. Puede venir con tipo
+ * `'00'` o `'sin-ncf'`, así que se excluye por estado antes de mirar el tipo.
+ */
+const ESTADO_HISTORICA = 'HISTORICA';
+
+/**
  * ¿Este documento genera asiento de venta? Dos familias:
  *  - e-CF fiscal emitido y vivo (`TIPOS_VENTA` en un `ESTADOS_VENTA`), y
  *  - venta interna `sin-ncf` no anulada (permanece en BORRADOR a propósito).
+ * Una factura histórica nunca, aunque sea `sin-ncf`.
  *
  * ⚠️ `VENTA_ASENTABLE_SQL` es el espejo de esta función para el barrido.
  * **Cambiar las dos juntas** o el barrido y el generador se desincronizan.
  */
 export function esVentaAsentable(estado: string, tipoEcf: string): boolean {
+  if (estado === ESTADO_HISTORICA) return false;
   if (tipoEcf === TIPO_SIN_NCF) return estado !== 'ANULADO' && estado !== 'RECHAZADO';
   return ESTADOS_VENTA.includes(estado) && TIPOS_VENTA.includes(tipoEcf);
 }
@@ -69,7 +79,29 @@ export function esVentaAsentable(estado: string, tipoEcf: string): boolean {
 /** Espejo SQL de `esVentaAsentable`, sobre el alias `d`. Mantener en sync. */
 export const VENTA_ASENTABLE_SQL = sql`(
   (d.estado IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO') AND d.tipo_ecf IN ('31', '32', '33', '44', '45'))
-  OR (d.tipo_ecf = 'sin-ncf' AND d.estado NOT IN ('ANULADO', 'RECHAZADO'))
+  OR (d.tipo_ecf = 'sin-ncf' AND d.estado NOT IN ('ANULADO', 'RECHAZADO', 'HISTORICA'))
+)`;
+
+/**
+ * Lo que se debía de una factura histórica al traerla, en centavos, sobre el
+ * alias `d`: el total menos lo retenido y menos lo que ya se había cobrado en el
+ * sistema anterior (los cobros `de_migracion`). Los cobros hechos en Zero no
+ * restan: esos sí se asientan, y son los que van cerrando este saldo.
+ */
+export const SALDO_INICIAL_HISTORICA_SQL = sql`(
+  d.monto_total - COALESCE(d.total_retenciones, 0) - COALESCE((
+    SELECT sum(pm.monto_centavos) FROM pagos_recibidos pm
+    WHERE pm.team_id = d.team_id AND pm.ecf_document_id = d.id AND pm.de_migracion
+  ), 0)
+)`;
+
+/**
+ * ¿Esta factura histórica abre saldo inicial? Sobre el alias `d`. El barrido y
+ * el conteo de pendientes usan esto mismo; si una histórica llegó cobrada del
+ * todo no hay nada que abrir, y tampoco debe contarse como pendiente.
+ */
+export const HISTORICA_ASENTABLE_SQL = sql`(
+  d.estado = 'HISTORICA' AND ${SALDO_INICIAL_HISTORICA_SQL} > 0
 )`;
 
 export interface LineaAsiento {
@@ -104,7 +136,9 @@ export type MotivoSalto =
   | 'provisiones-apagadas'
   | 'no-es-gasto'
   | 'compra-anulada'
-  | 'sin-cuenta-retenciones-por-pagar';
+  | 'sin-cuenta-retenciones-por-pagar'
+  | 'sin-cuenta-resultados-acumulados'
+  | 'cobro-de-migracion';
 
 export interface ResultadoGeneracion {
   creado:  boolean;
@@ -412,6 +446,73 @@ export async function generarAsientoFactura(
     : { creado: true, asientoId };
 }
 
+// ─── Saldo inicial de una factura histórica ──────────────────────────────────
+
+/** Cuenta contra la que se abre el saldo de lo traído de otro sistema. */
+const CODIGO_RESULTADOS_ACUMULADOS = '3102';
+
+/**
+ * Asiento de una factura histórica: abre la deuda que el cliente traía.
+ *
+ *   Debe  Cuentas por cobrar          lo que se debía al traerla
+ *     Haber  Resultados acumulados      lo mismo
+ *
+ * No es una venta del período: su ingreso y lo que ya se cobró viven en los
+ * libros del sistema anterior. Asentarla como venta duplicaría ese ingreso, y no
+ * asentarla dejaba Cuentas por cobrar negativa en cuanto entraba el primer
+ * cobro hecho en Zero. Por eso solo entra el saldo pendiente
+ * (`SALDO_INICIAL_HISTORICA_SQL`), y los cobros de migración no se asientan
+ * (ver `generarAsientoPago`).
+ *
+ * Usa el origen `'factura'` a propósito: una factura abre deuda una sola vez, y
+ * así una histórica anulada se reversa con `generarAsientoAnulacion` como
+ * cualquier otra.
+ */
+export async function generarAsientoSaldoInicial(
+  teamId: number,
+  documentoId: number,
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+
+  const filas = await db.execute(sql`
+    SELECT d.id, d.encf, d.estado,
+           ${SALDO_INICIAL_HISTORICA_SQL}::bigint AS saldo,
+           to_char(d.fecha_emision AT TIME ZONE 'America/Santo_Domingo', 'YYYY-MM-DD') AS fecha
+    FROM ecf_documents d
+    WHERE d.team_id = ${teamId} AND d.id = ${documentoId}
+  `);
+  const doc = (filas as unknown as {
+    id: number; encf: string | null; estado: string; saldo: unknown; fecha: string;
+  }[])[0];
+  if (!doc || doc.estado !== ESTADO_HISTORICA) return { creado: false, motivo: 'no-es-venta' };
+
+  const saldo = Number(doc.saldo ?? 0);
+  if (saldo <= 0) return { creado: false, motivo: 'sin-monto' };
+
+  if (!cfg.cuentaPorCobrarId) return { creado: false, motivo: 'sin-cuenta-por-cobrar' };
+  const cuentaResultados = await cuentaPorCodigo(teamId, CODIGO_RESULTADOS_ACUMULADOS);
+  if (!cuentaResultados) return { creado: false, motivo: 'sin-cuenta-resultados-acumulados' };
+
+  const concepto = `Saldo inicial · factura ${doc.encf ?? doc.id}`;
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: doc.fecha, concepto, origenTipo: 'factura', origenId: doc.id },
+    [
+      { cuentaId: cfg.cuentaPorCobrarId, debeCents: saldo, haberCents: 0,
+        descripcion: 'Saldo pendiente traído del sistema anterior' },
+      { cuentaId: cuentaResultados, debeCents: 0, haberCents: saldo,
+        descripcion: 'Contrapartida del saldo inicial' },
+    ],
+    userId,
+  );
+
+  return asientoId === null
+    ? { creado: false, motivo: 'ya-tiene-asiento' }
+    : { creado: true, asientoId };
+}
+
 // ─── Asiento de nota de crédito ──────────────────────────────────────────────
 
 /**
@@ -629,16 +730,21 @@ export async function generarAsientoPago(
   const filas = await db.execute(sql`
     SELECT p.id, p.metodo, p.monto_centavos AS "montoCentavos",
            to_char(p.fecha_pago, 'YYYY-MM-DD') AS fecha,
+           p.de_migracion AS "deMigracion",
            d.encf
     FROM pagos_recibidos p
     LEFT JOIN ecf_documents d ON d.id = p.ecf_document_id
     WHERE p.team_id = ${teamId} AND p.id = ${pagoId}
   `);
   const pago = (filas as unknown as {
-    id: number; metodo: string; montoCentavos: number; fecha: string; encf: string | null;
+    id: number; metodo: string; montoCentavos: number; fecha: string;
+    deMigracion: boolean; encf: string | null;
   }[])[0];
 
   if (!pago) return { creado: false, motivo: 'no-es-venta' };
+  // Se cobró en el sistema anterior: ese dinero ya está en sus libros, y el
+  // saldo inicial de la factura histórica ya lo descontó.
+  if (pago.deMigracion) return { creado: false, motivo: 'cobro-de-migracion' };
   if (pago.montoCentavos <= 0) return { creado: false, motivo: 'sin-monto' };
 
   // ── Aplicación de un saldo a favor ────────────────────────────────────────

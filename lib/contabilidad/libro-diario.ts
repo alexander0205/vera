@@ -18,13 +18,13 @@ import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import { getConfig } from './config';
 import {
-  generarAsientoFactura, generarAsientoPago,
+  generarAsientoFactura, generarAsientoPago, generarAsientoSaldoInicial,
   generarAsientoNotaCredito, generarAsientoAnulacion,
   generarAsientoCompra, generarAsientoCompraAnulada, generarAsientoGastoCaja, generarAsientoPagoProveedor,
   generarAsientoGastoDoc,
   generarAsientoNomina, generarAsientoProvisionNomina,
   generarAsientoPagoNominaObligacion, generarAsientoPagoSueldos,
-  VENTA_ASENTABLE_SQL,
+  VENTA_ASENTABLE_SQL, HISTORICA_ASENTABLE_SQL,
   type MotivoSalto,
 } from './asientos';
 
@@ -124,6 +124,22 @@ export async function generarAsientosPendientes(
 
   await procesar(docs, 'factura', (id) => generarAsientoFactura(teamId, id, userId));
 
+  // ── Facturas históricas sin saldo inicial ─────────────────────────────────
+  // Antes que los cobros: el cobro hecho en Zero cierra la deuda que esto abre.
+  const historicas = await db.execute(sql`
+    SELECT d.id
+    FROM ecf_documents d
+    LEFT JOIN contabilidad_asientos a
+      ON a.team_id = d.team_id AND a.origen_tipo = 'factura' AND a.origen_id = d.id
+    WHERE d.team_id = ${teamId}
+      AND a.id IS NULL
+      AND ${HISTORICA_ASENTABLE_SQL}
+    ORDER BY d.fecha_emision, d.id
+    LIMIT ${TOPE_POR_BARRIDO}
+  `);
+
+  await procesar(historicas, 'factura', (id) => generarAsientoSaldoInicial(teamId, id, userId));
+
   // ── Notas de crédito sin asiento ──────────────────────────────────────────
   // Van después de las facturas porque una nota reduce la deuda que la factura
   // creó: leer el libro al revés confundiría.
@@ -146,7 +162,8 @@ export async function generarAsientosPendientes(
 
   // ── Pagos sin asiento ─────────────────────────────────────────────────────
   // Ya no se excluyen saldo_favor ni nota_credito: desde el Paso 5 tienen su
-  // propio asiento contra la cuenta de saldos a favor.
+  // propio asiento contra la cuenta de saldos a favor. Los cobros de migración
+  // sí: se cobraron en el sistema anterior y no se asientan nunca.
   const pagos = await db.execute(sql`
     SELECT p.id
     FROM pagos_recibidos p
@@ -154,6 +171,7 @@ export async function generarAsientosPendientes(
       ON a.team_id = p.team_id AND a.origen_tipo = 'pago' AND a.origen_id = p.id
     WHERE p.team_id = ${teamId}
       AND a.id IS NULL
+      AND NOT p.de_migracion
       AND p.monto_centavos > 0
     ORDER BY p.fecha_pago, p.id
     LIMIT ${TOPE_POR_BARRIDO}
@@ -644,6 +662,8 @@ export async function getLineasAsiento(
  */
 export interface PendientesPorOrigen {
   ventas: number;
+  /** Facturas históricas cuyo saldo inicial todavía no se abrió. */
+  saldos_iniciales: number;
   notas: number;
   cobros: number;
   anulaciones: number;
@@ -672,6 +692,12 @@ export async function contarPendientesPorOrigen(teamId: number): Promise<Pendien
         WHERE d.team_id = ${teamId} AND a.id IS NULL
           AND ${VENTA_ASENTABLE_SQL}
           AND d.monto_total > 0)::int AS ventas,
+      -- Facturas históricas: su saldo inicial (mismo predicado que el barrido)
+      (SELECT count(*) FROM ecf_documents d
+        LEFT JOIN contabilidad_asientos a
+          ON a.team_id = d.team_id AND a.origen_tipo = 'factura' AND a.origen_id = d.id
+        WHERE d.team_id = ${teamId} AND a.id IS NULL
+          AND ${HISTORICA_ASENTABLE_SQL})::int AS saldos_iniciales,
       -- Notas de crédito con efecto monetario
       (SELECT count(*) FROM ecf_documents d
         LEFT JOIN contabilidad_asientos a
@@ -681,11 +707,12 @@ export async function contarPendientesPorOrigen(teamId: number): Promise<Pendien
           AND d.estado IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')
           AND d.monto_total > 0
           AND d.codigo_modificacion IS DISTINCT FROM 2)::int AS notas,
-      -- Cobros, incluidos los que aplican un saldo a favor
+      -- Cobros, incluidos los que aplican un saldo a favor; sin los de migración
       (SELECT count(*) FROM pagos_recibidos p
         LEFT JOIN contabilidad_asientos a
           ON a.team_id = p.team_id AND a.origen_tipo = 'pago' AND a.origen_id = p.id
         WHERE p.team_id = ${teamId} AND a.id IS NULL
+          AND NOT p.de_migracion
           AND p.monto_centavos > 0)::int AS cobros,
       -- Anulaciones de documentos que ya estaban asentados
       (SELECT count(*) FROM ecf_documents d
