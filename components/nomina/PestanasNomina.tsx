@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { CalendarClock, Clock, FileText, Settings, Users } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { NOMINA_EN_GOBERNANZA } from '@/lib/nomina/rutas';
+import { rutaOculta } from '@/lib/config/pantallas';
 
 /**
  * Las secciones de nómina dentro de Gobernanza, como pestañas: el menú de la
@@ -21,8 +22,9 @@ const PESTANAS = [
 
 export function PestanasNomina() {
   const pathname = usePathname();
-  const { can } = usePermissions();
-  const visibles = PESTANAS.filter((t) => !t.permiso || can(t.permiso));
+  const { can, pantallasOcultas } = usePermissions();
+  // Una pestaña que el dueño le ocultó al rol en Nómina tampoco sale aquí.
+  const visibles = PESTANAS.filter((t) => (!t.permiso || can(t.permiso)) && !rutaOculta(t.href, pantallasOcultas));
   const activa = visibles.find((t) => pathname.startsWith(t.href))?.href;
 
   return (

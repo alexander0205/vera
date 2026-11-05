@@ -38,7 +38,7 @@ import { Lock, ChevronDown, ChevronRight, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import {
-  MODULOS_PANTALLAS, agruparPantallas, pantallaDeRuta, primeraVisible, veLaPantalla,
+  MODULOS_PANTALLAS, agruparPantallas, pantallaDeRuta, pantallaOcultaEnRuta, primeraVisible, veLaPantalla,
   type ModuloId, type PantallaDef,
 } from '@/lib/config/pantallas';
 
@@ -95,13 +95,16 @@ export function GuardPantalla({ ocultas, inicio, puede, children }: {
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const pantalla = ocultas.length ? pantallaDeRuta(pathname, inicio) : null;
-  const oculta = !!pantalla && ocultas.includes(pantalla.id);
-  // Adónde puede ir: la primera pantalla del mismo módulo que sí ve.
-  const alternativa = oculta ? primeraVisible(pantalla.modulo, ocultas, puede) : null;
+  // La pantalla oculta que cubre la ruta: la suya o, en una ruta espejo (la
+  // nómina dentro de Gobernanza), la del otro módulo.
+  const pantalla = ocultas.length ? pantallaOcultaEnRuta(pathname, ocultas, inicio) : null;
+  const oculta = !!pantalla;
+  // Adónde puede ir: la primera pantalla que sí ve del módulo en el que está.
+  const propia = oculta ? (pantallaDeRuta(pathname, inicio) ?? pantalla) : null;
+  const alternativa = propia ? primeraVisible(propia.modulo, ocultas, puede) : null;
   // La portada (a donde se entra, o se rebota por permisos) no se queda en el
   // aviso: quien entra a Facturación sin Dashboard va directo a lo que ve.
-  const seguir = oculta && pantalla.portada && alternativa ? alternativa.href : null;
+  const seguir = propia?.portada && alternativa ? alternativa.href : null;
 
   useEffect(() => {
     if (seguir) router.replace(seguir);

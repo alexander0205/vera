@@ -233,9 +233,41 @@ export function primeraVisible(
 
 /** ¿Esta ruta es de una pantalla que el rol tiene oculta? */
 export function rutaOculta(href: string, ocultas: string[], inicio?: string): boolean {
-  if (ocultas.length === 0) return false;
-  const p = pantallaDeRuta(href, inicio);
-  return !!p && ocultas.includes(p.id);
+  return pantallaOcultaEnRuta(href, ocultas, inicio) !== null;
+}
+
+/**
+ * Rutas que enseñan las MISMAS pantallas que otro módulo: la nómina del colegio
+ * en Gobernanza (`/escolar/nomina/*`) reusa las de Nómina (`/nomina/*`). Ocultar
+ * la pantalla por cualquiera de los dos lados la oculta en los dos; si no, a un
+ * rol al que le quitaron «Empleados» de Nómina le bastaba entrar por Gobernanza.
+ */
+const ESPEJOS: ReadonlyArray<readonly [string, string]> = [['/escolar/nomina', '/nomina']];
+
+/**
+ * Todas las pantallas que cubren una ruta: la suya (`pantallaDeRuta`) y, si la
+ * ruta es espejo de otro módulo, la de allá. Basta con que una esté oculta.
+ */
+export function pantallasDeRuta(pathname: string, inicio = '/dashboard'): PantallaDef[] {
+  const propia = pantallaDeRuta(pathname, inicio);
+  const todas = propia ? [propia] : [];
+  const ruta = normalizar(pathname === '/' ? inicio : pathname);
+  // El aviso de pantalla oculta de cada módulo nunca se tapa a sí mismo.
+  if (ruta.endsWith('/pantalla-oculta')) return todas;
+  for (const [a, b] of ESPEJOS) {
+    for (const [desde, hacia] of [[a, b], [b, a]] as const) {
+      if (ruta !== desde && !ruta.startsWith(`${desde}/`)) continue;
+      const otra = pantallaDeRuta(hacia + ruta.slice(desde.length));
+      if (otra && !todas.some(p => p.id === otra.id)) todas.push(otra);
+    }
+  }
+  return todas;
+}
+
+/** La pantalla oculta que cubre esta ruta (la suya primero), o `null` si se puede abrir. */
+export function pantallaOcultaEnRuta(href: string, ocultas: string[], inicio?: string): PantallaDef | null {
+  if (ocultas.length === 0) return null;
+  return pantallasDeRuta(href, inicio).find(p => ocultas.includes(p.id)) ?? null;
 }
 
 /** ¿El rol ve esta pantalla? El Propietario siempre. */
