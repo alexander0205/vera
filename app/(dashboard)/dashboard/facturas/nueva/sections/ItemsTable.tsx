@@ -18,6 +18,7 @@ import { Info, X } from 'lucide-react';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
 import { Autocomplete } from '../components/Autocomplete';
+import { claveOpcionProducto } from '../utils/opcionesProducto';
 import { renderProductoOption } from '@/components/productos/ProductoOption';
 import { LineaMaestros } from './LineaMaestros';
 import { calcularMontoItem } from '../utils/calculos';
@@ -351,6 +352,7 @@ export function ItemsTable({
                 onFreeText={modoGasto ? (text) => onUpdateItem(item.id, 'nombreItem', text) : undefined}
                 dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                 renderOption={renderProductoOption}
+                getOptionKey={claveOpcionProducto}
               />
               <LineaMaestros productoId={item.productoId} />
             </Box>
@@ -749,6 +751,7 @@ export function ItemsTable({
                     onFreeText={modoGasto ? (text) => onUpdateItem(item.id, 'nombreItem', text) : undefined}
                     dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                     renderOption={renderProductoOption}
+                getOptionKey={claveOpcionProducto}
                     // El nombre del producto identifica la línea: cortado a
                     // «Manuales Caligrafias…» no se sabe cuál manual es.
                     multilinea
