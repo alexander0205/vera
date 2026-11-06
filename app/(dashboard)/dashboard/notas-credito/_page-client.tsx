@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { consultarEstadosEnSegundoPlano } from '@/lib/ecf-api/auto-consulta';
 import Link from 'next/link';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -128,6 +130,18 @@ function StatCard({ label, value, sub, Icon, bgcolor, iconColor, valueColor }: S
 }
 
 export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
+  const router = useRouter();
+
+  // Los «En proceso» se consultan solos (máx. 5 por carga, 1 vez cada 2 min por
+  // documento) sin bloquear la pantalla; si alguno cambió, se refresca la lista.
+  useEffect(() => {
+    const ids = docs.filter(d => d.estado === 'EN_PROCESO').map(d => d.id);
+    if (ids.length === 0) return;
+    let vivo = true;
+    consultarEstadosEnSegundoPlano(ids).then(cambio => { if (vivo && cambio) router.refresh(); });
+    return () => { vivo = false; };
+  }, [docs, router]);
+
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
 
   const resumen = useMemo(() => {

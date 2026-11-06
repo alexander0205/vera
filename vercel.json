@@ -65,6 +65,10 @@
       "schedule": "0 13 * * 2"
     },
     {
+      "path": "/api/cron/ecf-estados",
+      "schedule": "0,30 11-23 * * *"
+    },
+    {
       "path": "/api/cron/sigerd-relevos",
       "schedule": "*/30 * * * *"
     }
