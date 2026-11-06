@@ -14,6 +14,7 @@ import { usePermissions } from '@/lib/hooks/usePermissions';
 import { toast } from '@/lib/toast';
 import { fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { ArrowLeft, HandCoins, Loader2, Plus, Trash2 } from 'lucide-react';
+import { equivalenteMensual } from '@/lib/nomina/avisos-datos';
 import { Empleado, fetcher, nombreCompleto, pesos } from '../../shared';
 
 // Ingresos y descuentos variables del empleado (incentivos, comisiones, avances,
@@ -183,6 +184,7 @@ export default function ConceptosEmpleadoClient({ id }: { id: string }) {
                 </Campo>
                 <Campo label="Monto por corrida (RD$) *">
                   <MoneyInput value={fc.monto} onChange={(v) => setFc({ ...fc, monto: v })} aria-label="Monto por corrida" />
+                  <AvisoQuincenas empleado={empleado} monto={fc.monto} />
                 </Campo>
                 <Campo label="Se repite">
                   <NativeSelect value={fc.fijo ? 'fijo' : 'una'} onChange={(e) => setFc({ ...fc, fijo: e.target.value === 'fijo' })}>
@@ -217,6 +219,7 @@ export default function ConceptosEmpleadoClient({ id }: { id: string }) {
                 </Campo>
                 <Campo label="Cuota por corrida (RD$) *">
                   <MoneyInput value={fp.cuota} onChange={(v) => setFp({ ...fp, cuota: v })} aria-label="Cuota por corrida" />
+                  <AvisoQuincenas empleado={empleado} monto={fp.cuota} verbo="se descuentan" />
                 </Campo>
                 <Campo label="Se empieza a descontar desde *">
                   <Input type="date" value={fp.desde} onChange={(e) => setFp({ ...fp, desde: e.target.value })} />
@@ -342,6 +345,24 @@ function Acciones({ guardando, onCancelar, onGuardar }: { guardando: boolean; on
       </Button>
     </div>
   );
+}
+
+/** En una nómina quincenal el monto se aplica completo en cada quincena: se dice cuánto suma al mes. */
+function AvisoQuincenas({ empleado, monto, verbo = 'se pagan' }: { empleado: Empleado; monto: string; verbo?: string }) {
+  if (empleado.frecuenciaPago === 'quincenal') {
+    const eq = equivalenteMensual('quincenal', monto);
+    return (
+      <p className="text-xs text-amber-700" data-testid="aviso-quincenas">
+        {eq
+          ? `Cobra 2 quincenas: este monto se aplica en cada una, así que ${verbo} RD$${eq.totalPesos.toLocaleString('es-DO', { minimumFractionDigits: 2 })} al mes en total.`
+          : 'Cobra por quincena: este monto se aplica completo en cada una (el doble al mes).'}
+      </p>
+    );
+  }
+  if (empleado.frecuenciaPago === 'semanal') {
+    return <p className="text-xs text-amber-700" data-testid="aviso-quincenas">Cobra por semana: este monto se aplica completo cada semana.</p>;
+  }
+  return null;
 }
 
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {

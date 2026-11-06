@@ -165,13 +165,14 @@ export const PANTALLAS: PantallaDef[] = [
   con({ id: 'contabilidad-config',   label: 'Configuración', href: '/contabilidad/configuracion', descripcion: 'Cuentas automáticas y ajustes' }),
 
   // ── Nómina ──
-  nom({ id: 'nomina-panorama',  label: 'Panorama', href: '/nomina', exacta: true, portada: true, descripcion: 'Resumen de la nómina' }),
-  nom({ id: 'nomina-empleados', label: 'Empleados', href: '/nomina/empleados', descripcion: 'Ficha de cada empleado' }),
+  // /nomina todavía no tiene panorama propio: redirige a Empleados, que hace de portada.
+  // (Antes había «nomina-panorama» y «nomina-pagos»; sin pantalla real, apagarlas no hacía nada.
+  // El pago se registra dentro de cada corrida.)
+  nom({ id: 'nomina-empleados', label: 'Empleados', href: '/nomina/empleados', portada: true, descripcion: 'Ficha de cada empleado' }),
   nom({ id: 'nomina-corridas',  label: 'Corridas', href: '/nomina/corridas', descripcion: 'Calcular y aprobar la nómina' }),
   nom({ id: 'nomina-horas',     label: 'Horas', href: '/nomina/horas', descripcion: 'Horas trabajadas' }),
   nom({ id: 'nomina-contratos', label: 'Contratos', href: '/nomina/contratos', descripcion: 'Contratos de los empleados' }),
-  nom({ id: 'nomina-pagos',     label: 'Pagos', href: '/nomina/pagos', descripcion: 'Dispersión y pagos' }),
-  nom({ id: 'nomina-config',    label: 'Configuración', href: '/nomina/configuracion', descripcion: 'Tasas y cuenta de dispersión' }),
+  nom({ id: 'nomina-config',    label: 'Configuración', href: '/nomina/configuracion', descripcion: 'Seguridad social, programación, ingresos y descuentos, cuentas de pago y ajustes avanzados' }),
 
   // ── Administración (Usuarios y Roles quedan fuera a propósito) ──
   adm({ id: 'cuenta-empresa',  label: 'Mi empresa', href: '/cuenta/empresa', descripcion: 'Datos de la empresa' }),

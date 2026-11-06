@@ -112,6 +112,13 @@ export default function ConfiguracionClient() {
     !Number.isFinite(srlNumero) || srlNumero < ajustes.srlMin * 100 - 1e-9 || srlNumero > ajustes.srlMax * 100 + 1e-9
   );
 
+  // ¿Hay algo escrito en seguridad social o programación que todavía no se guardó?
+  const sinGuardar = !!cfg && !!data?.programacion && !!ajustes && (
+    JSON.stringify(cfg) !== JSON.stringify(data.programacion)
+    || (tamano || '') !== (ajustes.tamanoEmpresa ?? '')
+    || srlPct.trim() !== (ajustes.srlTasa !== null ? aPorcentaje(ajustes.srlTasa) : '')
+  );
+
   const set = <K extends keyof Programacion>(k: K, v: Programacion[K]) =>
     setCfg((c) => (c ? { ...c, [k]: v } : c));
 
@@ -141,7 +148,7 @@ export default function ConfiguracionClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cfg),
       });
-      if (!res.ok) throw new Error('No se pudo guardar la programación');
+      if (!res.ok) throw new Error('La seguridad social se guardó, pero la programación no se pudo guardar. Revisa los días e inténtalo otra vez.');
       toast.success('Configuración guardada');
       mutate();
       mutateAjustes();
@@ -167,7 +174,7 @@ export default function ConfiguracionClient() {
           <Settings className="h-6 w-6 text-zero-600" /> Configuración de nómina
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          La seguridad social de la empresa y los días en que se genera la nómina.
+          La seguridad social de la empresa y los días en que se genera la nómina. Esas dos secciones se guardan con su botón; el resto se guarda solo.
         </p>
       </div>
 
@@ -333,18 +340,24 @@ export default function ConfiguracionClient() {
         </CardContent>
       </Card>
 
+      <div className="-mt-3 mb-8 flex flex-wrap items-center justify-end gap-3" data-testid="guardar-seguridad-programacion">
+        {sinGuardar && <span className="text-xs font-medium text-amber-700">Cambios sin guardar</span>}
+        <Button onClick={guardar} disabled={guardando} className="gap-1.5">
+          {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
+          Guardar seguridad social y programación
+        </Button>
+      </div>
+
+      <p className="mb-6 rounded-md border border-muted bg-muted/40 p-2.5 text-xs text-muted-foreground" data-testid="nota-guardado-automatico">
+        Lo que sigue se guarda solo, en cuanto lo cambias: las cuentas de pago y las cuentas y marcas de los ingresos y
+        descuentos. Los ajustes avanzados tienen su propio botón.
+      </p>
+
       <CuentasPagoNomina />
 
       <ConceptosNomina />
 
       <SeccionAvanzado />
-
-      <div className="flex justify-end">
-        <Button onClick={guardar} disabled={guardando} className="gap-1.5">
-          {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
-          Guardar
-        </Button>
-      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,12 +11,16 @@ import { Badge } from '@/components/ui/badge';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogBody,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { avisoCedula, cedulaConFormato, soloDigitos } from '@/lib/nomina/avisos-datos';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { toast } from '@/lib/toast';
 import { fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import {
   Users, Search, Loader2, IdCard, Phone, Briefcase,
-  Plus, Pencil, Trash2, UserPlus, GraduationCap, Check, FileText, FileSpreadsheet, HandCoins, CalendarOff, LogOut, HeartPulse, Clock, Copy,
+  Plus, Pencil, UserPlus, GraduationCap, Check, FileText, FileSpreadsheet, HandCoins, CalendarOff, LogOut, HeartPulse, Clock, Copy, MoreHorizontal, UserMinus,
 } from 'lucide-react';
 import {
   Empleado, fetcher, pesos, nombreCompleto, iniciales, esActivo, LABEL_FRECUENCIA, LABEL_CONTRATO,
@@ -229,6 +234,11 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
                   <div className="flex items-center gap-2">
                     <span className="truncate font-medium">{nombreCompleto(e)}</span>
                     {!esActivo(e.estado) && <Badge variant="secondary">Inactivo</Badge>}
+                    {esActivo(e.estado) && !cedulaConFormato(e.cedula) && (
+                      <Badge variant="outline" className="border-amber-400 text-amber-700" title={avisoCedula(e.cedula) ?? undefined} data-testid="badge-sin-cedula">
+                        {soloDigitos(e.cedula) ? 'Cédula incompleta' : 'Sin cédula'}
+                      </Badge>
+                    )}
                     {e.origen === 'escolar' && (
                       <Badge variant="outline" className="gap-1"><GraduationCap className="h-3 w-3" /> Del colegio</Badge>
                     )}
@@ -257,41 +267,51 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
                     </>
                   )}
                 </div>
-                <div className="flex flex-shrink-0 gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => irContrato(e.id)} aria-label="Contrato" title="Contrato">
-                    <FileText className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => irConceptos(e.id)} aria-label="Ingresos y descuentos" title="Incentivos, descuentos y préstamos">
-                    <HandCoins className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => irAusencias(e.id)} aria-label="Faltas y licencias" title="Faltas y licencias">
-                    <CalendarOff className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => irDependientes(e.id)} aria-label="Dependientes" title="Dependientes del seguro de salud">
-                    <HeartPulse className="h-4 w-4" />
-                  </Button>
-                  {puedeCorrer && esActivo(e.estado) && (
-                    <Button variant="ghost" size="icon" onClick={() => irLiquidar(e.id)} aria-label="Liquidar" title="Dar de baja y liquidar (preaviso, cesantía, vacaciones, regalía)">
-                      <LogOut className="h-4 w-4" />
-                    </Button>
-                  )}
-                  {puedeGestionar && cobraPorHora(e) && esActivo(e.estado) && (
-                    <Button variant="ghost" size="icon" onClick={() => pedirEnlace(e)} aria-label="Enlace de horas" title="Enlace para que registre sus horas">
-                      <Clock className="h-4 w-4" />
-                    </Button>
-                  )}
+                <div className="flex flex-shrink-0 items-center gap-1">
                   {puedeGestionar && (
-                    <>
-                      <Button variant="ghost" size="icon" onClick={() => irEditar(e.id)} aria-label="Editar">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      {esActivo(e.estado) && (
-                        <Button variant="ghost" size="icon" onClick={() => pedirBaja(e)} aria-label="Dar de baja">
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      )}
-                    </>
+                    <Button variant="ghost" size="sm" onClick={() => irEditar(e.id)} className="gap-1.5" title="Editar los datos del empleado">
+                      <Pencil className="h-4 w-4" /> <span className="hidden sm:inline">Editar</span>
+                    </Button>
                   )}
+                  {puedeCorrer && esActivo(e.estado) && (
+                    <Button variant="ghost" size="sm" onClick={() => irLiquidar(e.id)} className="gap-1.5" title="Dar de baja y calcular lo que se le debe: preaviso, cesantía, vacaciones y regalía">
+                      <LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Liquidar</span>
+                    </Button>
+                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="gap-1" aria-label={`Más opciones de ${nombreCompleto(e)}`} title="Contrato, ingresos y descuentos, faltas, dependientes y más">
+                        <MoreHorizontal className="h-4 w-4" /> <span className="hidden sm:inline">Más</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-64">
+                      <DropdownMenuItem onSelect={() => irConceptos(e.id)}>
+                        <HandCoins className="h-4 w-4" /> Ingresos y descuentos
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => irAusencias(e.id)}>
+                        <CalendarOff className="h-4 w-4" /> Faltas y licencias
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => irDependientes(e.id)}>
+                        <HeartPulse className="h-4 w-4" /> Dependientes del seguro
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => irContrato(e.id)}>
+                        <FileText className="h-4 w-4" /> Contrato
+                      </DropdownMenuItem>
+                      {puedeGestionar && cobraPorHora(e) && esActivo(e.estado) && (
+                        <DropdownMenuItem onSelect={() => pedirEnlace(e)}>
+                          <Clock className="h-4 w-4" /> Enlace para registrar horas
+                        </DropdownMenuItem>
+                      )}
+                      {puedeGestionar && esActivo(e.estado) && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem variant="destructive" onSelect={() => pedirBaja(e)}>
+                            <UserMinus className="h-4 w-4" /> Dar de baja (sin liquidar)
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </CardContent>
             </Card>
@@ -358,6 +378,12 @@ export default function EmpleadosClient({ tieneEscolar = false }: { tieneEscolar
               {aEliminar ? nombreCompleto(aEliminar) : ''} pasa a inactivo. La nómina de ese período le paga hasta su último
               día trabajado y las siguientes ya no lo incluyen. Su historia se conserva.
             </DialogDescription>
+            <p className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800" data-testid="aviso-baja-sin-liquidar">
+              Esto no calcula lo que se le debe (preaviso, cesantía, vacaciones, regalía). Para eso usa{' '}
+              {aEliminar ? (
+                <Link href={`/nomina/empleados/${aEliminar.id}/liquidar`} className="font-medium underline">Liquidar</Link>
+              ) : 'Liquidar'}.
+            </p>
           </DialogHeader>
           <DialogBody className="space-y-1.5">
             <label htmlFor="fecha-baja" className="text-xs text-muted-foreground">Último día trabajado</label>

@@ -38,8 +38,10 @@ export interface ArchivoDispersion {
   /** Cuántos beneficiarios entraron y cuánto suman, en centavos. */
   totalBeneficiarios: number;
   totalCents: number;
-  /** Empleados excluidos por no tener la cuenta completa (nombre + motivo). */
+  /** Empleados con datos de banco a medias (nombre + motivo): fichas por completar. */
   incompletos: { empleadoId: number; nombre: string; motivo: string }[];
+  /** Empleados sin ningún dato de banco: se entiende que cobran en efectivo, no es un error. */
+  efectivo: { empleadoId: number; nombre: string }[];
   /** Aviso de verificación del formato elegido (presets por banco). */
   nota?: string;
 }
@@ -76,6 +78,11 @@ function motivoNoDispersable(b: BeneficiarioDispersion): string | null {
   return null;
 }
 
+/** ¿La ficha no trae ni banco, ni cuenta, ni tipo? Entonces cobra en efectivo a propósito. */
+export function cobraEnEfectivo(b: BeneficiarioDispersion): boolean {
+  return !b.bancoNombre?.trim() && !b.bancoCuenta?.trim() && !b.bancoTipoCuenta?.trim();
+}
+
 /** Valor de una columna para un beneficiario, según el formato. */
 function valorColumna(col: ColumnaDispersion, b: BeneficiarioDispersion, f: FormatoBanco, referencia: string): string {
   switch (col) {
@@ -103,9 +110,12 @@ export function generarArchivoDispersion(
 ): ArchivoDispersion {
   const f = getFormatoBanco(opts.formatoKey);
   const incluidos = beneficiarios.filter((b) => motivoNoDispersable(b) === null);
+  const efectivo = beneficiarios
+    .filter((b) => cobraEnEfectivo(b))
+    .map((b) => ({ empleadoId: b.empleadoId, nombre: b.nombre }));
   const incompletos = beneficiarios.flatMap((b) => {
     const motivo = motivoNoDispersable(b);
-    return motivo ? [{ empleadoId: b.empleadoId, nombre: b.nombre, motivo }] : [];
+    return motivo && !cobraEnEfectivo(b) ? [{ empleadoId: b.empleadoId, nombre: b.nombre, motivo }] : [];
   });
 
   const filas = incluidos.map((b) =>
@@ -128,6 +138,7 @@ export function generarArchivoDispersion(
     totalBeneficiarios: incluidos.length,
     totalCents,
     incompletos,
+    efectivo,
     nota: f.nota,
   };
 }

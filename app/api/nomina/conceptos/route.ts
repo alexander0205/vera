@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
-import { contabilidadCuentas, nominaConceptos } from '@/lib/db/schema';
+import { contabilidadCuentas, empleadoConceptos, nominaConceptos } from '@/lib/db/schema';
 import { catalogoConceptos } from '@/lib/nomina/conceptos-db';
 import { limpiarTexto } from '@/lib/nomina/conceptos';
 
@@ -41,7 +41,19 @@ export async function GET() {
   if (!auth.ok) return auth.response;
   const conceptos = await catalogoConceptos(auth.teamId);
   conceptos.sort((a, b) => a.tipo.localeCompare(b.tipo) || a.id - b.id);
-  return NextResponse.json({ conceptos });
+  // Cuántos empleados lo tienen asignado y vigente: la pantalla lo usa para avisar antes de cambiar «Cotiza a la TSS» o «Grava ISR».
+  const cuentas = await db
+    .select({ conceptoId: empleadoConceptos.conceptoId, n: sql<number>`count(distinct ${empleadoConceptos.empleadoId})::int` })
+    .from(empleadoConceptos)
+    .where(and(
+      eq(empleadoConceptos.teamId, auth.teamId),
+      eq(empleadoConceptos.activo, true),
+      sql`(${empleadoConceptos.hasta} is null or ${empleadoConceptos.hasta} >= current_date)`,
+    ))
+    .groupBy(empleadoConceptos.conceptoId)
+    .catch(() => [] as { conceptoId: number; n: number }[]);
+  const porConcepto = new Map(cuentas.map((c) => [c.conceptoId, c.n]));
+  return NextResponse.json({ conceptos: conceptos.map((c) => ({ ...c, empleadosAfectados: porConcepto.get(c.id) ?? 0 })) });
 }
 
 /** POST /api/nomina/conceptos — crea un concepto propio. */

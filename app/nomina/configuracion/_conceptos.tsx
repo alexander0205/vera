@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { NativeSelect } from '@/components/ui/native-select';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { toast } from '@/lib/toast';
 import { HandCoins, Info } from 'lucide-react';
 
@@ -16,6 +17,8 @@ import { HandCoins, Info } from 'lucide-react';
 interface Concepto {
   id: number; codigo: string; nombre: string; tipo: 'ingreso' | 'descuento';
   cotizaTss: boolean; gravaIsr: boolean; cuentaId: number | null; activo: boolean;
+  /** Empleados que lo tienen asignado y vigente. */
+  empleadosAfectados?: number;
 }
 interface CuentaPlana {
   id: number; codigo: string; nombre: string; tipo: string; imputable: boolean; activa: boolean;
@@ -27,6 +30,9 @@ export function ConceptosNomina() {
   const { data, mutate } = useSWR<{ conceptos: Concepto[] }>('/api/nomina/conceptos', fetcher);
   const { data: dCuentas } = useSWR<{ cuentas?: CuentaPlana[] }>('/api/contabilidad/cuentas?plano=true', fetcher);
   const [guardando, setGuardando] = useState<number | null>(null);
+  // Una marca de impuestos cambia lo que se descuenta en las próximas corridas: si ya hay empleados con
+  // ese concepto, se pide confirmación antes de guardar.
+  const [pendiente, setPendiente] = useState<{ c: Concepto; cambios: Partial<Pick<Concepto, 'cotizaTss' | 'gravaIsr'>> } | null>(null);
 
   const conceptos = (data?.conceptos ?? []).filter((c) => c.activo);
   const cuentas = (dCuentas?.cuentas ?? []).filter((c) => c.imputable && c.activa);
@@ -41,11 +47,18 @@ export function ConceptosNomina() {
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error ?? 'No se pudo guardar');
       await mutate();
+      toast.success(`«${c.nombre}» guardado`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
       setGuardando(null);
     }
+  }
+
+  /** Las marcas de TSS e ISR piden confirmación si ya hay empleados con ese concepto. */
+  function cambiarMarca(c: Concepto, cambios: Partial<Pick<Concepto, 'cotizaTss' | 'gravaIsr'>>) {
+    if ((c.empleadosAfectados ?? 0) > 0) setPendiente({ c, cambios });
+    else void cambiar(c, cambios);
   }
 
   const grupo = (tipo: 'ingreso' | 'descuento', titulo: string, sugeridas: string[]) => {
@@ -63,7 +76,7 @@ export function ConceptosNomina() {
                   <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
                     <input
                       type="checkbox" checked={c.cotizaTss} disabled={guardando === c.id}
-                      onChange={(e) => cambiar(c, { cotizaTss: e.target.checked })}
+                      onChange={(e) => cambiarMarca(c, { cotizaTss: e.target.checked })}
                       className="h-3.5 w-3.5 cursor-pointer accent-zero-600"
                     />
                     Cotiza a la TSS
@@ -71,7 +84,7 @@ export function ConceptosNomina() {
                   <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
                     <input
                       type="checkbox" checked={c.gravaIsr} disabled={guardando === c.id}
-                      onChange={(e) => cambiar(c, { gravaIsr: e.target.checked })}
+                      onChange={(e) => cambiarMarca(c, { gravaIsr: e.target.checked })}
                       className="h-3.5 w-3.5 cursor-pointer accent-zero-600"
                     />
                     Grava ISR
@@ -113,6 +126,39 @@ export function ConceptosNomina() {
           {grupo('descuento', 'Descuentos', ['activo', 'pasivo'])}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={pendiente !== null}
+        onOpenChange={(o) => { if (!o) setPendiente(null); }}
+        title="Cambiar cómo se trata este ingreso"
+        description={pendiente && (() => {
+          const n = pendiente.c.empleadosAfectados ?? 0;
+          const partes = [
+            pendiente.cambios.cotizaTss !== undefined
+              ? `«${pendiente.c.nombre}» ${pendiente.cambios.cotizaTss ? 'pasará a cotizar' : 'dejará de cotizar'} a la TSS`
+              : null,
+            pendiente.cambios.gravaIsr !== undefined
+              ? `«${pendiente.c.nombre}» ${pendiente.cambios.gravaIsr ? 'pasará a gravar' : 'dejará de gravar'} ISR`
+              : null,
+          ].filter(Boolean).join(' y ');
+          return (
+            <span className="block space-y-2" data-testid="resumen-cambio-marca">
+              <span className="block">{partes}.</span>
+              <span className="block">
+                Afecta la TSS y el ISR de <strong>{n} empleado{n === 1 ? '' : 's'}</strong> que lo tienen asignado, desde la próxima
+                corrida. Las corridas ya aprobadas no cambian. Confírmalo con tu contable.
+              </span>
+            </span>
+          );
+        })()}
+        confirmLabel="Sí, cambiarlo"
+        loading={pendiente !== null && guardando === pendiente.c.id}
+        onConfirm={async () => {
+          if (!pendiente) return;
+          await cambiar(pendiente.c, pendiente.cambios);
+          setPendiente(null);
+        }}
+      />
     </>
   );
 }

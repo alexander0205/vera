@@ -15,6 +15,7 @@ import { provisionesDeLineas } from '@/lib/nomina/provisiones';
 import { esCorridaEspecial, LABEL_TIPO_CORRIDA } from '@/lib/nomina/corrida';
 import { rangoLegible } from '@/lib/nomina/periodos';
 import { partesDeHoras, totalHorasTexto, type ResumenHoras } from '@/lib/nomina/horas';
+import { nombresSinCedula } from '@/lib/nomina/avisos-datos';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { toast } from '@/lib/toast';
 import { ArrowLeft, Loader2, CheckCircle2, BookOpen, Download, Banknote, AlertTriangle, FileText, PiggyBank, Landmark, Trash2, RefreshCw } from 'lucide-react';
@@ -100,6 +101,18 @@ function textoAsiento(asiento?: { creado: boolean; asientoId?: number; motivo?: 
   return `sin asiento: ${MOTIVO_SIN_ASIENTO[asiento.motivo] ?? asiento.motivo}`;
 }
 
+/** Lo mismo para el asiento de las provisiones (regalía, vacaciones, cesantía) que se intenta al aprobar. */
+function textoProvision(p?: { creado: boolean; asientoId?: number; motivo?: string } | null): string | null {
+  if (!p) return null;
+  if (p.creado) return `provisiones: asiento #${p.asientoId}`;
+  if (p.motivo === 'sin-cuenta-gastos' || p.motivo === 'sin-cuenta-por-pagar') {
+    return `provisiones sin asiento: ${MOTIVO_SIN_ASIENTO[p.motivo]}`;
+  }
+  return null;
+}
+
+const METODO_TEXTO = { transferencia: 'Transferencia', efectivo: 'Efectivo', cheque: 'Cheque' } as const;
+
 const LABEL_DESTINO: Record<string, string> = {
   TSS: 'TSS · Seguridad Social',
   DGII: 'DGII · ISR retenido',
@@ -119,6 +132,7 @@ interface PreviewDispersion {
   totalBeneficiarios: number;
   totalCents: number;
   incompletos: { empleadoId: number; nombre: string; motivo: string }[];
+  efectivo?: { empleadoId: number; nombre: string }[];
   nota?: string;
 }
 
@@ -158,6 +172,9 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   const [descargandoTSS, setDescargandoTSS] = useState(false);
   const [formato, setFormato] = useState(FORMATO_POR_DEFECTO);
   const [borrar, setBorrar] = useState(false);
+  // Confirmaciones antes de asentar pagos: nada que mueva dinero sale con un solo clic.
+  const [confirmarPagoEmp, setConfirmarPagoEmp] = useState<'seleccion' | 'todos' | null>(null);
+  const [confirmarPagoObl, setConfirmarPagoObl] = useState<Obligacion | null>(null);
   const [recalculando, setRecalculando] = useState(false);
   const [borrando, setBorrando] = useState(false);
   // Candado de las operaciones que mueven dinero o estado. Un ref y no estado de
@@ -215,6 +232,8 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
   const infotepTotal = suma((l) => l.infotepPatronalCents);
 
   const aprobada = corrida.estado !== 'borrador';
+  // Sin cédula (o incompleta) la línea sale en blanco en el archivo de la TSS.
+  const sinCedula = esEspecial ? [] : nombresSinCedula(lineas);
   const empPagados = lineas.filter((l) => l.pagada).length;
   const netoPendiente = lineas.filter((l) => !l.pagada).reduce((s, l) => s + l.netoCents, 0);
   const oblPendiente = obligaciones.filter((o) => !o.pagada).reduce((s, o) => s + o.montoCents, 0);
@@ -233,6 +252,9 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
       if (!res.ok) throw new Error(j.error ?? 'No se pudo aprobar');
       const contable = textoAsiento(j.asiento);
       toast.success(contable ? `Corrida aprobada · ${contable}` : 'Corrida aprobada');
+      // Las provisiones se asientan aparte y sin bloquear la aprobación: si no salió, que se sepa.
+      const contableProv = textoProvision(j.provision);
+      if (contableProv?.includes('sin asiento')) toast.warning(`Corrida aprobada, pero ${contableProv}.`, { duration: 12000 });
       // Un préstamo cancelado, o ya cobrado por otro borrador, no se descuenta de más.
       const ajustes = Array.isArray(j.ajustesPrestamos) ? j.ajustesPrestamos : [];
       if (ajustes.length > 0) {
@@ -289,6 +311,9 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      if (nombresSinCedula(lineas).length > 0) {
+        toast.warning('El archivo de la TSS salió con la cédula en blanco o incompleta para algunos empleados. Complétala en su ficha antes de subirlo.', { duration: 12000 });
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error');
     } finally {
@@ -317,6 +342,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
     } finally {
       ocupadoRef.current = false;
       setPagandoEmp(false);
+      setConfirmarPagoEmp(null);
     }
   }
 
@@ -338,6 +364,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
     } finally {
       ocupadoRef.current = false;
       setPagandoObl(null);
+      setConfirmarPagoObl(null);
     }
   }
 
@@ -437,7 +464,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                 title="Formato del archivo según tu banco"
               >
                 {FORMATOS_BANCO.map((f) => (
-                  <option key={f.key} value={f.key}>{f.nombre}</option>
+                  <option key={f.key} value={f.key}>{f.nombre}{f.nota ? ' (confirmar con el banco)' : ''}</option>
                 ))}
               </NativeSelect>
               <Button variant="outline" onClick={descargarDispersion} disabled={descargando} className="shrink-0 gap-1.5 whitespace-nowrap">
@@ -446,9 +473,16 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
               </Button>
               <Button
                 variant="outline"
-                onClick={() => window.open(`/api/nomina/corridas/${id}/constancia${parametroLineas ? `?${parametroLineas.slice(1)}` : ''}`, '_blank', 'noopener')}
+                onClick={() => {
+                  // La constancia solo incluye a los pendientes: sin ellos la API responde 409 y la pestaña nueva quedaba en blanco.
+                  if (seleccionables.length === 0) {
+                    toast.warning('La constancia solo incluye a los empleados pendientes de pago. Ya todos están pagados.');
+                    return;
+                  }
+                  window.open(`/api/nomina/corridas/${id}/constancia${parametroLineas ? `?${parametroLineas.slice(1)}` : ''}`, '_blank', 'noopener');
+                }}
                 className="shrink-0 gap-1.5 whitespace-nowrap"
-                title="Hoja con una línea de firma por empleado, para pagos en efectivo"
+                title="Hoja con una línea de firma por empleado, para pagos en efectivo. Imprímela antes de marcar pagados: solo incluye a los pendientes"
               >
                 <FileText className="h-4 w-4" />
                 Constancia de efectivo{sel.size > 0 ? ` (${sel.size})` : ''}
@@ -464,6 +498,12 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
         </div>
       </div>
 
+      {corrida.estado !== 'borrador' && puedePagar && seleccionables.length > 0 && (
+        <p className="-mt-3 mb-5 text-xs text-muted-foreground" data-testid="nota-constancia">
+          Para pagos en efectivo, imprime la «Constancia de efectivo» antes de marcar pagados: solo incluye a los empleados pendientes.
+        </p>
+      )}
+
       {/* Aviso: horas sin revisar en estas fechas; el borrador solo paga las aprobadas */}
       {corrida.estado === 'borrador' && (data?.horasPendientes ?? 0) > 0 && (
         <div className="mb-5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200" data-testid="aviso-horas-pendientes">
@@ -473,7 +513,8 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
               {data?.horasPendientes} registro{data?.horasPendientes === 1 ? '' : 's'} de horas sin revisar en estas fechas.
             </span>{' '}
             Esta corrida paga solo las horas aprobadas: revísalas en{' '}
-            <Link href="/nomina/horas" className="font-medium underline">Horas</Link>, borra este borrador y vuelve a generarlo.
+            <Link href="/nomina/horas" className="font-medium underline">Horas</Link>
+            {esEspecial ? ', borra este borrador y vuelve a generarlo.' : ', vuelve aquí y pulsa «Recalcular».'}
           </div>
         </div>
       )}
@@ -487,20 +528,39 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
         <p className="mb-5 text-sm text-muted-foreground" data-testid="nota-conceptos-borrador">
           Los incentivos, descuentos y préstamos salen de la ficha de cada empleado (botón de monedas en{' '}
           <Link href="/nomina/empleados" className="font-medium underline">Empleados</Link>). Para cambiarlos en esta corrida,
-          ajústalos allá, borra este borrador y vuelve a generarlo.
+          ajústalos allá, vuelve aquí y pulsa «Recalcular». No hace falta borrar el borrador.
         </p>
       )}
 
-      {/* Aviso: empleados sin cuenta de banco que quedan fuera de la dispersión */}
-      {corrida.estado === 'aprobada' && preview && preview.incompletos.length > 0 && (
-        <div className="mb-5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+      {/* Aviso: cédula en blanco o incompleta (la TSS la pide) */}
+      {sinCedula.length > 0 && (
+        <div className="mb-5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200" data-testid="aviso-sin-cedula">
           <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <div>
-            <span className="font-medium">{preview.incompletos.length} empleado(s) quedan fuera del archivo del banco</span>:{' '}
-            {preview.incompletos.map((i) => `${i.nombre}: ${i.motivo.toLowerCase()}`).join('; ')}. Complétalo en su
+            <span className="font-medium">{sinCedula.length} empleado{sinCedula.length === 1 ? '' : 's'} sin cédula completa</span>: {sinCedula.join(', ')}.
+            El archivo de la TSS los lleva con la cédula en blanco. Complétala en su ficha (Empleados › Editar).
+          </div>
+        </div>
+      )}
+
+      {/* Aviso: fichas de banco a medias que quedan fuera de la dispersión */}
+      {corrida.estado === 'aprobada' && preview && preview.incompletos.length > 0 && (
+        <div className="mb-5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200" data-testid="aviso-ficha-banco">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <div>
+            <span className="font-medium">{preview.incompletos.length} empleado(s) con la cuenta de banco incompleta quedan fuera del archivo</span>:{' '}
+            {preview.incompletos.map((i) => `${i.nombre}: ${i.motivo.toLowerCase()}`).join('; ')}. Complétala en su
             ficha para incluirlos.
           </div>
         </div>
+      )}
+
+      {/* Nota neutra: sin datos de banco = se pagan en efectivo */}
+      {corrida.estado === 'aprobada' && preview && (preview.efectivo?.length ?? 0) > 0 && (
+        <p className="mb-5 text-sm text-muted-foreground" data-testid="nota-pagan-efectivo">
+          Se pagan en efectivo: {preview.efectivo!.length} ({preview.efectivo!.map((e) => e.nombre).join(', ')}).
+          No salen en el archivo del banco; usa la constancia de efectivo.
+        </p>
       )}
 
       {/* Aviso de verificación cuando se elige un preset de banco */}
@@ -640,7 +700,7 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
                     )}
                   </div>
                   {puedePagar && !o.pagada && (
-                    <Button size="sm" onClick={() => pagarObligacion(o.id)} disabled={pagandoObl !== null || pagandoEmp} className="shrink-0 gap-1.5">
+                    <Button size="sm" onClick={() => setConfirmarPagoObl(o)} disabled={pagandoObl !== null || pagandoEmp} className="shrink-0 gap-1.5">
                       {pagandoObl === o.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Banknote className="h-3.5 w-3.5" />}
                       Registrar pago
                     </Button>
@@ -689,13 +749,13 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
               </div>
             )}
             {sel.size > 0 && (
-              <Button variant="outline" size="sm" onClick={() => pagarEmpleados({ lineaIds: [...sel] })} disabled={pagandoEmp || pagandoObl !== null} className="gap-1.5">
+              <Button variant="outline" size="sm" onClick={() => setConfirmarPagoEmp('seleccion')} disabled={pagandoEmp || pagandoObl !== null} className="gap-1.5">
                 {pagandoEmp ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Banknote className="h-3.5 w-3.5" />}
                 Marcar pagados ({sel.size})
               </Button>
             )}
             {seleccionables.length > 0 && (
-              <Button size="sm" onClick={() => pagarEmpleados({ todos: true })} disabled={pagandoEmp || pagandoObl !== null} className="gap-1.5">
+              <Button size="sm" onClick={() => setConfirmarPagoEmp('todos')} disabled={pagandoEmp || pagandoObl !== null} className="gap-1.5">
                 <Banknote className="h-3.5 w-3.5" /> Marcar todos pagados
               </Button>
             )}
@@ -813,10 +873,73 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
         open={confirmar}
         onOpenChange={setConfirmar}
         title="Aprobar la corrida"
-        description="Se genera el asiento contable del devengo y la corrida queda lista para pagar. No podrás editarla después."
+        description={
+          <span className="block space-y-2" data-testid="resumen-aprobar">
+            <span className="block">
+              Vas a aprobar <strong>{lineas.length} empleado{lineas.length === 1 ? '' : 's'}</strong> con un neto a pagar de{' '}
+              <strong>{pesos(corrida.totalNetoCents)}</strong> (costo patronal {pesos(corrida.totalPatronalCents)}).
+            </span>
+            <span className="block">
+              Se registra en contabilidad lo que la empresa debe a los empleados, la TSS y la DGII, y la corrida queda lista para pagar.
+              No podrás editarla después.
+            </span>
+          </span>
+        }
         confirmLabel={aprobando ? 'Aprobando…' : 'Aprobar'}
         loading={aprobando}
         onConfirm={aprobar}
+      />
+
+      <ConfirmDialog
+        open={confirmarPagoEmp !== null}
+        onOpenChange={(o) => { if (!o) setConfirmarPagoEmp(null); }}
+        title="Registrar el pago a empleados"
+        description={(() => {
+          const aPagar = confirmarPagoEmp === 'seleccion' ? lineas.filter((l) => sel.has(l.id) && !l.pagada) : seleccionables;
+          const total = aPagar.reduce((s, l) => s + l.netoCents, 0);
+          const cuenta = cuentasPago.find((c) => String(c.id) === cuentaEmp);
+          return (
+            <span className="block space-y-2" data-testid="resumen-pago-empleados">
+              <span className="block">
+                Vas a registrar el pago de <strong>{aPagar.length} empleado{aPagar.length === 1 ? '' : 's'}</strong> por un neto de{' '}
+                <strong>{pesos(total)}</strong>, con <strong>{METODO_TEXTO[metodoEmp]}</strong>
+                {cuenta ? <> desde <strong>{cuenta.nombre}</strong></> : <> desde la cuenta por defecto</>}.
+              </span>
+              <span className="block">
+                Quedan marcados como pagados y, si la contabilidad está activa, se asienta el pago. Esto no manda dinero al banco:
+                solo lo registra. Desde esta pantalla no se puede deshacer.
+              </span>
+            </span>
+          );
+        })()}
+        confirmLabel={pagandoEmp ? 'Registrando…' : 'Sí, registrar pago'}
+        loading={pagandoEmp}
+        onConfirm={() => pagarEmpleados(confirmarPagoEmp === 'seleccion' ? { lineaIds: [...sel] } : { todos: true })}
+      />
+
+      <ConfirmDialog
+        open={confirmarPagoObl !== null}
+        onOpenChange={(o) => { if (!o) setConfirmarPagoObl(null); }}
+        title={`Registrar el pago de ${confirmarPagoObl ? (confirmarPagoObl.destino === 'TSS' ? 'la TSS' : 'la DGII') : ''}`}
+        description={confirmarPagoObl && (() => {
+          const cuenta = cuentasPago.find((c) => String(c.id) === cuentaObl);
+          return (
+            <span className="block space-y-2" data-testid="resumen-pago-obligacion">
+              <span className="block">
+                Vas a registrar el pago de <strong>{pesos(confirmarPagoObl.montoCents)}</strong> a {LABEL_DESTINO[confirmarPagoObl.destino] ?? confirmarPagoObl.destino},
+                con <strong>{METODO_TEXTO[metodoObl]}</strong>
+                {cuenta ? <> desde <strong>{cuenta.nombre}</strong></> : <> desde la cuenta por defecto</>}.
+              </span>
+              <span className="block">
+                Queda marcado como pagado y, si la contabilidad está activa, se asienta el pago. Solo lo registra: el pago real a la
+                TSS o a la DGII lo haces tú en su portal o en tu banco. Desde esta pantalla no se puede deshacer.
+              </span>
+            </span>
+          );
+        })()}
+        confirmLabel={pagandoObl !== null ? 'Registrando…' : 'Sí, registrar pago'}
+        loading={pagandoObl !== null}
+        onConfirm={() => confirmarPagoObl && pagarObligacion(confirmarPagoObl.id)}
       />
 
       <ConfirmDialog
