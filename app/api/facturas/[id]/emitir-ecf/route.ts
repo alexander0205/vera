@@ -29,6 +29,8 @@ import { emision, EcfApiError } from '@/lib/ecf-api/client';
 import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente } from '@/lib/ecf-api/contribuyente';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
+import { fechaLimiteParaEmitir } from '@/lib/facturas/fecha-limite-pago';
+import { hoyRD } from '@/lib/utils/format';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
 import { getAmbienteTenant, mensajeAmbienteNoProduccion, puedeEmitirADgii } from '@/lib/ecf-api/ambiente';
 
@@ -554,6 +556,21 @@ export async function POST(
 
     // Build mapper payload
     const tipoPago = (doc.tipoPago ?? 1) as 1 | 2 | 3 | 4;
+    // Crédito exige fecha límite (DGII). Un borrador a crédito sin ella (p. ej. una
+    // nota de mora vieja) recibe la de por defecto en vez de fallar con 422.
+    const fechaLimiteFinal = fechaLimiteParaEmitir({
+      tipoPago,
+      fechaLimitePago:      doc.fechaLimitePago,
+      esNotaMora:           doc.moraOrigenId != null,
+      hoy:                  hoyRD(),
+      plazoPagoDefaultDias: team.plazoPagoDefaultDias,
+    });
+    if (fechaLimiteFinal && fechaLimiteFinal !== doc.fechaLimitePago) {
+      await db
+        .update(ecfDocuments)
+        .set({ fechaLimitePago: fechaLimiteFinal, updatedAt: new Date() })
+        .where(and(eq(ecfDocuments.id, docId), eq(ecfDocuments.teamId, teamId)));
+    }
     const { tipo, dto: ecfApiDto } = mapToEcfApiDto({
       tipoEcf,
       items,
@@ -562,7 +579,7 @@ export async function POST(
       razonSocialComprador:       doc.razonSocialComprador ?? undefined,
       emailComprador:             doc.emailComprador ?? undefined,
       tipoPago,
-      fechaLimitePago:            doc.fechaLimitePago ?? undefined,
+      fechaLimitePago:            fechaLimiteFinal ?? doc.fechaLimitePago ?? undefined,
       ncfModificado:              ncfModFinal ?? undefined,
       codigoModificacion:         codModFinal,
       fechaNcfModificado:         fechaNcfModFinal,
