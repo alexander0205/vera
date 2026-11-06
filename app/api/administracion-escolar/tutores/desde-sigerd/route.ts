@@ -15,24 +15,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
-import { db } from '@/lib/db/drizzle';
-import { adminEscolarTutores } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
-import { traerParientesEstudiante, type ParienteSigerd } from '@/lib/sigerd/parientes';
-import { traerParientesDesdePdf } from '@/lib/sigerd/ficha-pdf';
+import { traerTutoresDeSigerd } from '@/lib/sigerd/tutores-desde-sigerd';
 import { conSesionSigerdAuto } from '@/lib/sigerd/sesion-auto';
-import { sinInvisibles, textoLimpio } from '@/lib/utils/format';
 
 export const dynamic = 'force-dynamic';
-
-/** El PDF trae el nombre entero en una pieza; la pestaña lo trae partido. */
-function nombreDe(p: { nombreCompleto?: string } & Partial<Omit<ParienteSigerd, 'tipo'>>): string {
-  const completo = textoLimpio(p.nombreCompleto);
-  if (completo) return completo.replace(/\s+/g, ' ');
-  return sinInvisibles([p.primerNombre, p.segundoNombre, p.primerApellido, p.segundoApellido]
-    .filter(Boolean).join(' ')).replace(/\s+/g, ' ').trim();
-}
 
 export async function POST(req: NextRequest) {
   // `gestionar` y no `ver`: consulta datos de familiares de menores en el
@@ -47,102 +34,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'idEstudianteSigerd requerido' }, { status: 400 });
   }
 
-  return conSesionSigerdAuto(teamId, async (cli) => {
-    /**
-     * El PDF manda porque es el único que trae los datos.
-     *
-     * `GetViewDatosPariente` —la pestaña del portal— devuelve el formulario en
-     * blanco para todos los alumnos probados, incluido uno cuyo PDF sí lista
-     * padre y madre con cédula. Se deja como respaldo por si el reporte falla o
-     * el ministerio arregla la pestaña, pero primero va el que funciona.
-     */
-    let parientes: Array<{
-      tipo: string; cedula: string | null; email: string | null;
-      telefono: string | null; celular: string | null; direccion: string | null;
-      nombreCompleto?: string;
-      primerNombre?: string | null; segundoNombre?: string | null;
-      primerApellido?: string | null; segundoApellido?: string | null;
-    }> = [];
-
-    try {
-      parientes = (await traerParientesDesdePdf(cli, idEstudianteSigerd)).map((p) => ({
-        tipo: p.tipo,
-        nombreCompleto: p.nombre,
-        cedula: p.cedula,
-        celular: p.celular,
-        telefono: p.telefono,
-        email: null,
-        direccion: null,
-      }));
-    } catch {
-      // Que el reporte falle no tumba el alta: se sigue con la pestaña, y si
-      // esa también viene vacía el usuario pone los tutores a mano.
-      parientes = [];
-    }
-
-    if (parientes.length === 0) {
-      parientes = (await traerParientesEstudiante(cli, idEstudianteSigerd)) as typeof parientes;
-    }
-
-    const tutores = [];
-    for (const p of parientes) {
-      const nombre = nombreDe(p);
-      // Sin nombre no hay tutor que crear: el hueco del portal estaba a medias.
-      if (!nombre) continue;
-
-      // Sin invisibles también para buscar: con un U+200E delante, la misma
-      // cédula no se encontraba y el padre se creaba otra vez.
-      const documento = textoLimpio(p.cedula);
-      const telefono = textoLimpio(p.celular) ?? textoLimpio(p.telefono);
-      const email = textoLimpio(p.email);
-
-      // Reutilizar antes que duplicar. La cédula manda —es la identidad— y solo
-      // cuando falta se cae al nombre exacto. Sin esto, traer los parientes de
-      // dos hermanos crearía al mismo padre dos veces.
-      const [existente] = await db
-        .select({ id: adminEscolarTutores.id, clientId: adminEscolarTutores.clientId })
-        .from(adminEscolarTutores)
-        .where(and(
-          eq(adminEscolarTutores.teamId, teamId),
-          documento
-            ? eq(adminEscolarTutores.documento, documento)
-            : eq(adminEscolarTutores.nombre, nombre),
-        ))
-        .limit(1);
-
-      let tutorId: number;
-      let clientId: number | null;
-      if (existente) {
-        tutorId = existente.id;
-        clientId = existente.clientId;
-      } else {
-        const [creado] = await db.insert(adminEscolarTutores).values({
-          teamId,
-          nombre,
-          documento,
-          // El portal guarda los dos; el celular es el que contesta.
-          telefono,
-          email,
-          direccion: textoLimpio(p.direccion),
-        }).returning({ id: adminEscolarTutores.id });
-        tutorId = creado.id;
-        clientId = null;
-      }
-
-      tutores.push({
-        tutorId,
-        nombre,
-        documento,
-        telefono,
-        email,
-        clientId,
-        // `padre` | `madre` | `tutor` son tres de nuestras cinco relaciones, así
-        // que el tipo del portal entra tal cual.
-        relacion: p.tipo,
-        reutilizado: !!existente,
-      });
-    }
-
-    return { tutores };
-  });
+  return conSesionSigerdAuto(teamId, async (cli) => ({
+    tutores: await traerTutoresDeSigerd(teamId, cli, idEstudianteSigerd),
+  }));
 }
+

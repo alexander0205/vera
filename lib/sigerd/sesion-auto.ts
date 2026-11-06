@@ -48,6 +48,12 @@ export async function conClienteSigerd<T>(
      */
     verificarCookie?: boolean;
     /**
+     * Sin navegador detrás: no se lee ni se deja la sesión en una cookie. Para
+     * el trabajo que sigue después de responder (`after()`) y el cron, donde
+     * Next no deja escribir cookies. Implica `soloCredenciales`.
+     */
+    sinCookie?: boolean;
+    /**
      * Centro que el colegio ACABA de elegir en «Conectar», cuando su cuenta
      * tiene varios perfiles. Manda sobre el guardado: es justo para cambiarlo.
      */
@@ -55,7 +61,7 @@ export async function conClienteSigerd<T>(
   } = {},
 ): Promise<{ datos: T; origen: 'cookie' | 'credenciales'; perfil: SigerdPerfil | null } | null> {
   // 1 · La cookie del usuario, si sigue viva.
-  if (!opts.soloCredenciales) {
+  if (!opts.soloCredenciales && !opts.sinCookie) {
     const guardada = await leerSesion();
     if (guardada) {
       const cli = SigerdClient.desdeSesion(guardada);
@@ -95,7 +101,7 @@ export async function conClienteSigerd<T>(
 
     const datos = await fn(cli);
     const sesion = cli.exportarSesion();
-    await guardarSesion(sesion);
+    if (!opts.sinCookie) await guardarSesion(sesion);
     return { datos, perfil: sesion.perfil };
   });
 

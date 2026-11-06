@@ -20,6 +20,8 @@ interface Factura {
   estado: string;
   estadoPago: string;
   montoTotal: number;
+  /** El día de la factura. Un borrador puede no tenerla todavía. */
+  fechaEmision: string | null;
   createdAt: string;
 }
 
@@ -177,10 +179,12 @@ export function VincularFacturaDialog({ cargoId, cargoLabel, cargoSaldoCentavos 
                         {/* Un borrador no tiene eNCF todavía; sin fallback la fila
                             salía en blanco y no se distinguía una de otra. */}
                         <p className="font-medium text-gray-900 truncate">{f.encf || f.codigo || 'Borrador'}</p>
+                        {/* La fecha de la factura, no la del registro: una histórica
+                            o una que vino de Alegra se crea hoy pero es de agosto. */}
                         <p className="text-xs text-gray-400 truncate">
                           {f.razonSocialComprador
-                            ? `${f.razonSocialComprador} · ${fmtFechaCorta(f.createdAt)}`
-                            : fmtFechaCorta(f.createdAt)}
+                            ? `${f.razonSocialComprador} · ${fmtFechaCorta(f.fechaEmision ?? f.createdAt)}`
+                            : fmtFechaCorta(f.fechaEmision ?? f.createdAt)}
                         </p>
                       </div>
                       <div className="text-right shrink-0">

@@ -12,11 +12,30 @@ export { cobraEnSeccion } from '@/lib/administracion-escolar/matricular-sigerd-p
 
 export interface Alumno {
   id: number; nombre: string; sinResponsable: boolean;
+  /** Su RNE, si lo tiene: lo que identifica al alumno en SIGERD. */
+  rne?: string | null;
   /** Ya tiene matrícula activa este año: sale para cambiarle lo que lleva. */
   matriculaId?: number;
   /** Lo que su matrícula cobra hoy (solo si ya está matriculado). */
   conceptos?: number[];
+  /**
+   * De dónde sale su sección: `sigerd` (el portal lo pone ahí) o `zero` (su
+   * matrícula, o el curso que se le eligió aquí porque SIGERD no lo ubica).
+   */
+  origen?: 'sigerd' | 'zero';
+  /** Sin curso todavía: por qué SIGERD no lo ubica. */
+  motivoSinCurso?: string;
 }
+
+/**
+ * El «grupo» de los alumnos de Zero que SIGERD no ubica: no es una sección, es
+ * la lista de dónde se les elige una. No tiene plan ni se matricula tal cual.
+ */
+export const SIN_CURSO = -2;
+export const esSinCurso = (g: Pick<Grupo, 'cursoId'>) => g.cursoId === SIN_CURSO;
+
+/** Los pasos del alumno abierto. «Revisar» solo sale en la vista Formulario. Vive en la URL (`?paso=`). */
+export type PasoAlumno = 'familia' | 'conceptos' | 'pagos' | 'revisar';
 
 export const esMatriculado = (a: Pick<Alumno, 'matriculaId'>) => a.matriculaId != null;
 export interface Grupo {
@@ -26,7 +45,8 @@ export interface Grupo {
 
 export type PlanSeccion =
   | { estado: 'cargando' }
-  | { estado: 'listo'; lineas: LineaPlan[] }
+  /** `otros`: lo que la sección no cobra y otros grados sí, para «Ver más» de cada alumno. */
+  | { estado: 'listo'; lineas: LineaPlan[]; otros: LineaPlan[] }
   | { estado: 'error'; mensaje: string };
 
 /** Lo que se decidió para un alumno al abrirlo. Sin entrada, va con lo de su sección. */

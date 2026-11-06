@@ -68,7 +68,7 @@ export async function matricularLote(params: {
    * cobran a ÉL (al que no usa transporte se le quita). Quien no tiene entrada
    * va con lo del grupo.
    */
-  porEstudiante?: Map<number, { conceptos: number[] }>;
+  porEstudiante?: Map<number, { conceptos: number[]; beca?: { porcentaje: number; motivo?: string | null } | null }>;
   /**
    * Hasta qué fecha se crean ya los cargos (ver `corteCargos` en
    * matricula-alta.ts). Nunca antes de la inscripción.
@@ -174,8 +174,14 @@ export async function matricularLote(params: {
     // Su plan y sus conceptos, si no son los del grupo. Los conceptos se
     // recortan a los que su plan cobra: un id que no tenga tarifa aquí no es
     // algo que se le pueda cargar.
-    const planAlumno = ctx && conPrecioPropio.has(id)
-      ? await armarPlanDeCobro(teamId, { ...ctx, estudianteId: id }, inscripcion)
+    // Con beca, su plan también es suyo: la beca cambia el monto de lo que la admite.
+    const beca = params.porEstudiante?.get(id)?.beca;
+    const becaOk = beca && Number.isInteger(beca.porcentaje) && beca.porcentaje > 0 && beca.porcentaje <= 100 ? beca : null;
+    const planAlumno = ctx && (conPrecioPropio.has(id) || becaOk)
+      ? await armarPlanDeCobro(teamId, {
+          ...ctx, estudianteId: id,
+          ...(becaOk ? { becaTipo: 'porcentaje', becaValor: becaOk.porcentaje } : {}),
+        }, inscripcion)
       : plan;
     const suyos = params.porEstudiante?.get(id)?.conceptos;
     const enPlan = new Set(planAlumno.map((l) => l.conceptoId));
@@ -198,9 +204,9 @@ export async function matricularLote(params: {
         corteCargos: corte,
         estado: 'activa',
         notas: notas?.trim() || null,
-        becaTipo: null,
-        becaValor: null,
-        becaMotivo: null,
+        becaTipo: becaOk ? 'porcentaje' : null,
+        becaValor: becaOk ? becaOk.porcentaje : null,
+        becaMotivo: becaOk ? (becaOk.motivo?.trim() || null) : null,
         conceptos: pedidosAlumno,
       }, planAlumno);
       resultados.push({ estudianteId: id, nombre, codigo, resultado: 'creada', matriculaId: matricula.id });

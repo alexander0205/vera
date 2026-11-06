@@ -18,18 +18,29 @@
  */
 
 import {
-  aplicarPreciosPropios, tarifaDesdeEscrito, type LineaPlan,
+  aplicarPreciosPropios, conBeca as planConBeca, tarifaDesdeEscrito, type LineaPlan,
 } from '@/components/administracion-escolar/PlanCobroSelector';
 import { cuotasAlMatricular, sumaCentavos } from './cuotas-al-matricular';
 
 export interface PrecioPropio { conceptoId: number; montoCentavos: number }
+
+/** Beca de la matrícula: un porcentaje que se descuenta de lo que admite beca. */
+export interface BecaAlumno { porcentaje: number; motivo?: string | null }
 
 /** Lo decidido para un alumno. Sin ajuste, lleva lo de su sección. */
 export interface AjusteAlumno {
   conceptos: number[];
   /** Su tarifa en esos conceptos, en la misma unidad que `LineaPlan.montoCentavos`. */
   precios: PrecioPropio[];
+  /**
+   * Su beca, si tiene (solo para quien se va a matricular). `null` = se le
+   * quitó; sin el campo, lo que ya tuviera (los cambios en lote no la tocan).
+   */
+  beca?: BecaAlumno | null;
 }
+
+/** El plan con la beca puesta, como lo hace el servidor (ver `conBeca` del selector). */
+export const conBeca = (plan: LineaPlan[], beca: BecaAlumno | null | undefined) => planConBeca(plan, beca?.porcentaje);
 
 /**
  * Si la sección cobra este concepto. Por defecto, los obligatorios sí y los
@@ -44,16 +55,18 @@ export const conceptosDeSeccion = (lineas: LineaPlan[], cambiados?: Set<number>)
 
 /** Igual que lo de su sección y sin precios propios: no hace falta guardarle nada aparte. */
 export const igualASeccion = (deSeccion: number[] | null, a: AjusteAlumno) => deSeccion != null
-  && a.precios.length === 0
+  && a.precios.length === 0 && !a.beca
   && a.conceptos.length === deSeccion.length && deSeccion.every((c) => a.conceptos.includes(c));
 
 /**
  * Cuánto se le carga hoy, cuántos cargos nacen y cuánto suma el año.
  * `corte` es hasta dónde se carga ya: lo emitido antes o ese día nace como cargo.
  */
-export function cuentaDe(lineas: LineaPlan[], conceptos: Iterable<number>, precios: PrecioPropio[], corte: string) {
+export function cuentaDe(
+  lineas: LineaPlan[], conceptos: Iterable<number>, precios: PrecioPropio[], corte: string, beca?: BecaAlumno | null,
+) {
   const propios = new Map(precios.map((p) => [p.conceptoId, p.montoCentavos]));
-  const plan = aplicarPreciosPropios(lineas, propios);
+  const plan = conBeca(aplicarPreciosPropios(lineas, propios), beca);
   const { ahora, despues } = cuotasAlMatricular(plan, conceptos, corte);
   const hoy = sumaCentavos(ahora);
   return { hoy, cargos: ahora.length, anio: hoy + sumaCentavos(despues) };
@@ -126,7 +139,8 @@ export function seccionConConcepto(
   for (const [id, a] of ajustes) {
     if (matriculados.has(id)) continue;
     const conceptos = con(a.conceptos);
-    const ajuste = { conceptos, precios: soloDe(conceptos, a.precios) };
+    // Su beca se queda: cambiar lo de la sección no se la quita.
+    const ajuste = { conceptos, precios: soloDe(conceptos, a.precios), ...(a.beca ? { beca: a.beca } : {}) };
     resultado.set(id, igualASeccion(deSeccion, ajuste) ? null : ajuste);
   }
   for (const [id, guardados] of matriculados) {
