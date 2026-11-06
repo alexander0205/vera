@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import useSWR from 'swr';
+import useSWR, { mutate as mutateGlobal } from 'swr';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,6 +15,10 @@ import { Banknote, Download, Landmark, Loader2, Plus, Printer, Scale, X } from '
 import type { InfoCuenta, LibroBanco, ResumenEfectivo } from '@/lib/contabilidad/bancos';
 const CODIGOS_CON_AUXILIAR = ['1103', '1104', '1107', '2101', '2102', '2103', '2104', '2113', '2114', '2115'];
 import { ExtractoBanco } from './_extracto';
+import { useEscape } from './_escape';
+import { fmtFechaCorta } from '@/lib/utils/format';
+import type { Bandeja } from '@/lib/contabilidad/conciliacion';
+import { etiquetaOrigen } from '@/lib/contabilidad/origen-labels';
 
 // Libro banco, conciliación y movimientos entre cuentas propias. El libro es el
 // mayor de una caja o banco partido en lo que entró y lo que salió; conciliar es
@@ -25,10 +29,6 @@ const RD = new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP', 
 const pesos = (c: number) => RD.format(c / 100);
 const hoyISO = () => new Date(Date.now() - 4 * 3600_000).toISOString().slice(0, 10);
 const primeroDeMes = () => `${hoyISO().slice(0, 8)}01`;
-const ORIGEN: Record<string, string> = {
-  factura: 'Factura', pago: 'Cobro', nota: 'Nota', anulacion: 'Anulación', manual: 'Manual',
-  pago_sueldos: 'Pago de nómina', pago_nomina: 'Pago TSS/DGII', nomina: 'Nómina', compra: 'Compra', gasto: 'Gasto',
-};
 
 type Tipo = 'transferencia' | 'cargo' | 'deposito' | 'retiro';
 const TIPOS: Record<Tipo, string> = {
@@ -59,7 +59,12 @@ export default function BancosClient() {
   const ocupadoRef = useRef(false);
   const [trabajando, setTrabajando] = useState(false);
 
-  async function refrescar() { await Promise.all([mutate(), mutateEfectivo()]); setSel(new Set()); }
+  // El libro y la bandeja del estado de cuenta se miran entre sí: si cambia uno, se refrescan los dos.
+  async function refrescar() {
+    await Promise.all([mutate(), mutateEfectivo(), mutateGlobal((k) => typeof k === 'string' && k.startsWith('/api/contabilidad/bancos/extracto'))]);
+    setSel(new Set());
+  }
+  const { data: bandeja } = useSWR<Bandeja>(cuentaActiva ? `/api/contabilidad/bancos/extracto?cuentaId=${cuentaActiva}` : null, fetcher);
 
   async function conciliar(conciliada: boolean, ids: number[]) {
     if (ocupadoRef.current || ids.length === 0) return;
@@ -93,8 +98,8 @@ export default function BancosClient() {
           <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
             <Landmark className="h-6 w-6 text-zero-600" /> Bancos y caja
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground print:hidden">
-            El libro banco de cada cuenta, lo que entró y salió, y la conciliación contra tu estado de cuenta.
+          <p className="mt-1 text-sm text-muted-foreground print:hidden" data-testid="origen-libro">
+            Lo que entró y salió de cada banco o caja. Se llena solo con cobros, pagos a proveedores y lo que registras con «Registrar movimiento». Abajo lo comparas con el estado de cuenta que bajas de tu banco.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 print:hidden">
@@ -164,14 +169,27 @@ export default function BancosClient() {
                 <div className="text-xs text-muted-foreground">Diferencia</div>
                 {diferencia === null
                   ? <div className="text-sm text-muted-foreground">Escribe el saldo del banco</div>
-                  : <div className={`text-lg font-semibold tabular-nums ${diferencia === 0 ? 'text-emerald-700' : 'text-amber-700'}`} data-testid="diferencia">
-                      {diferencia === 0 ? 'Cuadra ✓' : pesos(diferencia)}
-                    </div>}
+                  : <>
+                      <div className={`text-lg font-semibold tabular-nums ${diferencia === 0 ? 'text-emerald-700' : 'text-amber-700'}`} data-testid="diferencia">
+                        {diferencia === 0 ? 'Cuadra ✓' : pesos(diferencia)}
+                      </div>
+                      {diferencia !== 0 && (
+                        <div className="text-xs text-muted-foreground" data-testid="diferencia-explicada">
+                          El banco tiene {pesos(Math.abs(diferencia))} {diferencia > 0 ? 'más' : 'menos'} que lo marcado en tu libro.
+                        </div>
+                      )}
+                    </>}
+                {bandeja?.disponible && bandeja.resumen.pendientes > 0 && (
+                  <div className="mt-1 text-xs text-muted-foreground" data-testid="sin-emparejar">
+                    Líneas del banco sin emparejar: +{pesos(bandeja.resumen.depositosPendientesCents)} / −{pesos(bandeja.resumen.retirosPendientesCents)}
+                  </div>
+                )}
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
               Marca abajo lo que ya aparece en el estado de cuenta. Cuando el saldo del banco menos lo conciliado da cero, la cuenta está conciliada.
               Lo que queda sin marcar son los depósitos o retiros que el banco aún no refleja (o que están mal registrados).
+              Si la cuenta tenía movimientos antes de «Desde», ponlo más atrás para verlos y marcarlos.
             </p>
           </CardContent></Card>
 
@@ -203,9 +221,9 @@ export default function BancosClient() {
                   <tr key={m.lineaId} className="border-b last:border-0 align-top" data-testid="movimiento">
                     {puedeGestionar && <td className="px-3 py-2 print:hidden"><input type="checkbox" checked={sel.has(m.lineaId)} aria-label={`Marcar ${m.concepto}`}
                       onChange={() => setSel((s) => { const n = new Set(s); if (n.has(m.lineaId)) n.delete(m.lineaId); else n.add(m.lineaId); return n; })} className="h-4 w-4 cursor-pointer accent-zero-600" /></td>}
-                    <td className="whitespace-nowrap px-3 py-2 tabular-nums">{m.fecha}</td>
+                    <td className="whitespace-nowrap px-3 py-2 tabular-nums">{fmtFechaCorta(m.fecha)}</td>
                     <td className="min-w-[14rem] px-3 py-2 [overflow-wrap:anywhere]">{m.concepto}</td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{ORIGEN[m.origenTipo] ?? m.origenTipo}</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">{etiquetaOrigen(m.origenTipo)}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-emerald-700">{m.entraCents ? pesos(m.entraCents) : ''}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-red-700">{m.saleCents ? pesos(m.saleCents) : ''}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{pesos(m.saldoCents)}</td>
@@ -220,7 +238,8 @@ export default function BancosClient() {
 
       {cuentaActiva && (
         <div className="mt-8">
-          <ExtractoBanco cuentaId={cuentaActiva} puedeGestionar={puedeGestionar} onCambio={refrescar} />
+          <ExtractoBanco cuentaId={cuentaActiva} puedeGestionar={puedeGestionar} onCambio={refrescar}
+            onUsarSaldo={(cents, fecha) => { setSaldoBanco((cents / 100).toFixed(2)); setHasta(fecha); }} />
         </div>
       )}
 
@@ -239,7 +258,7 @@ export default function BancosClient() {
               <div className="mb-1 text-xs font-medium text-muted-foreground">Lo que salió, por tipo</div>
               {efectivo.salidasPorOrigen.length === 0 && <div className="text-muted-foreground">Nada salió en efectivo.</div>}
               {efectivo.salidasPorOrigen.map((o) => (
-                <div key={o.origenTipo} className="flex justify-between"><span>{ORIGEN[o.origenTipo] ?? o.origenTipo} <span className="text-xs text-muted-foreground">({o.cantidad})</span></span><span className="tabular-nums">{pesos(o.saleCents)}</span></div>
+                <div key={o.origenTipo} className="flex justify-between"><span>{etiquetaOrigen(o.origenTipo)} <span className="text-xs text-muted-foreground">({o.cantidad})</span></span><span className="tabular-nums">{pesos(o.saleCents)}</span></div>
               ))}
             </CardContent></Card>
           </div>
@@ -266,6 +285,7 @@ function FormMovimiento({ bancos, cuentaInicial, onCerrar, onGuardado }: {
   const [guardando, setGuardando] = useState(false);
   const ocupadoRef = useRef(false);
   const set = (p: Partial<typeof f>) => setF((x) => ({ ...x, ...p }));
+  useEscape(onCerrar);
 
   async function guardar() {
     if (ocupadoRef.current) return;
@@ -298,12 +318,12 @@ function FormMovimiento({ bancos, cuentaInicial, onCerrar, onGuardado }: {
             {(Object.keys(TIPOS) as Tipo[]).map((t) => <option key={t} value={t}>{TIPOS[t]}</option>)}
           </NativeSelect>
         </Campo>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Campo label="Fecha *"><Input type="date" value={f.fecha} onChange={(e) => set({ fecha: e.target.value })} aria-label="Fecha del movimiento" /></Campo>
           <Campo label="Monto (RD$) *"><MoneyInput value={f.monto} onChange={(v) => set({ monto: v })} aria-label="Monto" /></Campo>
         </div>
         {tipo === 'transferencia' ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Campo label="Sale de *"><NativeSelect value={f.origen} onChange={(e) => set({ origen: e.target.value })} aria-label="Cuenta de origen">{opcionesBanco}</NativeSelect></Campo>
             <Campo label="Entra a *"><NativeSelect value={f.destino} onChange={(e) => set({ destino: e.target.value })} aria-label="Cuenta de destino"><option value="">Elige…</option>{opcionesBanco}</NativeSelect></Campo>
           </div>

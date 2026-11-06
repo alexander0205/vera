@@ -32,8 +32,8 @@ const ETIQUETA: Record<string, { texto: string; color: string }> = {
  * Solicitudes de pago a proveedores: la secretaria pide, el dueño aprueba mirando
  * lo disponible en caja y bancos, y luego se registra el pago.
  */
-export function SolicitudesPago({ puedeGestionar, puedeAprobar, cuentasSalida, compra, onCerrarSolicitud, onPagada }: {
-  puedeGestionar: boolean; puedeAprobar: boolean; cuentasSalida: CuentaCatalogo[];
+export function SolicitudesPago({ puedeGestionar, puedeAprobar, cuentasSalida, cuentaSalidaPorMetodo = {}, compra, onCerrarSolicitud, onPagada }: {
+  cuentaSalidaPorMetodo?: Record<string, number>; puedeGestionar: boolean; puedeAprobar: boolean; cuentasSalida: CuentaCatalogo[];
   compra: CompraParaSolicitar | null; onCerrarSolicitud: () => void; onPagada: () => void;
 }) {
   const [datos, setDatos] = useState<ListadoSolicitudes | null>(null);
@@ -116,7 +116,7 @@ export function SolicitudesPago({ puedeGestionar, puedeAprobar, cuentasSalida, c
 
       <Dialog open={rechazando !== null} onClose={() => setRechazando(null)}>
         <DialogTitle>Rechazar la solicitud</DialogTitle>
-        <DialogContent sx={{ pt: 2, minWidth: 340 }}>
+        <DialogContent sx={{ '&&': { pt: 2 } }}>
           <TextField label="Motivo (opcional)" value={motivo} onChange={(e) => setMotivo(e.target.value)} fullWidth multiline slotProps={{ htmlInput: { maxLength: 300 } }} />
         </DialogContent>
         <DialogActions>
@@ -125,7 +125,7 @@ export function SolicitudesPago({ puedeGestionar, puedeAprobar, cuentasSalida, c
         </DialogActions>
       </Dialog>
 
-      {compra && <Solicitar compra={compra} cuentasSalida={cuentasSalida} onCerrar={onCerrarSolicitud} onCreada={async () => { onCerrarSolicitud(); setMensaje('Solicitud enviada'); await cargar(); }} />}
+      {compra && <Solicitar compra={compra} cuentasSalida={cuentasSalida} porMetodo={cuentaSalidaPorMetodo} onCerrar={onCerrarSolicitud} onCreada={async () => { onCerrarSolicitud(); setMensaje('Solicitud enviada'); await cargar(); }} />}
     </Box>
   );
 }
@@ -150,7 +150,7 @@ function Fila({ s, children }: { s: SolicitudPago; children?: React.ReactNode })
   );
 }
 
-function Solicitar({ compra, cuentasSalida, onCerrar, onCreada }: { compra: CompraParaSolicitar; cuentasSalida: CuentaCatalogo[]; onCerrar: () => void; onCreada: () => void | Promise<void> }) {
+function Solicitar({ compra, cuentasSalida, porMetodo, onCerrar, onCreada }: { compra: CompraParaSolicitar; cuentasSalida: CuentaCatalogo[]; porMetodo: Record<string, number>; onCerrar: () => void; onCreada: () => void | Promise<void> }) {
   const [monto, setMonto] = useState((compra.saldo / 100).toFixed(2));
   const [metodo, setMetodo] = useState('transferencia');
   const [cuenta, setCuenta] = useState('auto');
@@ -173,9 +173,9 @@ function Solicitar({ compra, cuentasSalida, onCerrar, onCreada }: { compra: Comp
   }
 
   return (
-    <Dialog open onClose={() => !guardando && onCerrar()}>
-      <DialogTitle>Solicitar pago a proveedor</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2, minWidth: 360 }}>
+    <Dialog open fullWidth maxWidth="xs" onClose={() => !guardando && onCerrar()}>
+      <DialogTitle>Pedir aprobación del pago</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, '&&': { pt: 2 } }}>
         <Typography sx={{ fontSize: 13, color: '#6b7280' }}>{compra.proveedorNombre ?? 'Proveedor sin nombre'} · {compra.referencia ?? `#${compra.id}`} · saldo {fmtDOP(compra.saldo)}</Typography>
         <TextField label="Monto (RD$)" value={mascaraMonto(monto)} onChange={(e) => setMonto(limpiarMonto(e.target.value))} slotProps={{ htmlInput: { inputMode: 'decimal' } }} />
         <TextField select label="Método" value={metodo} onChange={(e) => setMetodo(e.target.value)}>
@@ -183,7 +183,7 @@ function Solicitar({ compra, cuentasSalida, onCerrar, onCreada }: { compra: Comp
         </TextField>
         {cuentasSalida.length > 0 && (
           <TextField select label="Sale de" value={cuenta} onChange={(e) => setCuenta(e.target.value)}>
-            <MenuItem value="auto">Automática (la del método)</MenuItem>
+            <MenuItem value="auto">{(() => { const a = cuentasSalida.find((c) => c.id === porMetodo[metodo]); return a ? `Automática · ${a.codigo} ${a.nombre}` : 'Automática (la del método)'; })()}</MenuItem>
             {cuentasSalida.map((c) => <MenuItem key={c.id} value={String(c.id)}>{c.codigo} · {c.nombre}</MenuItem>)}
           </TextField>
         )}
@@ -192,7 +192,7 @@ function Solicitar({ compra, cuentasSalida, onCerrar, onCreada }: { compra: Comp
       </DialogContent>
       <DialogActions>
         <Button onClick={onCerrar} disabled={guardando}>Cancelar</Button>
-        <Button variant="contained" onClick={enviar} disabled={guardando}>{guardando ? 'Enviando…' : 'Enviar solicitud'}</Button>
+        <Button variant="contained" onClick={enviar} disabled={guardando}>{guardando ? 'Enviando…' : 'Pedir aprobación'}</Button>
       </DialogActions>
     </Dialog>
   );

@@ -107,6 +107,8 @@ function fechaReal(a: number, m: number, d: number): string | null {
   return f.toISOString().slice(0, 10);
 }
 
+const MESES: Record<string, number> = { ene: 1, jan: 1, feb: 2, mar: 3, abr: 4, apr: 4, may: 5, jun: 6, jul: 7, ago: 8, aug: 8, sep: 9, set: 9, oct: 10, nov: 11, dic: 12, dec: 12 };
+
 /** Una fecha de estado de cuenta: ISO, día/mes/año, un Date de Excel o el número de serie de Excel. */
 export function leerFecha(v: unknown, orden: 'dmy' | 'mdy' = 'dmy'): string | null {
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : fechaReal(v.getUTCFullYear(), v.getUTCMonth() + 1, v.getUTCDate());
@@ -118,6 +120,12 @@ export function leerFecha(v: unknown, orden: 'dmy' | 'mdy' = 'dmy'): string | nu
   const t = textoCelda(v);
   let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(t);
   if (m) return fechaReal(Number(m[1]), Number(m[2]), Number(m[3]));
+  // «15-ene-2024», «15 Enero 2024», «15/Jan/24»
+  const mt = /^(\d{1,2})[\s/\-.]+([a-záéíóú]{3,10})\.?[\s/\-.]+(\d{2}|\d{4})(?!\d)/i.exec(sinAcentos(t).toLowerCase());
+  if (mt) {
+    const mes = MESES[mt[2].slice(0, 3)];
+    if (mes) return fechaReal(mt[3].length === 2 ? 2000 + Number(mt[3]) : Number(mt[3]), mes, Number(mt[1]));
+  }
   m = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2}|\d{4})(?!\d)/.exec(t);
   if (m) {
     const a = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
@@ -159,6 +167,9 @@ export function leerMonto(v: unknown): number | null {
   if (t === '') return null;
   let negativo = false;
   if (/^\(.*\)$/.test(t)) { negativo = true; t = t.slice(1, -1); }
+  // «1,500.00 CR» entró, «1,500.00 DB» salió.
+  const sufijo = /(cr|db)$/i.exec(t);
+  if (sufijo) { negativo = sufijo[1].toLowerCase() === 'db'; t = t.slice(0, -2); }
   if (t.endsWith('-')) { negativo = true; t = t.slice(0, -1); }
   if (t.startsWith('-')) { negativo = !negativo; t = t.slice(1); }
   if (t.startsWith('+')) t = t.slice(1);
@@ -198,9 +209,16 @@ export function leerMonto(v: unknown): number | null {
 /** Un CSV a matriz: comillas, delimitador `,` `;` o tabulador (se detecta), BOM y saltos de línea de cualquier sistema. */
 export function leerCsv(texto: string): string[][] {
   const t = texto.replace(/^﻿/, '');
-  const primera = t.split(/\r?\n/, 1)[0] ?? '';
-  const cuenta = (c: string) => primera.split(c).length - 1;
-  const delim = [',', ';', '\t'].map((c) => ({ c, n: cuenta(c) })).sort((a, b) => b.n - a.n)[0];
+  // Los bancos ponen títulos y datos de la cuenta arriba del encabezado: el delimitador se decide con la fila de
+  // encabezados (la primera que dice «fecha») y, si no se encuentra, con la primera fila que tenga varios delimitadores.
+  const lineas = t.split(/\r?\n/, 60);
+  const mejor = (linea: string) => [',', ';', '\t'].map((c) => ({ c, n: linea.split(c).length - 1 })).sort((a, b) => b.n - a.n)[0];
+  // Un título como «Fecha de impresión: 06/11/2026, 10:15» también dice «fecha»: gana la línea con MÁS delimitadores.
+  const conFecha = lineas
+    .filter((l) => /\b(fecha|date)\b/.test(norm(l)) && mejor(l).n >= 1)
+    .sort((a, b) => mejor(b).n - mejor(a).n)[0];
+  const base = conFecha ?? lineas.find((l) => mejor(l).n >= 3) ?? lineas[0] ?? '';
+  const delim = mejor(base);
   const sep = delim.n > 0 ? delim.c : ',';
 
   const filas: string[][] = [];
@@ -485,4 +503,21 @@ export function emparejar(
     if (lejos.length > 0) sugeridas.push({ extractoId: e.id, candidatos: lejos.map((c) => c.id) });
   }
   return { pares, ambiguas, sugeridas };
+}
+
+// ── Saldo final del archivo ──────────────────────────────────────────────────
+
+/** ¿El archivo viene con lo más nuevo primero? Se mira la fecha de su primera y su última línea. */
+export function archivoDescendente(fechasEnOrdenDelArchivo: readonly string[]): boolean {
+  if (fechasEnOrdenDelArchivo.length < 2) return false;
+  return fechasEnOrdenDelArchivo[0] > fechasEnOrdenDelArchivo[fechasEnOrdenDelArchivo.length - 1];
+}
+
+/**
+ * De varias líneas del último día, la que trae el saldo final: la última del archivo. En un archivo
+ * ascendente es la de mayor id (se guardan en el orden del archivo); en uno descendente, la de menor.
+ */
+export function elegirUltimoSaldo<T extends { id: number }>(delUltimoDia: readonly T[], descendente: boolean): T | null {
+  if (delUltimoDia.length === 0) return null;
+  return [...delUltimoDia].sort((a, b) => (descendente ? a.id - b.id : b.id - a.id))[0];
 }

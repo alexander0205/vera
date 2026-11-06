@@ -186,7 +186,7 @@ export async function pagarSolicitud(teamId: number, id: number, userId: number,
   // Si el pago de esa solicitud ya se registró (lo que atascó fue la marca final), se enlaza en vez de pagar de nuevo.
   const [yaPagado] = await db.execute(sql`
     SELECT id FROM pagos_proveedores
-    WHERE team_id = ${teamId} AND compra_id = ${s.compraId} AND referencia = ${`Solicitud #${id}`} LIMIT 1`) as unknown as { id: number }[];
+    WHERE team_id = ${teamId} AND solicitud_id = ${id} LIMIT 1`) as unknown as { id: number }[];
   if (yaPagado) {
     await db.execute(sql`UPDATE pagos_solicitudes SET estado = 'pagado', pago_id = ${yaPagado.id} WHERE id = ${id}`);
     return { pagoId: yaPagado.id };

@@ -101,12 +101,20 @@ export default function CuentasPorCobrarPage() {
   const [pagoModal, setPagoModal] = useState<Cuenta | null>(null);
   const [detalle, setDetalle] = useState<Cuenta | null>(null);
   const [historicaModal, setHistoricaModal] = useState(false);
+  // ?clienteId=123 (por ejemplo desde la conciliación bancaria): solo las cuentas de ese cliente.
+  // undefined = aún no se leyó la URL; null = sin filtro (lo de siempre).
+  const [clienteId, setClienteId] = useState<number | null | undefined>(undefined);
+  useEffect(() => {
+    const v = Number(new URLSearchParams(window.location.search).get('clienteId'));
+    setClienteId(Number.isSafeInteger(v) && v > 0 ? v : null);
+  }, []);
 
   const cargar = useCallback(async () => {
+    if (clienteId === undefined) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/cuentas-por-cobrar');
+      const res = await fetch(clienteId ? `/api/cuentas-por-cobrar?clientId=${clienteId}` : '/api/cuentas-por-cobrar');
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Error cargando');
       setData(json);
@@ -115,7 +123,7 @@ export default function CuentasPorCobrarPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [clienteId]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -365,6 +373,14 @@ export default function CuentasPorCobrarPage() {
           </button>
         </div>
       </div>
+
+      {clienteId ? (
+        <p className="rounded-lg border border-zero-200 bg-zero-50 px-3 py-2 text-sm text-gray-700" data-testid="filtro-cliente-id">
+          Estás viendo solo las cuentas de un cliente.{' '}
+          {/* Enlace normal (recarga): la página lee el filtro de la URL al abrirse. */}
+          <a href="/dashboard/cuentas-por-cobrar" className="font-medium text-zero-700 underline">Ver todas</a>
+        </p>
+      ) : null}
 
       {/* Tutorial en video de esta pantalla (no dibuja nada si no hay video publicado) */}
       <TutorialDePantalla pantalla="fact-cxc" modo="tarjeta" />

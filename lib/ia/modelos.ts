@@ -43,7 +43,7 @@ export const MODELOS_IA: readonly ModeloIa[] = [
   { id: 'google/gemini-3-flash', nombre: 'Gemini 3 Flash', proveedor: 'Google', nota: 'Más nuevo; razona antes de contestar', entradaUsd: 0.5, salidaUsd: 3 },
 ];
 
-export type UsoIa = 'asistente' | 'analisis' | 'plantillas' | 'captura' | 'redaccion' | 'academia' | 'revision_tono';
+export type UsoIa = 'asistente' | 'analisis' | 'plantillas' | 'captura' | 'redaccion' | 'academia' | 'revision_tono' | 'conciliacion';
 
 export interface UsoIaInfo {
   uso: UsoIa;
@@ -113,10 +113,17 @@ export function usosIa(env: Record<string, string | undefined> = {}): UsoIaInfo[
       principal: env.REVISION_TONO_IA_MODELO || 'google/gemini-2.5-flash-lite',
       respaldo: env.REVISION_TONO_IA_MODELO_RESPALDO || 'google/gemini-2.5-flash-lite',
     },
+    {
+      uso: 'conciliacion',
+      nombre: 'Contabilidad: leer estado de cuenta y conciliar',
+      descripcion: 'Lee el PDF o el archivo raro de un estado de cuenta del banco y sugiere con qué se empareja cada movimiento pendiente. Solo se llama cuando la persona lo pide; nunca aplica nada solo. Se apaga con CONCILIACION_IA=0.',
+      principal: env.CONCILIACION_IA_MODELO || 'anthropic/claude-haiku-5.5',
+      respaldo: env.CONCILIACION_IA_MODELO_RESPALDO || 'google/gemini-2.5-flash',
+    },
   ];
 }
 
-export const USOS_IA: readonly UsoIa[] = ['asistente', 'analisis', 'plantillas', 'captura', 'redaccion', 'academia', 'revision_tono'];
+export const USOS_IA: readonly UsoIa[] = ['asistente', 'analisis', 'plantillas', 'captura', 'redaccion', 'academia', 'revision_tono', 'conciliacion'];
 
 export interface ModelosDeUso { principal: string; respaldo: string }
 

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { logAudit, getIp } from '@/lib/audit';
-import { bandejaExtracto, importarExtracto, emparejarExtracto, ConciliacionError } from '@/lib/contabilidad/conciliacion';
+import { bandejaExtracto, contarYaImportadas, importarExtracto, emparejarExtracto, ConciliacionError } from '@/lib/contabilidad/conciliacion';
 import { interpretarExtracto, ExtractoError } from '@/lib/contabilidad/extracto';
 import { leerMatrizExtracto, MAX_BYTES_EXTRACTO } from '@/lib/contabilidad/extracto-archivo';
+import { faltanColumnas } from '@/lib/contabilidad/extracto-ia';
+import { iaConciliacionDisponible } from '@/lib/contabilidad/conciliacion-ia-servidor';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,8 +59,9 @@ export async function POST(req: NextRequest) {
     const lectura = interpretarExtracto(matriz);
 
     if (form?.get('aplicar') !== '1') {
+      const yaImportadas = await contarYaImportadas(auth.teamId, cuentaId, lectura.filas);
       return NextResponse.json({
-        vista: true,
+        vista: true, yaImportadas,
         columnas: lectura.columnas,
         total: lectura.filas.length,
         entradasCents: lectura.filas.filter((f) => f.montoCents > 0).reduce((s, f) => s + f.montoCents, 0),
@@ -82,6 +85,11 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ vista: false, importacion, emparejado, errores: lectura.errores.slice(0, 30), totalErrores: lectura.errores.length });
   } catch (e) {
+    // Las reglas no encontraron las columnas: si hay IA, la pantalla pide la lectura a /extracto/ia (solo columnas; los montos los lee este mismo código).
+    // Sin IA el error es el de siempre.
+    if (faltanColumnas(e) && form?.get('aplicar') !== '1' && iaConciliacionDisponible()) {
+      return NextResponse.json({ necesitaIa: true });
+    }
     if (e instanceof ExtractoError) return NextResponse.json({ error: e.message }, { status: 400 });
     if (e instanceof ConciliacionError) return NextResponse.json({ error: e.message }, { status: e.status });
     throw e;

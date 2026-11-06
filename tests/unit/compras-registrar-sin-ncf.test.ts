@@ -18,10 +18,13 @@ const base = vi.hoisted(() => ({
   compras: [] as Record<string, unknown>[],
   lineas: [] as Record<string, unknown>[],
   entradas: 0,
+  /** Lo que la base contesta DENTRO de la transacción a «¿ya está este NCF?» (la segunda mirada, tras el candado). */
+  repetidosEnTx: [] as { id: number }[],
 }));
 
 vi.mock('@/lib/db/drizzle', () => {
   const tx = {
+    execute: async () => base.repetidosEnTx,
     insert: () => ({
       values: (v: unknown) => {
         // Las líneas llegan en un arreglo y no devuelven nada; la compra, sola y con su id.
@@ -81,6 +84,7 @@ beforeEach(() => {
   base.compras = [];
   base.lineas = [];
   base.entradas = 0;
+  base.repetidosEnTx = [];
 });
 
 describe('gasto sin NCF', () => {
@@ -180,5 +184,21 @@ describe('lo que no cambia', () => {
     const conNcf = gasto({ ncf: 'B0100000123', tipoProveedor: 'juridica', proveedorRnc: '123456789', lineas: conItbis });
     await expect(registrarCompra(1, 2, conNcf)).rejects.toMatchObject({ codigo: 'ncf-repetido', status: 409, compraId: 9 });
     expect(base.compras).toHaveLength(0);
+  });
+});
+
+describe('NCF repetido dentro de la transacción (doble envío)', () => {
+  const conNcf = (p: Partial<Registro> = {}) => gasto({ ncf: 'B0100000123', tipoProveedor: 'juridica', proveedorRnc: '130000123', ...p });
+
+  it('si otro envío ya lo guardó mientras se esperaba el candado, responde 409 y no guarda nada', async () => {
+    base.repetidosEnTx = [{ id: 55 }];
+    await expect(registrarCompra(1, 2, conNcf())).rejects.toMatchObject({ codigo: 'ncf-repetido', status: 409, compraId: 55 });
+    expect(base.compras).toHaveLength(0);
+  });
+
+  it('con «permitir repetido» no se vuelve a mirar', async () => {
+    base.repetidosEnTx = [{ id: 55 }];
+    await registrarCompra(1, 2, conNcf({ permitirNcfRepetido: true }));
+    expect(base.compras).toHaveLength(1);
   });
 });
