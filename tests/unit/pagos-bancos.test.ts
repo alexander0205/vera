@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   bancoObligatorio, casarCuentaBanco, cuentaInicial, etiquetaDe, mismoBanco, normalizarBanco,
-  resolverBancoDeAprobacion, ultimos4, MAX_ETIQUETA,
+  resolverBancoDeAprobacion, ultimos4, MAX_ETIQUETA, referenciaVisible,
 } from '@/lib/pagos/bancos';
 
 /**
@@ -248,5 +248,19 @@ describe('etiquetas de cuenta', () => {
     const largo = etiquetaDe('B'.repeat(150), 'Corriente', '4821');
     expect(largo.length).toBeLessThanOrEqual(MAX_ETIQUETA);
     expect(largo.endsWith('····4821')).toBe(true);
+  });
+});
+
+describe('referenciaVisible', () => {
+  it('abre el campo solo en cualquier método que no sea efectivo', () => {
+    for (const m of ['transferencia', 'deposito', 'cheque', 'tarjeta']) {
+      expect(referenciaVisible(m, '', false)).toBe(true);
+    }
+  });
+  it('en efectivo queda tras «+ Referencia» salvo que ya traiga texto o se abriera', () => {
+    expect(referenciaVisible('efectivo', '', false)).toBe(false);
+    expect(referenciaVisible('efectivo', undefined, false)).toBe(false);
+    expect(referenciaVisible('efectivo', '', true)).toBe(true);
+    expect(referenciaVisible('efectivo', 'A-1', false)).toBe(true);
   });
 });

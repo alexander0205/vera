@@ -46,6 +46,7 @@ import { useListaNavegacion } from '@/lib/hooks/useListaNavegacion';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import { useSecuencia } from '../nueva/hooks/useSecuencia';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
+import { etiquetaFacturaOrigen } from '@/lib/facturas/etiqueta-origen';
 
 // Opciones del dropdown "Tipo de comprobante" del modal Enviar a DGII.
 const TIPOS_EMIT_DGII: { value: string; label: string }[] = [
@@ -1323,7 +1324,7 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
             <div className="flex items-center justify-between gap-3 rounded-xl border border-zero-200 bg-zero-50 px-4 py-3">
               <p className="text-sm text-zero-900">
                 {factura.tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} sobre la factura{' '}
-                <span className="font-semibold font-mono">{factura.notaOrigen.codigo ?? factura.notaOrigen.encf}</span>
+                <span className="font-semibold font-mono">{etiquetaFacturaOrigen(factura.notaOrigen)}</span>
                 {factura.codigoModificacion != null && (
                   <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-white border border-zero-200 text-zero-800">
                     {factura.codigoModificacion} — {COD_MODIFICACION_LABEL[factura.codigoModificacion] ?? 'Modificación'}
@@ -1382,7 +1383,7 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
             <div className="flex items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
               <p className="text-sm text-orange-900">
                 Nota de débito por mora de la factura{' '}
-                <span className="font-semibold">{factura.moraOrigen.codigo ?? factura.moraOrigen.encf}</span>
+                <span className="font-semibold">{etiquetaFacturaOrigen(factura.moraOrigen)}</span>
               </p>
               <Link
                 href={`/dashboard/facturas/${factura.moraOrigen.id}`}

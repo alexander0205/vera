@@ -29,6 +29,7 @@
 
 import { useCallback, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
+import { mutate as mutateGlobal } from 'swr';
 import { toast } from 'sonner';
 import { Ban, Loader2, Mail } from 'lucide-react';
 
@@ -38,6 +39,7 @@ import { Label } from '@/components/ui/label';
 import { ModalHeader } from '@/components/ui/modal-header';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { fmtDOP } from '@/lib/utils/format';
+import { esClaveCuentasPorCobrar } from '@/lib/administracion-escolar/claves-swr';
 
 import { VincularFacturaDialog } from '@/components/administracion-escolar/VincularFacturaDialog';
 import { ReenviarAvisoDialog } from '@/components/administracion-escolar/ReenviarAvisoDialog';
@@ -89,12 +91,25 @@ export interface AccionesDeCargo {
   reenviandoCargoId: number | null;
 }
 
-export function useAccionesDeCargo({ clienteId, onCambio }: {
+export function useAccionesDeCargo({ clienteId, onCambio: onCambioPantalla }: {
   /** El contacto al que se le factura. Null si aún no hay: no hay dónde buscar facturas. */
   clienteId: number | null;
   /** Refresca la pantalla. Se llama después de todo lo que cambia datos. */
   onCambio: () => void | Promise<void>;
 }): { acciones: AccionesDeCargo; dialogos: ReactNode } {
+  /**
+   * Refresca la pantalla y, además, las cuentas por cobrar del panel.
+   *
+   * El panel de «Cuentas por cobrar» / «Notas de débito» vive con su propia
+   * clave de SWR (`/api/cuentas-por-cobrar?…`), que `onCambio` de la ficha no
+   * conoce: generar una mora dejaba su columna «Mora» con la cifra de antes
+   * hasta recargar la página. Se invalida aquí, donde nace el cambio, y así
+   * vale para la ficha de la familia, la del responsable y la del período.
+   */
+  const onCambio = useCallback(async () => {
+    void mutateGlobal(esClaveCuentasPorCobrar);
+    await onCambioPantalla();
+  }, [onCambioPantalla]);
   const [cargoVincularFactura, setCargoVincularFactura] = useState<CargoAccionable | null>(null);
 
   // Modal de cobro in-place: reutiliza el PagoModal de Cuentas por Cobrar sin

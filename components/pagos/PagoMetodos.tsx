@@ -11,7 +11,7 @@ import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import { METODOS_PAGO, METODO_NOTA_CREDITO, METODO_PAGO_LABELS, type MetodoOption } from '@/lib/pagos/metodos';
 import { useCuentasBanco } from '@/lib/hooks/useCuentasBanco';
-import { METODOS_CON_BANCO } from '@/lib/pagos/bancos';
+import { METODOS_CON_BANCO, referenciaVisible } from '@/lib/pagos/bancos';
 
 // Re-export para compatibilidad con imports existentes. Fuente: lib/pagos/metodos.
 export { METODOS_PAGO } from '@/lib/pagos/metodos';
@@ -193,7 +193,7 @@ export function PagoMetodos({
       cuentaBancoId: Number.isInteger(id) && id! > 0 ? id : null,
     });
   }
-  const refVisible    = (i: number, l: PagoLinea) => !!l.referencia || verReferencia.has(i);
+  const refVisible    = (i: number, l: PagoLinea) => referenciaVisible(l.metodo, l.referencia, verReferencia.has(i));
   const toggleSet = (set: Set<number>, i: number) => {
     const next = new Set(set); next.add(i); return next;
   };
@@ -362,7 +362,7 @@ export function PagoMetodos({
             )}
           </Box>
 
-          {/* Fila 3: referencia (solo si se reveló) */}
+          {/* Fila 3: referencia (abierta si el método no es efectivo) */}
           {showReferencia && refVisible(i, l) && (
             <Box sx={{ minWidth: 0 }}>
               <FieldLabel>Referencia</FieldLabel>
