@@ -5,6 +5,7 @@ import { getTeamIdForUser } from '@/lib/db/queries';
 import { hoyRD } from '@/lib/utils/format';
 import { listarActivosFijos } from '@/lib/contabilidad/depreciacion';
 import { cuentasDeSalida } from '@/lib/contabilidad/config';
+import { listarEspacios } from '@/lib/escolar/inventario-aula-db';
 import { ActivosFijosClient } from './_client';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -31,6 +32,9 @@ export default async function ActivosFijosPage() {
     cuentasDeSalida(teamId),
   ]);
 
+  // Las aulas, para ponerle una a cada ficha. Sin la migración 0236 no hay lista y no se ofrece nada.
+  const espacios = await listarEspacios(teamId).then((l) => l.map((e) => ({ id: e.id, nombre: e.nombre }))).catch(() => []);
+
   return (
     <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1100, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* Breadcrumb */}
@@ -51,7 +55,7 @@ export default async function ActivosFijosPage() {
         </Typography>
       </Box>
 
-      <ActivosFijosClient activos={activos} hoy={hoyRD()} puedeGestionar={puedeGestionar} cuentasCobro={salida.cuentas.map((c) => ({ id: c.id, codigo: c.codigo, nombre: c.nombre }))} />
+      <ActivosFijosClient activos={activos} hoy={hoyRD()} puedeGestionar={puedeGestionar} cuentasCobro={salida.cuentas.map((c) => ({ id: c.id, codigo: c.codigo, nombre: c.nombre }))} espacios={espacios} />
     </Box>
   );
 }

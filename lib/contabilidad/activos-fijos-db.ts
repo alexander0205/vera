@@ -19,6 +19,7 @@ import { getConfig } from './config';
 import { generarAsientoCompra, AsientoManualError } from './asientos';
 import { CODIGO, asegurarCuentaBaseDetalle } from './catalogo-base';
 import { insertarAsientoManualTx, validarCuentasDeAsiento } from './asiento-tx';
+import { inventarioAulaDisponible, soloControlDisponible } from './activos-espacios';
 import {
   activosCompletosDisponible, generarDepreciacionesPendientes, registrarActivoFijo, ActivoFijoError,
 } from './depreciacion';
@@ -58,12 +59,16 @@ async function cuentaPorCodigo(teamId: number, codigo: string): Promise<number |
  * asiento de la compra: entre las candidatas (la que se eligió en la línea, la
  * configurada para «activo fijo» y 1201) la primera que tenga un débito por al
  * menos ese costo. Null si el asiento todavía no existe.
+ *
+ * `compraLinea` puede venir como `línea + 1000·n`: las fichas que nacen de dividir
+ * una (traslado parcial de unidades) siguen atadas a su compra con esa clave, y la
+ * línea real de la compra es el resto de dividir entre 1000.
  */
 export async function cuentaRealDelCosto(teamId: number, compraId: number, compraLinea: number | null, costoCents: number): Promise<number | null> {
   const candidatas: number[] = [];
   if (compraLinea != null) {
     const [item] = await db.execute(sql`
-      SELECT cuenta_id AS "cuentaId" FROM compras_locales_items WHERE compra_id = ${compraId} ORDER BY id OFFSET ${compraLinea} LIMIT 1`) as unknown as { cuentaId: number | null }[];
+      SELECT cuenta_id AS "cuentaId" FROM compras_locales_items WHERE compra_id = ${compraId} ORDER BY id OFFSET ${compraLinea % 1000} LIMIT 1`) as unknown as { cuentaId: number | null }[];
     if (item?.cuentaId) candidatas.push(item.cuentaId);
   }
   const [conf] = await db.execute(sql`
@@ -158,6 +163,21 @@ export async function darDeBajaActivo(input: BajaInput): Promise<ResultadoBaja> 
       cantidadVigente: a.cantidad - n(b.unidades),
     }, input.unidades, 0);
 
+    // «Solo control» (migración 0236): su costo fue al gasto y no está en ninguna cuenta de activo, así que
+    // sacar unidades no lleva asiento. Se anota la baja (para que las unidades y el costo cuadren) y listo.
+    if (await soloControlDisponible()) {
+      const [c] = await tx.execute(sql`SELECT solo_control AS "soloControl" FROM contabilidad_activos_fijos WHERE id = ${a.id} AND team_id = ${input.teamId}`) as unknown as { soloControl: boolean }[];
+      if (c?.soloControl === true) {
+        const [bc] = await tx.execute(sql`
+          INSERT INTO contabilidad_activos_bajas
+            (team_id, activo_id, fecha, unidades, costo_baja_cents, deprec_baja_cents, precio_venta_cents, resultado_cents, motivo, created_by)
+          VALUES (${input.teamId}, ${a.id}, ${input.fecha}::date, ${calculo.unidades}, ${calculo.costoBajaCents}, 0, 0, 0, ${motivo}, ${input.userId})
+          RETURNING id`) as unknown as { id: number }[];
+        if (calculo.esTotal) await tx.execute(sql`UPDATE contabilidad_activos_fijos SET activa = false WHERE id = ${a.id}`);
+        return { bajaId: bc.id, asientoId: 0, calculo: { ...calculo, depreciacionBajaCents: 0, valorLibrosBajaCents: 0, resultadoCents: 0 }, unidadesRestantes: a.cantidad - n(b.unidades) - calculo.unidades };
+      }
+    }
+
     // El costo se saca de donde de verdad está: la cuenta de la ficha, la que la compra usó, o la general.
     const cuentaActivo = a.cuentaActivoId
       ?? (a.compraId ? await cuentaRealDelCosto(input.teamId, a.compraId, a.compraLinea, n(a.costo)) : null)
@@ -206,6 +226,12 @@ export interface EdicionActivo {
   valorResidualCents?: number;
   /** Confirma una ficha abierta desde una compra: desde ahí deprecia. */
   confirmar?: boolean;
+  /** Aula o espacio donde está (migración 0236). `null` la deja sin aula. */
+  espacioId?: number | null;
+  /** bien | regular | danado (migración 0236). */
+  estado?: string;
+  /** Solo control de inventario: se cuenta pero no se deprecia. Solo en fichas sin cuotas ni compra. */
+  soloControl?: boolean;
 }
 
 /**
@@ -247,6 +273,38 @@ export async function editarActivoFijo(teamId: number, userId: number, activoId:
       throw new ActivoFijoError('El valor residual tiene que ser menor que el costo.');
     }
     sets.push(sql`valor_residual_cents = ${cambios.valorResidualCents}`);
+  }
+
+  // Aula, estado y «solo control» (migración 0236).
+  if (cambios.espacioId !== undefined || cambios.estado !== undefined || cambios.soloControl !== undefined) {
+    if (!await inventarioAulaDisponible()) throw new ActivoFijoError(NO_MIGRADO);
+    if (cambios.espacioId !== undefined) {
+      if (cambios.espacioId !== null) {
+        const [e] = await db.execute(sql`SELECT id FROM escolar_espacios WHERE id = ${cambios.espacioId} AND team_id = ${teamId}`) as unknown as { id: number }[];
+        if (!e) throw new ActivoFijoError('El aula no existe.');
+      }
+      sets.push(sql`espacio_id = ${cambios.espacioId}`);
+    }
+    if (cambios.estado !== undefined) {
+      if (!['bien', 'regular', 'danado'].includes(cambios.estado)) throw new ActivoFijoError('El estado no es válido.');
+      sets.push(sql`estado = ${cambios.estado}`);
+    }
+    if (cambios.soloControl !== undefined) {
+      const [f] = await db.execute(sql`
+        SELECT solo_control AS "soloControl", compra_id AS "compraId",
+               (SELECT count(*) FROM contabilidad_depreciaciones WHERE activo_id = ${activoId} AND team_id = ${teamId})
+             + (SELECT count(*) FROM contabilidad_activos_bajas WHERE activo_id = ${activoId} AND team_id = ${teamId}) AS historia
+        FROM contabilidad_activos_fijos WHERE id = ${activoId} AND team_id = ${teamId}`) as unknown as { soloControl: boolean; compraId: number | null; historia: unknown }[];
+      if (f && f.soloControl !== cambios.soloControl) {
+        if (cambios.soloControl && (f.compraId || n(f.historia) > 0 || a.cuentaActivoId)) {
+          throw new ActivoFijoError('Esta ficha ya está en las cuentas del activo fijo (viene de una compra o tiene depreciación): no puede ser de solo control.');
+        }
+        if (!cambios.soloControl && n(f.historia) > 0) {
+          throw new ActivoFijoError('Esta ficha ya tiene bajas asentadas: su tipo no se puede cambiar.');
+        }
+        sets.push(sql`solo_control = ${cambios.soloControl}`);
+      }
+    }
   }
 
   let reclasificar: { deId: number; aId: number } | null = null;

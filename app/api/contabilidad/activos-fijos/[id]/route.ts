@@ -10,6 +10,7 @@ import { ActivoFijoError } from '@/lib/contabilidad/depreciacion';
 import { editarActivoFijo } from '@/lib/contabilidad/activos-fijos-db';
 import { BajaActivoError } from '@/lib/contabilidad/activos-fijos';
 import { parseMontoPesos } from '@/lib/contabilidad/montos';
+import { invalidarPlanta } from '@/lib/cache/escolar';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +38,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       vidaUtilMeses: b.vidaUtilMeses === undefined ? undefined : Number(b.vidaUtilMeses),
       valorResidualCents,
       confirmar: b.confirmar === true,
+      // Aula, estado y «solo control» (migración 0236).
+      espacioId: b.espacioId === null || b.espacioId === '' ? null : b.espacioId === undefined ? undefined : Number(b.espacioId),
+      estado: typeof b.estado === 'string' ? b.estado : undefined,
+      soloControl: typeof b.soloControl === 'boolean' ? b.soloControl : undefined,
     });
+    if (b.espacioId !== undefined) invalidarPlanta(auth.teamId);
     return NextResponse.json({ ok: true, avisos: r.avisos });
   } catch (e) {
     if (e instanceof ActivoFijoError) return NextResponse.json({ error: e.message }, { status: 400 });

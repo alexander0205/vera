@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BellRing, Coins, DownloadCloud, Landmark, Layers, MessageSquareText, Package, Tag } from 'lucide-react';
+import { BellRing, Building2, Coins, DownloadCloud, Landmark, Layers, MessageSquareText, Package, Tag } from 'lucide-react';
 
 /**
  * Sub-navegación de Configuración escolar, con rutas de verdad.
@@ -16,7 +16,7 @@ import { BellRing, Coins, DownloadCloud, Landmark, Layers, MessageSquareText, Pa
  * Con rutas, cada pestaña solo carga lo suyo cuando se entra en ella.
  */
 
-export const TABS = [
+export const TABS: { href: string; label: string; icon: typeof Tag; hint: string; soloConPlanta?: boolean }[] = [
   { href: '/escolar/configuracion/estructura', label: 'Estructura', icon: Layers,
     hint: 'Períodos, servicios (tandas), grados y secciones.' },
   { href: '/escolar/configuracion/conceptos', label: 'Conceptos', icon: Tag,
@@ -34,15 +34,20 @@ export const TABS = [
     hint: 'Los mensajes de WhatsApp que se mandan a las familias: crearlos, aprobarlos y elegir cuál usa cada aviso.' },
   { href: '/escolar/configuracion/cobros', label: 'Cobros', icon: Landmark,
     hint: 'La cuenta a la que las familias transfieren desde su enlace de pago.' },
+  // Las aulas y demás espacios del colegio, y qué secciones usa cada uno. Es lo que
+  // enciende «Inventario por aula» en el menú. Solo sale si la base ya está al día.
+  { href: '/escolar/configuracion/planta-fisica', label: 'Planta física', icon: Building2, soloConPlanta: true,
+    hint: 'Aulas y otros espacios del colegio, y qué secciones usa cada uno.' },
   // SIGERD vive aquí y no en el menú principal: traer datos del MINERD se hace
   // al montar el colegio y una vez al año, no a diario.
   { href: '/escolar/configuracion/sigerd', label: 'SIGERD', icon: DownloadCloud,
     hint: 'Traer del MINERD la estructura y los estudiantes.' },
 ];
 
-export function ConfiguracionNav() {
+export function ConfiguracionNav({ planta = false }: { planta?: boolean } = {}) {
   const pathname = usePathname();
-  const activa = TABS.find((t) => pathname.startsWith(t.href)) ?? TABS[0];
+  const tabs = TABS.filter((t) => !t.soloConPlanta || planta);
+  const activa = tabs.find((t) => pathname.startsWith(t.href)) ?? tabs[0];
 
   return (
     <>
@@ -52,7 +57,7 @@ export function ConfiguracionNav() {
       </div>
 
       <div className="flex gap-1 overflow-x-auto border-b border-gray-200">
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const on = t.href === activa.href;
           return (
             <Link key={t.href} href={t.href} prefetch
