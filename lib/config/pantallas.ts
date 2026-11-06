@@ -161,6 +161,7 @@ export const PANTALLAS: PantallaDef[] = [
   con({ id: 'contabilidad-bancos',    label: 'Bancos y caja', href: '/contabilidad/bancos', descripcion: 'Libro banco, depósitos, transferencias y conciliación' }),
   con({ id: 'contabilidad-cxp',      label: 'Cuentas por pagar', href: '/contabilidad/cuentas-por-pagar', descripcion: 'Lo que se debe a proveedores' }),
   con({ id: 'contabilidad-activos',  label: 'Activos fijos', href: '/contabilidad/activos-fijos', descripcion: 'Bienes y depreciación' }),
+  con({ id: 'contabilidad-inventario', label: 'Valor del inventario', href: '/contabilidad/inventario', descripcion: 'Existencias × costo contra la cuenta de inventario' }),
   con({ id: 'contabilidad-cierre',   label: 'Cierre de ejercicio', href: '/contabilidad/cierre-ejercicio', descripcion: 'Cerrar el año contable' }),
   con({ id: 'contabilidad-config',   label: 'Configuración', href: '/contabilidad/configuracion', descripcion: 'Cuentas automáticas y ajustes' }),
 

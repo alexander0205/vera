@@ -9,6 +9,7 @@
 import { db } from '@/lib/db/drizzle';
 import { products, inventoryMovements } from '@/lib/db/schema';
 import { and, eq, inArray, sql } from 'drizzle-orm';
+import { costoEfectivo, fotoDeCosto } from './costo';
 
 export interface ItemParaDescuento {
   productoId?:             number | null;
@@ -64,6 +65,7 @@ export async function descontarInventario(
           id: products.id,
           stockActual: products.stockActual,
           controlaInventario: products.controlaInventario,
+          costo: products.costo,
         })
         .from(products)
         .where(and(eq(products.teamId, teamId), inArray(products.id, ids)))
@@ -73,6 +75,7 @@ export async function descontarInventario(
       const conControl = filas.filter((f) => f.controlaInventario);
       if (conControl.length === 0) return;
       const stockProducto = new Map(conControl.map((f) => [f.id, f.stockActual]));
+      const costoProducto = new Map(conControl.map((f) => [f.id, f.costo]));
 
       // Con variante: el conteo real es el de la variante. Se baja su stock y,
       // en paralelo, el stock global del producto (que guarda la suma) para que
@@ -95,6 +98,8 @@ export async function descontarInventario(
         cantidad: number;
         stockAntes: number;
         stockDespues: number;
+        /** Costo promedio al momento de la venta: la foto que usa Contabilidad. */
+        costoUnitario: number;
       }[] = [];
 
       for (const linea of agrupadas) {
@@ -102,10 +107,11 @@ export async function descontarInventario(
 
         let variantEfectiva: number | null = null;
         let stockAntes = stockProducto.get(linea.productoId)!;
+        let costoVariante = 0;
 
         if (linea.variantId) {
-          const [variante] = await tx.execute<{ stock_actual: number }>(sql`
-            SELECT stock_actual
+          const [variante] = await tx.execute<{ stock_actual: number; costo: number }>(sql`
+            SELECT stock_actual, costo
             FROM product_variants
             WHERE id = ${linea.variantId} AND product_id = ${linea.productoId} AND team_id = ${teamId}
             FOR UPDATE
@@ -113,6 +119,7 @@ export async function descontarInventario(
           if (variante) {
             variantEfectiva = linea.variantId;
             stockAntes      = variante.stock_actual;
+            costoVariante   = Number(variante.costo ?? 0);
           } else {
             console.warn(
               `[inventario] variante ${linea.variantId} no existe para el producto ${linea.productoId} ` +
@@ -127,6 +134,7 @@ export async function descontarInventario(
           cantidad:     linea.cantidad,
           stockAntes,
           stockDespues: Math.max(0, stockAntes - linea.cantidad),
+          costoUnitario: costoEfectivo(costoProducto.get(linea.productoId), costoVariante),
         });
       }
 
@@ -180,6 +188,9 @@ export async function descontarInventario(
           stockDespues: c.stockDespues,
           referenciaId: ecfDocumentId,
           referenciaEncf: encf,
+          // Foto del costo: null si el producto no tiene costo (no hay nada que asentar).
+          costoUnitarioCents: fotoDeCosto(c.cantidad, c.costoUnitario)?.costoUnitarioCents ?? null,
+          costoTotalCents: fotoDeCosto(c.cantidad, c.costoUnitario)?.costoTotalCents ?? null,
           createdBy: userId,
         })),
       );

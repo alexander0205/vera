@@ -36,6 +36,21 @@ export function categoriaActivo(clave: string | null | undefined): CategoriaActi
   return CATEGORIAS_ACTIVO.find((c) => c.clave === clave) ?? null;
 }
 
+/**
+ * ¿Es una cuenta de caja o banco (familias 1101 y 1102)? Solo esas sirven para
+ * «pagué de contado»: no entra «Cobros por liquidar» (1106) ni otras de salida.
+ */
+export function esCuentaCajaBanco(codigo: string): boolean {
+  return codigo.startsWith('1101') || codigo.startsWith('1102');
+}
+
+/** ¿Es una cuenta de activo no corriente donde puede estar el costo de un activo (12xx, sin las de depreciación acumulada)? */
+export function esCuentaDeActivoFijo(codigo: string): boolean {
+  if (!codigo.startsWith('12')) return false;
+  const depAcum = new Set(['1202', '1208', '1209', '1210', '1211']);
+  return !depAcum.has(codigo);
+}
+
 // ── Baja ─────────────────────────────────────────────────────────────────────
 
 export class BajaActivoError extends Error {

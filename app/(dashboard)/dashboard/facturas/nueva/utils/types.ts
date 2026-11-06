@@ -99,6 +99,8 @@ export interface BorradorInicial {
   categoriaGasto?:      string | null;
   ncfProveedor?:        string | null;
   fechaGasto?:          string | null;
+  /** Nota de crédito: el cliente devolvió la mercancía. */
+  devuelveMercancia?:   boolean;
 }
 
 export interface ItemLinea {

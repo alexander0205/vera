@@ -12,6 +12,7 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, sql } from 'drizzle-orm';
 import { userCan } from '@/lib/config/roles';
 import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
+import { costoEfectivo, fotoDeCosto } from '@/lib/inventario/costo';
 
 const ajusteSchema = z.object({
   productoId:  z.number().int().positive(),
@@ -59,8 +60,8 @@ export async function POST(req: NextRequest) {
 
   const result = await db.transaction(async (tx) => {
     // Lock row para evitar race conditions en stock concurrente
-    const [prod] = await tx.execute<{ id: number; stock_actual: number; controla_inventario: boolean; tipo: string; permite_venta_sin_stock: boolean; variant_atributos: unknown }>(sql`
-      SELECT id, stock_actual, controla_inventario, tipo, permite_venta_sin_stock, variant_atributos
+    const [prod] = await tx.execute<{ id: number; stock_actual: number; controla_inventario: boolean; tipo: string; permite_venta_sin_stock: boolean; variant_atributos: unknown; costo: number }>(sql`
+      SELECT id, stock_actual, controla_inventario, tipo, permite_venta_sin_stock, variant_atributos, costo
       FROM products
       WHERE id = ${productoId} AND team_id = ${teamId}
       FOR UPDATE
@@ -85,14 +86,16 @@ export async function POST(req: NextRequest) {
     // La variante tiene que ser de ESTE producto y de ESTE equipo. Sin la
     // comprobación, un id de otro producto movería un stock ajeno.
     let stockVarianteAntes = 0;
+    let costoVariante = 0;
     if (variantId) {
-      const [variante] = await tx.execute<{ stock_actual: number }>(sql`
-        SELECT stock_actual FROM product_variants
+      const [variante] = await tx.execute<{ stock_actual: number; costo: number }>(sql`
+        SELECT stock_actual, costo FROM product_variants
         WHERE id = ${variantId} AND product_id = ${productoId} AND team_id = ${teamId}
         FOR UPDATE
       `);
       if (!variante) return { error: 'La variante no es de este producto', status: 422 };
       stockVarianteAntes = variante.stock_actual;
+      costoVariante = Number(variante.costo ?? 0);
     }
 
     // Lo que se registra en el movimiento es el stock de lo que se movió: el de
@@ -120,7 +123,14 @@ export async function POST(req: NextRequest) {
         .where(and(eq(products.id, productoId), eq(products.teamId, teamId)));
     }
 
+    // Foto del costo promedio al momento del ajuste: es lo que se asienta en
+    // Contabilidad (merma, sobrante o stock inicial) contra Inventario. Se valora
+    // lo que de verdad se movió (`delta`), no lo pedido. Sin costo, no hay asiento.
+    const foto = fotoDeCosto(Math.abs(delta), costoEfectivo(prod.costo, costoVariante));
+
     const [mov] = await tx.insert(inventoryMovements).values({
+      costoUnitarioCents: foto?.costoUnitarioCents ?? null,
+      costoTotalCents: foto?.costoTotalCents ?? null,
       // NULL cuando el ajuste no especifica almacén: igual que antes.
       almacenId: almacenId ?? null,
       teamId,

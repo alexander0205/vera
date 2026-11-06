@@ -11,7 +11,7 @@ import {
 } from '@/lib/contabilidad/depreciacion';
 
 export async function POST() {
-  const auth = await requirePermission('contabilidad:gestionar');
+  const auth = await requirePermission('contabilidad:gestionar', { escritura: true });
   if (!auth.ok) return auth.response;
 
   try {

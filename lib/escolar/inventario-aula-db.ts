@@ -308,14 +308,20 @@ export async function cambiarEstadoActivo(teamId: number, activoId: number, esta
  */
 export async function crearActivoEnAula(
   teamId: number, userId: number, espacioId: number,
-  input: NuevoActivoFijoInput & { estado?: string },
+  input: NuevoActivoFijoInput & { estado?: string; deprecAcumCents?: number },
 ): Promise<number> {
   await exigirDisponible();
   const [e] = await db.execute(sql`SELECT id FROM escolar_espacios WHERE id = ${espacioId} AND team_id = ${teamId} AND activo`) as unknown as { id: number }[];
   if (!e) throw new PlantaError('El aula no existe.', 404);
   const estado = input.estado ?? 'bien';
   if (!estadoActivoValido(estado)) throw new PlantaError('El estado no es válido.', 400);
-  return registrarActivoFijo(teamId, input, userId, { espacioId, estado });
+  // Desde el aula no se asienta la compra: la ficha se anota como «ya está en los libros» (compra registrada en
+  // Compras o saldo inicial). Una ficha de solo control no lleva asiento de ningún modo.
+  const { deprecAcumCents, ...ficha } = input;
+  return registrarActivoFijo(teamId, ficha, userId, {
+    espacioId, estado,
+    libros: input.soloControl ? null : { cuentaActivoId: null, deprecAcumCents: deprecAcumCents ?? 0 },
+  });
 }
 
 export interface TrasladoInput {

@@ -31,6 +31,8 @@ import { getConfig } from './config';
 import { CODIGO, asegurarCuentaBase } from './catalogo-base';
 import { categoriaActivo } from './activos-fijos';
 import { inventarioAulaDisponible, soloControlDisponible } from './activos-espacios';
+import { insertarAsientoManualTx, validarCuentasDeAsiento } from './asiento-tx';
+import { AsientoManualError } from './asientos';
 
 /** Una cuota mensual pendiente de un activo. `periodo` = 'YYYY-MM-01'. */
 export interface CuotaDepreciacion {
@@ -217,6 +219,18 @@ export interface NuevoActivoFijoInput {
   soloControl?:       boolean;
 }
 
+/**
+ * Cómo entra a los libros un activo que se registra a mano.
+ *  - `pago`: se pagó de contado y sin factura con NCF; se asienta la compra
+ *    (Debe: cuenta del activo · Haber: la caja o el banco).
+ *  - `libros`: el activo YA está en los libros (saldo inicial o una compra ya
+ *    registrada). No se asienta nada. `cuentaActivoId` es donde está su costo (null =
+ *    la de su categoría) y `deprecAcumCents` lo que ya lleva depreciado en libros:
+ *    esos meses no se vuelven a depreciar; Zero sigue desde el mes en curso.
+ */
+export interface PagoDeActivo { cuentaPagoId: number }
+export interface ActivoYaEnLibros { cuentaActivoId: number | null; deprecAcumCents: number }
+
 const tablaCompleta = { vista: false };
 /**
  * ¿Ya corrió la migración 0225 (cantidad, ubicación, categoría, bajas)? Se
@@ -240,7 +254,7 @@ export async function registrarActivoFijo(
   teamId: number,
   input: NuevoActivoFijoInput,
   userId: number | null,
-  extra: { enRevision?: boolean; compraId?: number; compraLinea?: number; espacioId?: number | null; estado?: 'bien' | 'regular' | 'danado' } = {},
+  extra: { enRevision?: boolean; compraId?: number; compraLinea?: number; espacioId?: number | null; estado?: 'bien' | 'regular' | 'danado'; pago?: PagoDeActivo | null; libros?: ActivoYaEnLibros | null } = {},
 ): Promise<number> {
   const nombre = input.nombre.trim();
   if (!nombre) throw new ActivoFijoError('El activo necesita un nombre.');
@@ -280,6 +294,30 @@ export async function registrarActivoFijo(
     const [e] = await db.execute(sql`SELECT id FROM escolar_espacios WHERE id = ${extra.espacioId} AND team_id = ${teamId}`) as unknown as { id: number }[];
     if (!e) throw new ActivoFijoError('El aula no existe.');
   }
+  if (input.fechaAdquisicion > hoyRD()) throw new ActivoFijoError('La fecha de adquisición no puede ser futura.');
+  if ((extra.pago || extra.libros) && (input.soloControl || extra.compraId)) {
+    throw new ActivoFijoError('Esta ficha no lleva asiento de compra: su costo ya está en otro lado.');
+  }
+  if ((extra.pago || extra.libros) && !completas) {
+    throw new ActivoFijoError('Esta opción necesita una actualización de la base que aún no se aplica.');
+  }
+  if (extra.pago && extra.libros) throw new ActivoFijoError('Elige una sola: pagado de contado o ya en libros.');
+  // Lo que ya lleva depreciado en libros: tiene que caber en lo depreciable y en los meses ya vencidos.
+  let mesesYaDepreciados: CuotaDepreciacion[] = [];
+  if (extra.libros) {
+    const dep = extra.libros.deprecAcumCents;
+    if (!Number.isInteger(dep) || dep < 0) throw new ActivoFijoError('La depreciación acumulada no puede ser negativa.');
+    if (categoriaActivo(input.categoria)?.deprecia === false || input.soloControl) {
+      if (dep > 0) throw new ActivoFijoError('Este activo no se deprecia: la depreciación acumulada va en cero.');
+    } else {
+      if (dep > input.costoCents - input.valorResidualCents) throw new ActivoFijoError('La depreciación acumulada no puede pasar de lo depreciable (costo menos residual).');
+      mesesYaDepreciados = calcularCuotas(
+        { costoCents: input.costoCents, valorResidualCents: input.valorResidualCents, vidaUtilMeses: input.vidaUtilMeses, fechaAdquisicion: input.fechaAdquisicion },
+        sumarMeses(primerDiaDelMes(hoyRD()), -1),
+      );
+      if (dep > 0 && mesesYaDepreciados.length === 0) throw new ActivoFijoError('Todavía no pasa un mes completo desde la adquisición: la depreciación acumulada va en cero.');
+    }
+  }
   if (!completas) {
     if (cantidad > 1 || ubicacion || categoria || extra.enRevision || extra.compraId) {
       throw new ActivoFijoError('Cantidad, ubicación y categoría necesitan una actualización de la base que aún no se aplica.');
@@ -303,26 +341,103 @@ export async function registrarActivoFijo(
     cuentaDeprec = await asegurarCuentaBase(teamId, categoria.cuentaDeprecAcum, userId ?? undefined);
   }
 
-  const rows = await db.execute(sql`
-    INSERT INTO contabilidad_activos_fijos
-      (team_id, nombre, costo_cents, valor_residual_cents, vida_util_meses, fecha_adquisicion, created_by,
-       cantidad, ubicacion, categoria, cuenta_activo_id, cuenta_deprec_acum_id, en_revision, compra_id, compra_linea)
-    VALUES (${teamId}, ${nombre}, ${input.costoCents}, ${input.valorResidualCents},
-            ${input.vidaUtilMeses}, ${input.fechaAdquisicion}, ${userId},
-            ${cantidad}, ${ubicacion}, ${categoria?.clave ?? null}, ${cuentaActivo}, ${cuentaDeprec},
-            ${extra.enRevision ?? false}, ${extra.compraId ?? null}, ${extra.compraLinea ?? null})
-    ON CONFLICT (team_id, compra_id, compra_linea) WHERE compra_id IS NOT NULL DO NOTHING
-    RETURNING id
-  `);
-  const id = (rows as unknown as { id: number }[])[0]?.id ?? 0;
-  // Aula, estado y «solo control» (migración 0236): se anotan justo después del alta.
-  if (id && pideInventario) {
-    await db.execute(sql`
-      UPDATE contabilidad_activos_fijos
-      SET espacio_id = ${extra.espacioId ?? null}, estado = ${extra.estado ?? 'bien'}, solo_control = ${!!input.soloControl}
-      WHERE id = ${id} AND team_id = ${teamId}`);
+  // Si ya está en libros, el costo vive donde el usuario dice (la de su categoría por defecto).
+  if (extra.libros?.cuentaActivoId) {
+    await validarCuentasAsientoActivo(teamId, [extra.libros.cuentaActivoId]);
+    cuentaActivo = extra.libros.cuentaActivoId;
   }
+
+  // La ficha, su asiento de compra (si lo hay), los meses ya depreciados en libros y el aula/estado salen
+  // juntos o no sale nada: un fallo a medias no deja un activo fuera de los libros.
+  const id = await db.transaction(async (tx) => {
+    const rows = await tx.execute(sql`
+      INSERT INTO contabilidad_activos_fijos
+        (team_id, nombre, costo_cents, valor_residual_cents, vida_util_meses, fecha_adquisicion, created_by,
+         cantidad, ubicacion, categoria, cuenta_activo_id, cuenta_deprec_acum_id, en_revision, compra_id, compra_linea)
+      VALUES (${teamId}, ${nombre}, ${input.costoCents}, ${input.valorResidualCents},
+              ${input.vidaUtilMeses}, ${input.fechaAdquisicion}, ${userId},
+              ${cantidad}, ${ubicacion}, ${categoria?.clave ?? null}, ${cuentaActivo}, ${cuentaDeprec},
+              ${extra.enRevision ?? false}, ${extra.compraId ?? null}, ${extra.compraLinea ?? null})
+      ON CONFLICT (team_id, compra_id, compra_linea) WHERE compra_id IS NOT NULL DO NOTHING
+      RETURNING id
+    `);
+    const nuevoId = (rows as unknown as { id: number }[])[0]?.id ?? 0;
+    if (!nuevoId) return 0;
+    // Aula, estado y «solo control» (migración 0236).
+    if (pideInventario) {
+      await tx.execute(sql`
+        UPDATE contabilidad_activos_fijos
+        SET espacio_id = ${extra.espacioId ?? null}, estado = ${extra.estado ?? 'bien'}, solo_control = ${!!input.soloControl}
+        WHERE id = ${nuevoId} AND team_id = ${teamId}`);
+    }
+    if (extra.pago) {
+      await asentarCompraDeActivo(tx, teamId, userId, { id: nuevoId, nombre, costoCents: input.costoCents, fecha: input.fechaAdquisicion, cuentaActivoId: cuentaActivo, cuentaPagoId: extra.pago.cuentaPagoId });
+    }
+    if (extra.libros && mesesYaDepreciados.length > 0) {
+      for (const c of repartirDepreciacionPrevia(mesesYaDepreciados, extra.libros.deprecAcumCents)) {
+        // Sin asiento: ya está en los libros. La fila solo evita depreciar otra vez esos meses.
+        await tx.execute(sql`
+          INSERT INTO contabilidad_depreciaciones (team_id, activo_id, periodo, monto_cents)
+          VALUES (${teamId}, ${nuevoId}, ${c.periodo}, ${c.montoCents})`);
+      }
+    }
+    return nuevoId;
+  });
   return id;
+}
+
+/**
+ * Reparte lo que el activo ya lleva depreciado en libros entre los meses ya
+ * vencidos, en proporción a la cuota de cada uno; el último absorbe los centavos.
+ * Con 0 deja todos en cero (se empieza a depreciar desde el mes en curso).
+ */
+export function repartirDepreciacionPrevia(meses: readonly CuotaDepreciacion[], totalCents: number): CuotaDepreciacion[] {
+  const suma = meses.reduce((t, c) => t + c.montoCents, 0);
+  let resto = totalCents;
+  return meses.map((c, i) => {
+    const monto = i === meses.length - 1 ? resto : Math.min(resto, suma > 0 ? Math.floor((totalCents * c.montoCents) / suma) : 0);
+    resto -= monto;
+    return { periodo: c.periodo, montoCents: monto };
+  });
+}
+
+async function validarCuentasAsientoActivo(teamId: number, ids: number[]): Promise<void> {
+  try {
+    await validarCuentasDeAsiento(db, teamId, ids);
+  } catch (e) {
+    if (e instanceof AsientoManualError) throw new ActivoFijoError(e.message);
+    throw e;
+  }
+}
+
+/**
+ * El asiento de la compra de un activo registrado a mano:
+ *   Debe  cuenta del activo (la de su categoría, la configurada o 1201)
+ *     Haber  la caja o el banco del que salió el dinero
+ * Con la contabilidad apagada no se asienta nada (como el resto del motor).
+ */
+async function asentarCompraDeActivo(
+  tx: Parameters<typeof insertarAsientoManualTx>[0], teamId: number, userId: number | null,
+  a: { id: number; nombre: string; costoCents: number; fecha: string; cuentaActivoId: number | null; cuentaPagoId: number },
+): Promise<void> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return;
+  const cuentaActivo = a.cuentaActivoId ?? cfg.cuentaActivoFijoId ?? await cuentaPorCodigo(teamId, CODIGO.activoFijo);
+  if (!cuentaActivo) throw new ActivoFijoError('Falta la cuenta de activos fijos en el catálogo. Usa «Restaurar cuentas base» en el catálogo.');
+  try {
+    // origen 'activo_compra' + id del activo: el índice único impide un segundo asiento si se reintenta.
+    await insertarAsientoManualTx(tx, teamId, {
+      fecha: a.fecha,
+      concepto: `Compra de activo fijo · ${a.nombre}`,
+      lineas: [
+        { cuentaId: cuentaActivo, debeCents: a.costoCents, haberCents: 0, descripcion: 'Activo fijo' },
+        { cuentaId: a.cuentaPagoId, debeCents: 0, haberCents: a.costoCents, descripcion: 'Pago del activo' },
+      ],
+    }, userId, { tipo: 'activo_compra', id: a.id });
+  } catch (e) {
+    if (e instanceof AsientoManualError) throw new ActivoFijoError(e.message);
+    throw e;
+  }
 }
 
 /** Un activo fijo con su depreciación acumulada y su valor en libros. */
@@ -348,6 +463,10 @@ export interface ActivoFijoResumen {
   /** Ficha abierta desde una compra: falta confirmar categoría y vida útil. */
   enRevision:         boolean;
   compraId:           number | null;
+  /** El asiento de la compra, si el activo se registró a mano pagado de contado. */
+  asientoCompraId:    number | null;
+  /** Proveedor de la compra de la que nació la ficha. */
+  proveedor:          string | null;
   /** Costo de lo que queda (original − bajas). */
   costoVigenteCents:  number;
   /** Depreciación de lo que queda (acumulada − la que se fue con las bajas). */
@@ -378,6 +497,8 @@ export async function listarActivosFijos(teamId: number): Promise<ActivoFijoResu
            COALESCE(d.cuotas, 0)    AS "cuotasHechas"
            ${completas ? sql`,
            a.cantidad, a.ubicacion, a.categoria, a.en_revision AS "enRevision", a.compra_id AS "compraId",
+           (SELECT x.id FROM contabilidad_asientos x WHERE x.team_id = a.team_id AND x.origen_tipo = 'activo_compra' AND x.origen_id = a.id LIMIT 1) AS "asientoCompraId",
+           (SELECT c.proveedor_nombre FROM compras_locales c WHERE c.id = a.compra_id) AS "proveedor",
            COALESCE(b.unidades, 0) AS "bajasUnidades",
            COALESCE(b.costo, 0)    AS "bajasCosto",
            COALESCE(b.deprec, 0)   AS "bajasDeprec"` : sql``}
@@ -414,6 +535,8 @@ export async function listarActivosFijos(teamId: number): Promise<ActivoFijoResu
       cantidad, cantidadVigente: cantidad - bajas.unidades,
       ubicacion: (r.ubicacion as string | null) ?? null, categoria: (r.categoria as string | null) ?? null,
       enRevision: Boolean(r.enRevision), compraId: r.compraId == null ? null : Number(r.compraId),
+      asientoCompraId: r.asientoCompraId == null ? null : Number(r.asientoCompraId),
+      proveedor: (r.proveedor as string | null) ?? null,
       costoVigenteCents: costoVigente, acumuladaVigenteCents: acumuladaVigente,
       valorLibrosCents: costoVigente - acumuladaVigente, bajas,
       espacioId: r.espacioId == null ? null : Number(r.espacioId),

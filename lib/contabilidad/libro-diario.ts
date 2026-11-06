@@ -18,6 +18,9 @@ import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import { getConfig } from './config';
 import {
+  generarAsientoCostoVenta, generarAsientoAjusteInventario, lotesCostoVentaPendientes, ajustesPendientes, contarPendientesInventario,
+} from './inventario-asientos';
+import {
   generarAsientoFactura, generarAsientoPago, generarAsientoSaldoInicial,
   generarAsientoNotaCredito, generarAsientoAnulacion,
   generarAsientoCompra, generarAsientoCompraAnulada, generarAsientoGastoCaja, generarAsientoPagoProveedor,
@@ -199,6 +202,17 @@ export async function generarAsientosPendientes(
 
   await procesar(anulados, 'anulacion', (id) => generarAsientoAnulacion(teamId, id, userId));
 
+  // ── Inventario: costo de lo vendido, devoluciones, mermas y stock inicial ──
+  // Después de las facturas y anulaciones: el costo se lee al lado de su venta.
+  // La devolución se busca DESPUÉS de asentar las salidas (necesita que la venta
+  // ya tenga su asiento).
+  const costosVenta = await lotesCostoVentaPendientes(teamId, 'VENTA', TOPE_POR_BARRIDO);
+  await procesar(costosVenta, 'costo_venta', (id) => generarAsientoCostoVenta(teamId, id, userId));
+  const costosDevolucion = await lotesCostoVentaPendientes(teamId, 'DEVOLUCION', TOPE_POR_BARRIDO);
+  await procesar(costosDevolucion, 'costo_venta', (id) => generarAsientoCostoVenta(teamId, id, userId));
+  const ajustesInv = await ajustesPendientes(teamId, TOPE_POR_BARRIDO);
+  await procesar(ajustesInv, 'ajuste_inventario', (id) => generarAsientoAjusteInventario(teamId, id, userId));
+
   // ── Compras locales sin asiento (nivel 3.2) ───────────────────────────────
   const compras = await db.execute(sql`
     SELECT c.id
@@ -346,7 +360,7 @@ export async function generarAsientosPendientes(
     return r;
   });
 
-  resumen.hayMas = [docs, notas, pagos, anulados, compras, comprasAnuladas, pagosProveedores, gastos, gastosDoc,
+  resumen.hayMas = [docs, notas, pagos, anulados, costosVenta, costosDevolucion, ajustesInv, compras, comprasAnuladas, pagosProveedores, gastos, gastosDoc,
     corridas, provisiones, pagosSueldos, obligaciones]
     .some((s) => (s as unknown as unknown[]).length === TOPE_POR_BARRIDO);
 
@@ -431,6 +445,7 @@ export interface LineaDetalle {
 export const ORIGENES = [
   'factura', 'pago', 'nota', 'anulacion', 'manual', 'compra', 'gasto_caja', 'gasto_doc', 'depreciacion',
   'pago_proveedor', 'cierre', 'nomina', 'provision_nomina', 'pago_sueldos', 'pago_nomina', 'compra_anulada', 'prestamo_empleado',
+  'costo_venta', 'ajuste_inventario', 'activo_compra',
 ] as const;
 export type OrigenTipo = (typeof ORIGENES)[number];
 
@@ -680,6 +695,10 @@ export interface PendientesPorOrigen {
   nomina_pagados_sin_pago: number;
   nomina_pagos_sueldos: number;
   nomina_obligaciones: number;
+  /** Lotes de ventas y devoluciones cuyo costo todavía no se asentó. */
+  costos_venta: number;
+  /** Mermas, sobrantes y stock inicial sin asiento. */
+  ajustes_inventario: number;
 }
 
 export async function contarPendientesPorOrigen(teamId: number): Promise<PendientesPorOrigen> {
@@ -790,8 +809,9 @@ export async function contarPendientesPorOrigen(teamId: number): Promise<Pendien
           ON a.team_id = o.team_id AND a.origen_tipo = 'pago_nomina' AND a.origen_id = o.id
         WHERE o.team_id = ${teamId} AND a.id IS NULL AND o.pagada AND o.monto_cents > 0)::int AS nomina_obligaciones
   `);
+  const inv = await contarPendientesInventario(teamId);
   return Object.fromEntries(
-    Object.entries(fila).map(([k, v]) => [k, aNumero(v)]),
+    Object.entries({ ...fila, ...inv }).map(([k, v]) => [k, aNumero(v)]),
   ) as unknown as PendientesPorOrigen;
 }
 

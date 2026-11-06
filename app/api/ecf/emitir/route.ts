@@ -18,6 +18,7 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, teamMembers, dependientes, pagosRecibidos, products, cajaMovimientos } from '@/lib/db/schema';
 import { descontarInventario } from '@/lib/inventario/descuento';
 import { restaurarInventario } from '@/lib/inventario/devolucion';
+import { movimientoDeStock, devolverMercanciaDeNota } from '@/lib/inventario/nota-credito';
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
 import { bloquearSiSoloLectura } from '@/lib/suscripcion/guard';
@@ -224,6 +225,8 @@ const emitirSchema = z.object({
   // Vínculo por id al documento padre (flujo "crear nota desde factura").
   // Más robusto que ncfModificado: funciona aunque el padre aún sea borrador.
   origenDocumentoId:    z.number().int().positive().optional(),
+  // Solo nota de crédito: el cliente devolvió la mercancía (el stock vuelve y se revierte el costo de ventas).
+  devuelveMercancia:    z.boolean().optional(),
   // Acepta number (1..6) o string ("01".."06" o "1".."6"). Mapper normaliza a XSD "0X".
   tipoIngresos: z.union([
     z.coerce.number().int().min(1).max(6),
@@ -1073,6 +1076,7 @@ export async function POST(request: NextRequest) {
             // Vínculo al padre: solo sobreescribir cuando se resolvió uno
             // (no perder el vínculo si el form no lo reenvía).
             ...(padreDoc ? { origenDocumentoId: padreDoc.id } : {}),
+            devuelveMercancia:    data.tipoEcf === '34' && !!data.devuelveMercancia,
             codigoModificacion:   data.codigoModificacion ?? null,
             razonModificacion:    data.razonModificacion || null,
             creditoGeneradoCents,
@@ -1265,6 +1269,7 @@ export async function POST(request: NextRequest) {
             ncfProveedor:         data.ncfProveedor,
             fechaGasto:           data.fechaGasto,
             origenDocumentoId:    padreDoc?.id ?? null,
+            devuelveMercancia:    data.tipoEcf === '34' && !!data.devuelveMercancia,
             codigoModificacion:   data.codigoModificacion ?? null,
             razonModificacion:    data.razonModificacion || null,
             creditoGeneradoCents,
@@ -1425,7 +1430,8 @@ export async function POST(request: NextRequest) {
       .filter(i => i.indicadorBienoServicio === 1 && i.productoId)
       .map(i => i.productoId as number);
 
-    if (bienesIds.length > 0) {
+    // Solo lo que descuenta stock se bloquea por agotado (no notas, compras ni gastos).
+    if (bienesIds.length > 0 && movimientoDeStock(data.tipoEcf, data.devuelveMercancia) === 'descontar') {
       const prods = await db
         .select({
           id:                   products.id,
@@ -1572,6 +1578,7 @@ export async function POST(request: NextRequest) {
             totalItbis:           Math.round(totales.totalItbis * 100),
             ncfModificado:        data.ncfModificado,
             origenDocumentoId:    padreDoc?.id ?? null,
+            devuelveMercancia:    data.tipoEcf === '34' && !!data.devuelveMercancia,
             codigoModificacion:   data.codigoModificacion ?? null,
             razonModificacion:    data.razonModificacion || null,
             creditoGeneradoCents,
@@ -1705,6 +1712,7 @@ export async function POST(request: NextRequest) {
         ncfProveedor:         data.ncfProveedor,
         fechaGasto:           data.fechaGasto,
         origenDocumentoId:    padreDoc?.id ?? null,
+        devuelveMercancia:    data.tipoEcf === '34' && !!data.devuelveMercancia,
         codigoModificacion:   data.codigoModificacion ?? null,
         razonModificacion:    data.razonModificacion || null,
         // Saldo a favor de la NC emitida directo (igual que en el borrador).
@@ -1719,7 +1727,8 @@ export async function POST(request: NextRequest) {
         createdBy:            user.id,
         dependienteId:        data.dependienteId ?? null,
         dependienteNombre:    data.dependienteNombre ?? null,
-        stockDescontado:      true,
+        // Una nota nunca descuenta stock; la de crédito con devolución lo SUBE (lo marca devuelveMercancia).
+        stockDescontado:      movimientoDeStock(data.tipoEcf, data.devuelveMercancia) === 'descontar',
         ...extraFields,
       }).returning(),
       { userId: user.id, teamId },
@@ -1803,15 +1812,25 @@ export async function POST(request: NextRequest) {
     // Fire-and-forget: si falla, el e-CF ya fue emitido y guardado.
     // Solo afecta bienes (indicadorBienoServicio === 1) con productoId conocido.
     // Un gasto NO es venta de stock: no descuenta inventario.
+    // Una nota (33/34) NUNCA descuenta. La nota de crédito con «el cliente devolvió
+    // la mercancía» la devuelve al inventario y revierte el costo con el de la venta original.
     if (!esGasto) {
-      descontarInventario(
-        teamId,
-        user.id,
-        saved.id,
-        encf,
-        data.items,
-        data.almacenId ?? null,
-      ).catch((e) => console.error('[ecf/emitir] stock decrement failed', e));
+      const mov = movimientoDeStock(data.tipoEcf, data.devuelveMercancia);
+      if (mov === 'descontar') {
+        descontarInventario(
+          teamId,
+          user.id,
+          saved.id,
+          encf,
+          data.items,
+          data.almacenId ?? null,
+        ).catch((e) => console.error('[ecf/emitir] stock decrement failed', e));
+      } else if (mov === 'devolver') {
+        devolverMercanciaDeNota({
+          teamId, userId: user.id, notaId: saved.id, notaEncf: encf,
+          padreId: padreDoc?.id ?? null, items: data.items, almacenId: data.almacenId ?? null,
+        }).catch((e) => console.error('[ecf/emitir] devolución de nota falló', e));
+      }
     }
 
     import('@/lib/webhooks').then(({ dispatchWebhook }) =>

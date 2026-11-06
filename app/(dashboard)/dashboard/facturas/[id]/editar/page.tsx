@@ -204,6 +204,7 @@ export default async function EditarBorradorPage({
     ncfProveedor:         doc.ncfProveedor ?? null,
     fechaGasto:           doc.fechaGasto ?? null,
     ncfModificado:        doc.ncfModificado,
+    devuelveMercancia:    doc.devuelveMercancia ?? false,
     padreOrigen,
     notas:                doc.notas,
     terminosCondiciones:  doc.terminosCondiciones,

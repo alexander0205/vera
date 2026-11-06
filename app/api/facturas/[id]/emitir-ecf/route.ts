@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, teamMembers, users, products, inventoryMovements } from '@/lib/db/schema';
 import { descontarInventario } from '@/lib/inventario/descuento';
+import { movimientoDeStock, devolverMercanciaDeNota } from '@/lib/inventario/nota-credito';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
@@ -443,7 +444,8 @@ export async function POST(
     // Si el borrador ya descontó stock al guardarse, ese stock ya está
     // "reservado" por este mismo documento — re-chequear aquí lo bloquearía
     // incorrectamente (se vería agotado por su propio descuento).
-    if (!doc.stockDescontado) {
+    // Una nota (33/34) no descuenta stock: el agotado no la bloquea.
+    if (!doc.stockDescontado && movimientoDeStock(tipoEcf, doc.devuelveMercancia) === 'descontar') {
       const bienesIds = items
         .filter(i => i.indicadorBienoServicio === 1 && i.productoId)
         .map(i => i.productoId as number);
@@ -780,7 +782,8 @@ export async function POST(
           urlVerificacion: resultado.urlVerificacion ?? resultado.qrCodeData ?? null,
           ecfApiEmisionId: resultado.id,
           fechaEmision:    new Date(resultado.fechaEmision),
-          stockDescontado: true,
+          // Una nota nunca descuenta; la de crédito con devolución sube el stock (ver más abajo).
+          stockDescontado: movimientoDeStock(tipoEcf, doc.devuelveMercancia) === 'descontar',
           // Atar al turno que la emitió. Un borrador viejo pudo nacer sin turno
           // (o con el de otro cajero); lo que cuadra es quién la mandó a DGII.
           ...(turnoCaja ? { turnoCajaId: turnoCaja.id } : {}),
@@ -798,14 +801,24 @@ export async function POST(
     // Descuento automático de inventario — fire-and-forget.
     // Si el borrador ya había descontado al guardarse, no descontar de nuevo:
     // solo actualizar la referencia del movimiento al e-NCF final (BOR-xxx → Exx...).
-    if (doc.stockDescontado) {
-      db.update(inventoryMovements)
-        .set({ referenciaEncf: encfFinal })
-        .where(and(eq(inventoryMovements.teamId, teamId), eq(inventoryMovements.referenciaId, docId), eq(inventoryMovements.tipo, 'VENTA')))
-        .catch((e) => console.error('[emitir-ecf] actualizar referenciaEncf falló', e));
-    } else {
-      descontarInventario(teamId, user.id, docId, encfFinal, items, doc.almacenId ?? null)
-        .catch((e) => console.error('[emitir-ecf] stock decrement failed', e));
+    const movStock = movimientoDeStock(tipoEcf, doc.devuelveMercancia);
+    if (movStock === 'devolver') {
+      // Nota de crédito con «el cliente devolvió la mercancía»: el stock vuelve y el
+      // costo se revierte con el de la venta de la factura que modifica.
+      devolverMercanciaDeNota({
+        teamId, userId: user.id, notaId: docId, notaEncf: encfFinal,
+        padreId: parentDoc?.id ?? doc.origenDocumentoId ?? null, items, almacenId: doc.almacenId ?? null,
+      }).catch((e) => console.error('[emitir-ecf] devolución de nota falló', e));
+    } else if (movStock === 'descontar') {
+      if (doc.stockDescontado) {
+        db.update(inventoryMovements)
+          .set({ referenciaEncf: encfFinal })
+          .where(and(eq(inventoryMovements.teamId, teamId), eq(inventoryMovements.referenciaId, docId), eq(inventoryMovements.tipo, 'VENTA')))
+          .catch((e) => console.error('[emitir-ecf] actualizar referenciaEncf falló', e));
+      } else {
+        descontarInventario(teamId, user.id, docId, encfFinal, items, doc.almacenId ?? null)
+          .catch((e) => console.error('[emitir-ecf] stock decrement failed', e));
+      }
     }
 
     await logInfo({
