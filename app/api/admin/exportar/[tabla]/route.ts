@@ -19,10 +19,10 @@ import {
 export const dynamic = 'force-dynamic';
 
 const TABLAS = {
-  empresas: async (p: URLSearchParams) => csvEmpresas((await consultarEmpresas(leerConsulta(Object.fromEntries(p), DEF_EMPRESAS), true)).filas),
-  usuarios: async (p: URLSearchParams) => csvUsuarios((await consultarUsuarios(leerConsulta(Object.fromEntries(p), DEF_USUARIOS), true)).filas),
-  logs: async (p: URLSearchParams) => csvLogs((await consultarLogs(leerConsulta(Object.fromEntries(p), DEF_LOGS), true)).filas),
-  tareas: async (p: URLSearchParams) => csvTareas((await consultarTareas(leerConsulta(Object.fromEntries(p), DEF_TAREAS), true)).filas),
+  empresas: async (p: URLSearchParams, _yo: number) => csvEmpresas((await consultarEmpresas(leerConsulta(Object.fromEntries(p), DEF_EMPRESAS), true)).filas),
+  usuarios: async (p: URLSearchParams, _yo: number) => csvUsuarios((await consultarUsuarios(leerConsulta(Object.fromEntries(p), DEF_USUARIOS), true)).filas),
+  logs: async (p: URLSearchParams, _yo: number) => csvLogs((await consultarLogs(leerConsulta(Object.fromEntries(p), DEF_LOGS), true)).filas),
+  tareas: async (p: URLSearchParams, yo: number) => csvTareas((await consultarTareas(leerConsulta(Object.fromEntries(p), DEF_TAREAS), true, yo)).filas),
 } as const;
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ tabla: string }> }) {
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ tabla: stri
   const { tabla } = await ctx.params;
   if (!Object.hasOwn(TABLAS, tabla)) return NextResponse.json({ error: 'Tabla desconocida' }, { status: 404 });
 
-  const csv = await TABLAS[tabla as keyof typeof TABLAS](req.nextUrl.searchParams);
+  const csv = await TABLAS[tabla as keyof typeof TABLAS](req.nextUrl.searchParams, a.user.id);
   const dia = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santo_Domingo' });
   return new NextResponse(csv, {
     headers: {

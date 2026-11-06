@@ -18,6 +18,8 @@ import {
 import { SOPORTE } from '@/lib/config/soporte';
 import { armarCorreoResumenIa, armarCorreoTarea, enviarAvisoTarea, urlDeTarea, type CorreoTarea } from '@/lib/email/escolar-tareas';
 import { avisarTareaEnSlack } from './tareas-slack';
+import { atiendenLasTareas, personasDelEquipo, registrarAtiende } from './tareas-atiende';
+import { firmaVisible, personaDeMensaje, type PersonaEquipo } from './tareas-equipo';
 import { notificarTarea } from '@/lib/notificaciones/tareas';
 import { notificarEquipoZeroDeTarea } from '@/lib/notificaciones/plataforma';
 import { avisarTareaPorWhatsApp } from '@/lib/notificaciones/whatsapp-tareas';
@@ -98,6 +100,8 @@ export interface TareaEnLista {
   mensajes: number;
   actualizadoEn: string;
   turno: TurnoTarea | null;
+  /** La persona del equipo de Zero que la atiende, si se sabe. */
+  atiende: PersonaEquipo | null;
 }
 
 /**
@@ -187,6 +191,7 @@ export async function listarTareas(
   for (const m of mensajes) porTarea.set(m.tareaId, [...(porTarea.get(m.tareaId) ?? []), m]);
   const nombres = new Map(fam.alumnos.map((a) => [a.id, a.nombre]));
   const turnos = await turnosDe(filas);
+  const atienden = await atiendenLasTareas(ids);
 
   return filas.map((f) => {
     const suyos = porTarea.get(f.id) ?? [];
@@ -205,6 +210,7 @@ export async function listarTareas(
       mensajes: suyos.filter((m) => m.tipo !== 'evento').length,
       actualizadoEn: f.actualizadoEn.toISOString(),
       turno: turnos.get(f.id) ?? null,
+      atiende: atienden.get(f.id) ?? null,
     };
   });
 }
@@ -281,8 +287,11 @@ export async function leerTarea(teamId: number, id: number) {
       eq(adminEscolarTareaAdjuntos.id, adminEscolarTareaMensajes.adjuntoId), eq(adminEscolarTareaAdjuntos.subido, true)))
     .where(eq(adminEscolarTareaMensajes.tareaId, id))
     .orderBy(asc(adminEscolarTareaMensajes.creadoEn), asc(adminEscolarTareaMensajes.id));
+  const atiende = (await atiendenLasTareas([id])).get(id) ?? null;
+  const equipo = await personasDelEquipo(mensajes.flatMap((m) => (m.userId != null && esFirmaSoporte(m.autor) ? [m.userId] : [])));
   return {
     id: t.id, titulo: t.titulo, descripcion: t.descripcion, estado: t.estado,
+    atiende,
     de: deQuien(t.estudianteId, t.clientId, t.alumno),
     fichaId: t.fichaId,
     asignada: etiquetaAsignada(t.asignadaA, t.persona),
@@ -291,6 +300,7 @@ export async function leerTarea(teamId: number, id: number) {
     turno: (await turnosDe([{ ...t, id }])).get(id) ?? null,
     mensajes: mensajes.map(({ adjuntoId, adjuntoMime, adjuntoBytes, ...m }) => ({
       ...m,
+      equipo: personaDeMensaje(m, equipo),
       creadoEn: m.creadoEn.toISOString(),
       adjunto: adjuntoId != null ? { id: adjuntoId, mime: adjuntoMime ?? '', bytes: adjuntoBytes ?? 0 } : null,
     })),
@@ -298,7 +308,7 @@ export async function leerTarea(teamId: number, id: number) {
 }
 
 export async function agregarMensaje(teamId: number, id: number, autor: AutorTarea, texto: string) {
-  return db.transaction(async (tx) => {
+  const ok = await db.transaction(async (tx) => {
     const [t] = await tx.select({ id: adminEscolarTareas.id }).from(adminEscolarTareas)
       .where(and(eq(adminEscolarTareas.id, id), eq(adminEscolarTareas.teamId, teamId))).limit(1);
     if (!t) return false;
@@ -309,6 +319,9 @@ export async function agregarMensaje(teamId: number, id: number, autor: AutorTar
       .where(eq(adminEscolarTareas.id, id));
     return true;
   });
+  // Quien del equipo de Zero responde, la atiende. Fuera de la transacción: ver tareas-atiende.ts.
+  if (ok && autor.esSoporte) await registrarAtiende(id, autor.userId);
+  return ok;
 }
 
 /**
@@ -317,7 +330,7 @@ export async function agregarMensaje(teamId: number, id: number, autor: AutorTar
  */
 export async function cambiarEstadoTarea(teamId: number, id: number, autor: AutorTarea, accion: AccionEstado) {
   const { a, desde } = DESTINO[accion];
-  return db.transaction(async (tx) => {
+  const hecho = await db.transaction(async (tx) => {
     const [fila] = await tx.update(adminEscolarTareas)
       .set(a === 'completada'
         ? { estado: a, completadaPorUserId: autor.userId, completadaEn: new Date(), actualizadoEn: new Date(), revisionVenceEn: null }
@@ -335,6 +348,9 @@ export async function cambiarEstadoTarea(teamId: number, id: number, autor: Auto
     });
     return fila.id;
   });
+  // Quien del equipo de Zero toma la tarea, la atiende. Fuera de la transacción: ver tareas-atiende.ts.
+  if (hecho != null && a === 'en_proceso' && autor.esSoporte) await registrarAtiende(id, autor.userId);
+  return hecho;
 }
 
 /** Las personas del colegio, para asignarle una tarea a alguien en concreto. */
@@ -407,9 +423,14 @@ export async function avisarDeTarea(
         .filter((d) => d.platformRole !== 'admin' && d.id !== autor.userId).map((d) => d.id)])];
     }
 
+    // Si escribe una persona del equipo de Zero, el colegio lee su nombre
+    // («Ana · Zero te respondió») y no la firma genérica.
+    const persona = autor.esSoporte && autor.userId != null ? (await personasDelEquipo([autor.userId])).get(autor.userId) : null;
+    const autorVisible = firmaVisible(autor, persona);
+
     // La campana, el celular y el WhatsApp de las mismas personas que reciben el correo.
     await notificarTarea(teamId, usuarios, {
-      cambio: aviso, tareaId, titulo: t.titulo, autor: autor.nombre, texto,
+      cambio: aviso, tareaId, titulo: t.titulo, autor: autorVisible, texto,
     }, fila.colegio);
     // Cuando le toca a Soporte, también a la campana del panel de TODO el equipo
     // de Zero (no solo a la dirección compartida del correo). Campana y push,
@@ -434,7 +455,7 @@ export async function avisarDeTarea(
 
     const correo = armarCorreoTarea({
       aviso, colegio: fila.colegio, tareaId, titulo: t.titulo, de: t.de, asignada: t.asignada,
-      autor: autor.nombre, texto, documento: t.documento,
+      autor: autorVisible, texto, documento: t.documento,
     });
     await mandar([...correos], correo, `${tareaId}:${aviso}`);
   } catch (err) {
@@ -479,6 +500,8 @@ export interface TareaDelColegio {
   creadoEn: string;
   actualizadoEn: string;
   turno: TurnoTarea | null;
+  /** La persona del equipo de Zero que la atiende, si se sabe. */
+  atiende: PersonaEquipo | null;
 }
 
 export interface FamiliaConTareas {
@@ -549,6 +572,7 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
   // A quién le toca cada una; «Esperando a» filtra por eso.
   const turnos = await turnosDe(filasTodas);
   const filas = f.esperando ? filasTodas.filter((x) => turnos.get(x.id)?.quien === f.esperando) : filasTodas;
+  const atienden = await atiendenLasTareas(filas.map((x) => x.id));
 
   // Los hermanos de cada familia, para decir de quién se habla y llevar a una ficha.
   const clientIds = [...new Set(filas.map((x) => x.clientId).filter((x): x is number => x != null))];
@@ -600,6 +624,7 @@ export async function tareasDelColegio(teamId: number, yo: QuienMira, f: FiltroC
       documento: x.documento ?? null, creadaPorIa: x.creadaPorIa,
       creadoEn: x.creadoEn.toISOString(), actualizadoEn: x.actualizadoEn.toISOString(),
       turno: turnos.get(x.id) ?? null,
+      atiende: atienden.get(x.id) ?? null,
     });
   }
 
@@ -655,7 +680,7 @@ export async function guardarSubida(
 
 /** El archivo quedó entero en S3: sale en la conversación con su nombre. */
 export async function cerrarAdjunto(teamId: number, tareaId: number, adjuntoId: number, autor: AutorTarea, nombre: string) {
-  return db.transaction(async (tx) => {
+  const ok = await db.transaction(async (tx) => {
     const [a] = await tx.update(adminEscolarTareaAdjuntos)
       .set({ subido: true, pendiente: false })
       .where(and(eq(adminEscolarTareaAdjuntos.id, adjuntoId), eq(adminEscolarTareaAdjuntos.subido, false)))
@@ -669,6 +694,8 @@ export async function cerrarAdjunto(teamId: number, tareaId: number, adjuntoId: 
       .where(eq(adminEscolarTareas.id, tareaId));
     return true;
   });
+  if (ok && autor.esSoporte) await registrarAtiende(tareaId, autor.userId);
+  return ok;
 }
 
 // ── Lo que hace el cron cada hora: cierre automático y aviso urgente ─────────

@@ -14,12 +14,14 @@
  */
 
 import 'server-only';
-import { and, asc, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarTareas, systemLogs, teams, users,
 } from '@/lib/db/schema';
 import { fechaHora } from './fecha';
+import { atiendenLasTareas, tareasQueAtiende } from '@/lib/administracion-escolar/tareas-atiende';
+import { etiquetaAtiende, filtroAtiende, type PersonaEquipo } from '@/lib/administracion-escolar/tareas-equipo';
 import {
   armarCsv, patronBusqueda, TOPE_EXPORTACION, type ConsultaTabla, type DefTabla,
 } from './consulta-tabla';
@@ -296,6 +298,8 @@ export const DEF_TAREAS: DefTabla = {
     vence: { tipo: 'opciones', opciones: ['vencidas', 'hoy', '7dias', 'sin_fecha'] },
     /** Una sola tarea por su número: la usa la pantalla para la que se abre desde una notificación. */
     tarea: { tipo: 'entero' },
+    /** `mias`: las que atiende quien mira (ver `filtroAtiende`). */
+    atiende: { tipo: 'opciones', opciones: ['mias'] },
   },
   // Lo primero que se necesita saber es qué falta por hacer.
   filtrosPorDefecto: { estado: 'pendientes' },
@@ -310,6 +314,8 @@ export interface FilaTarea {
   de: 'alumno' | 'familia' | 'colegio';
   asignadaA: 'soporte' | 'persona';
   asignadaNombre: string | null;
+  /** La persona del equipo de Zero que la atiende (nombre, cargo y foto), si se sabe. */
+  atiende: PersonaEquipo | null;
   estado: 'abierta' | 'en_proceso' | 'en_revision' | 'completada';
   vence: string | null;
   creadaPorIa: boolean;
@@ -324,9 +330,18 @@ export interface FilaTarea {
 const hoyDR = sql`(now() at time zone ${ZONA})::date`;
 const nMensajes = sql<number>`(select count(*)::int from admin_escolar_tarea_mensajes m where m.tarea_id = "admin_escolar_tareas"."id" and m.tipo = 'mensaje')`;
 
-export async function consultarTareas(c: ConsultaTabla, todo = false): Promise<{ filas: FilaTarea[]; total: number }> {
+/** `yoId`: quien mira, para el filtro «Mis tareas». */
+export async function consultarTareas(c: ConsultaTabla, todo = false, yoId?: number | null): Promise<{ filas: FilaTarea[]; total: number }> {
   const t = adminEscolarTareas;
   const w: (SQL | undefined)[] = [];
+
+  // «Mis tareas»: las que atiende quien mira. Si no se puede leer quién atiende
+  // (falta la migración 0237), no enseña ninguna en vez de enseñar todas.
+  const atiende = filtroAtiende(c.filtros.atiende, yoId);
+  if (atiende) {
+    const suyas = atiende.tipo === 'usuario' ? await tareasQueAtiende(atiende.userId) : null;
+    w.push(suyas && suyas.length > 0 ? inArray(t.id, suyas) : sql`false`);
+  }
   if (c.q) w.push(ilike(t.titulo, patronBusqueda(c.q)));
 
   const est = c.filtros.estado ?? 'pendientes';
@@ -373,6 +388,7 @@ export async function consultarTareas(c: ConsultaTabla, todo = false): Promise<{
     db.select({ total: sql<number>`count(*)::int` }).from(t).innerJoin(teams, eq(teams.id, t.teamId)).where(where),
   ]);
 
+  const atienden = await atiendenLasTareas(filas.map((f) => f.id));
   const ahora = Date.now();
   return {
     total,
@@ -381,6 +397,7 @@ export async function consultarTareas(c: ConsultaTabla, todo = false): Promise<{
       de: f.estudianteId != null ? 'alumno' : f.clientId != null ? 'familia' : 'colegio',
       asignadaA: f.asignadaA === 'soporte' ? 'soporte' : 'persona',
       asignadaNombre: f.asignadaA === 'soporte' ? null : (f.asignadaNombre?.trim() || f.asignadaCorreo || null),
+      atiende: atienden.get(f.id) ?? null,
       estado: f.estado as FilaTarea['estado'], vence: f.vence, creadaPorIa: f.creadaPorIa, mensajes: f.mensajes,
       actividad: iso(f.actividad)!, creada: iso(f.creada)!,
       horasSinMover: f.estado === 'completada' ? null : Math.max(0, Math.floor((ahora - new Date(f.actividad).getTime()) / 3_600_000)),
@@ -412,8 +429,8 @@ export async function resumenDeTareas(): Promise<ResumenTareas> {
 export function csvTareas(filas: FilaTarea[]) {
   const estado = { abierta: 'Abierta', en_proceso: 'En proceso', en_revision: 'En revisión', completada: 'Completada' } as const;
   return armarCsv(
-    ['ID', 'Colegio', 'Tarea', 'De', 'Asignada a', 'Estado', 'Vence', 'Mensajes', 'Última actividad', 'Creada'],
+    ['ID', 'Colegio', 'Tarea', 'De', 'Asignada a', 'La atiende', 'Estado', 'Vence', 'Mensajes', 'Última actividad', 'Creada'],
     filas.map((f) => [f.id, f.colegio, f.titulo, f.de, f.asignadaA === 'soporte' ? 'Soporte IT · Zero' : (f.asignadaNombre ?? 'Persona'),
-      estado[f.estado], f.vence ?? '', f.mensajes, fechaDR(f.actividad), fechaDR(f.creada)]),
+      f.atiende ? etiquetaAtiende(f.atiende) : '', estado[f.estado], f.vence ?? '', f.mensajes, fechaDR(f.actividad), fechaDR(f.creada)]),
   );
 }

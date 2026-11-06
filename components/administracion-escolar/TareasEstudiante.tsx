@@ -17,6 +17,8 @@ import {
   type AccionEstado, type Asignacion, type EstadoTarea, type ModoRedaccion, type PlantillaSoporte,
 } from '@/lib/administracion-escolar/tareas-reglas';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { autorAMostrar, etiquetaAtiende, inicialesDe, type PersonaEquipo } from '@/lib/administracion-escolar/tareas-equipo';
+import { AvatarEquipo } from './AvatarEquipo';
 
 /**
  * Las tareas por revisar de un alumno y de su familia, desde su ficha.
@@ -39,12 +41,16 @@ interface TareaEnLista {
   documento: string | null; creadaPorIa: boolean; venceEl: string | null;
   ultimo: { autor: string; texto: string; tipo: string; creadoEn: string } | null;
   mensajes: number; actualizadoEn: string; turno: Turno | null;
+  /** La persona del equipo de Zero que la atiende. */
+  atiende?: PersonaEquipo | null;
 }
 /** A quién le toca contestar y desde cuándo (ver `turnoDe`). */
 export interface Turno { quien: 'soporte' | 'colegio'; nombre: string | null; desde: string; cierraEn: string | null }
 interface DocumentoFamilia { id: number; codigo: string; tipoEcf: string; fecha: string | null; montoTotal: number; anulado: boolean }
 interface Mensaje {
   id: number; tipo: 'mensaje' | 'evento' | 'ia' | 'adjunto'; userId: number | null; autor: string; texto: string; creadoEn: string;
+  /** La persona del equipo de Zero que lo escribió; sin ella, la firma genérica. */
+  equipo?: PersonaEquipo | null;
   /** Solo en los de tipo «adjunto», cuando el archivo ya subió entero. */
   adjunto: { id: number; mime: string; bytes: number } | null;
 }
@@ -52,6 +58,7 @@ export interface TareaCompleta {
   id: number; titulo: string; estado: EstadoTarea; de: string; fichaId: number | null; asignada: string;
   documento: string | null; ecfDocumentId: number | null; creadaPorIa: boolean; venceEl: string | null; mensajes: Mensaje[];
   turno: Turno | null;
+  atiende?: PersonaEquipo | null;
 }
 
 type Vista = { tipo: 'lista' } | { tipo: 'hilo'; id: number } | { tipo: 'nueva' };
@@ -74,12 +81,18 @@ export function cuando(iso: string) {
   return f.toLocaleDateString('es-DO', { day: 'numeric', month: 'short', timeZone: 'America/Santo_Domingo' });
 }
 
-const iniciales = (nombre: string) => {
-  if (nombre.startsWith('Soporte IT') || nombre.startsWith('Departamento de IT')) return 'IT';
-  if (nombre === 'Zero AI') return 'AI';
-  const p = nombre.trim().split(/\s+/);
-  return `${p[0]?.[0] ?? ''}${p[1]?.[0] ?? ''}`.toUpperCase() || '·';
-};
+const iniciales = inicialesDe;
+
+/** «La atiende: Ana · Soporte técnico» con su foto o iniciales; nada si no se sabe quién. */
+export function QuienAtiende({ persona, chica = false }: { persona: PersonaEquipo | null | undefined; chica?: boolean }) {
+  if (!persona) return null;
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-md bg-violet-50 px-1.5 py-0.5 font-medium text-violet-900">
+      <AvatarEquipo fotoUrl={persona.fotoUrl} iniciales={inicialesDe(persona.nombre)} clase={chica ? 'h-4 w-4 text-[8px]' : 'h-5 w-5 text-[9px]'} />
+      La atiende: {etiquetaAtiende(persona)}
+    </span>
+  );
+}
 
 export const COLOR_PUNTO: Record<EstadoTarea, string> = {
   abierta: 'bg-amber-500', en_proceso: 'bg-violet-500', en_revision: 'bg-sky-500', completada: 'bg-emerald-600',
@@ -330,6 +343,7 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
                       )}
                       <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
                         {t.de} · {t.asignada}
+                        <QuienAtiende persona={t.atiende} chica />
                         {t.estado === 'en_proceso' && <span className="rounded bg-violet-50 px-1.5 font-semibold text-violet-800">En proceso</span>}
                         {t.estado === 'en_revision' && <span className="rounded bg-sky-50 px-1.5 font-semibold text-sky-800">En revisión</span>}
                         <TurnoChip turno={t.turno} />
@@ -382,6 +396,7 @@ export function CabeceraHilo({ tarea }: { tarea: TareaCompleta }) {
       )}
       {tarea.venceEl && <span className="rounded-md bg-gray-100 px-2 py-0.5 text-gray-700">Para el {tarea.venceEl.split('-').reverse().join('/')}</span>}
       <TurnoChip turno={tarea.turno} />
+      <QuienAtiende persona={tarea.atiende} />
     </div>
   );
 }
@@ -508,14 +523,19 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
           }
           const mio = m.userId === yo && (m.tipo === 'mensaje' || m.tipo === 'adjunto');
           const ia = m.tipo === 'ia';
+          const quien = autorAMostrar(m);
           return (
             <div key={m.id} className={`flex items-start gap-2 ${mio ? 'flex-row-reverse' : ''}`}>
-              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                mio ? 'bg-zero-600 text-white' : ia ? 'bg-violet-600 text-white' : (m.autor.startsWith('Soporte IT') || m.autor.startsWith('Departamento de IT')) ? 'bg-violet-100 text-violet-800' : 'bg-amber-100 text-amber-800'}`}>
-                {ia ? <Sparkles className="h-3.5 w-3.5" /> : iniciales(m.autor)}
-              </span>
+              {quien.esPersona && !mio ? (
+                <AvatarEquipo fotoUrl={quien.fotoUrl} iniciales={quien.iniciales} />
+              ) : (
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                  mio ? 'bg-zero-600 text-white' : ia ? 'bg-violet-600 text-white' : (m.autor.startsWith('Soporte IT') || m.autor.startsWith('Departamento de IT')) ? 'bg-violet-100 text-violet-800' : 'bg-amber-100 text-amber-800'}`}>
+                  {ia ? <Sparkles className="h-3.5 w-3.5" /> : iniciales(m.autor)}
+                </span>
+              )}
               <div className={`flex max-w-[80%] flex-col gap-1 ${mio ? 'items-end' : ''}`}>
-                <span className="text-[11px] text-gray-500">{mio ? 'Tú' : m.autor} · {cuando(m.creadoEn)}</span>
+                <span className="text-[11px] text-gray-500">{mio ? 'Tú' : quien.etiqueta} · {cuando(m.creadoEn)}</span>
                 {m.tipo === 'adjunto' ? (
                   <Adjunto tareaId={tarea.id} nombre={m.texto} adjunto={m.adjunto} />
                 ) : (
