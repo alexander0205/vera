@@ -24,6 +24,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers, teamRolePantallasOcultas, teamRoles, users } from '@/lib/db/schema';
 import { normalizeRoleKey } from '@/lib/config/roles';
+import { esAdminPlataforma } from '@/lib/auth/plataforma';
 import { esPantalla, pantallaDeRuta, type PantallaDef } from '@/lib/config/pantallas';
 
 const TTL_MS = 15_000;
@@ -79,7 +80,7 @@ export async function pantallaOcultaPara(
   if (!pantalla) return null;
   try {
     const m = await miembro(userId);
-    if (m.platformRole === 'admin') return null;
+    if (esAdminPlataforma(m)) return null;
     const equipo = m.equipos.find(e => e.teamId === activeTeamId)
       ?? [...m.equipos].sort((a, b) => a.desde - b.desde)[0];
     const key = normalizeRoleKey(equipo?.role);

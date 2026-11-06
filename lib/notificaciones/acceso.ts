@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser, getTeamRoleForUser } from '@/lib/db/queries';
 import { getEffectivePermissions } from '@/lib/auth/permissions';
 import { ALL_PERMISSIONS } from '@/lib/config/roles';
+import { esAdminPlataforma } from '@/lib/auth/plataforma';
 import { tiposVisibles, type TipoDeEmpresa } from './tipos';
 
 type Usuario = NonNullable<Awaited<ReturnType<typeof getUser>>>;
@@ -25,7 +26,7 @@ export async function exigirAcceso(): Promise<Acceso> {
   if (!teamId) return { ok: false, response: NextResponse.json({ error: 'Sin empresa configurada' }, { status: 403 }) };
 
   // Mismo trato que `userCanForTeam`: el equipo de Zero lo ve todo.
-  const permisos = user.platformRole === 'admin'
+  const permisos = esAdminPlataforma(user)
     ? ALL_PERMISSIONS
     : await getEffectivePermissions(teamId, teamRole);
   return { ok: true, user, teamId, tipos: tiposVisibles(permisos) };

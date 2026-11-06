@@ -10,6 +10,7 @@ import { eq, and } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { planUserLimit } from '@/lib/plans';
 import { listTeamRoles } from '@/lib/auth/permissions';
+import { rolEfectivoEnEmpresa } from '@/lib/auth/plataforma';
 
 export async function GET() {
   const user = await getUser();
@@ -29,7 +30,9 @@ export async function GET() {
     ))
     .limit(1);
 
-  if (!myMember) return NextResponse.json({ error: 'No eres miembro de este equipo' }, { status: 403 });
+  // El equipo de Zero ve el equipo de cualquier empresa sin ser miembro.
+  const miRol = rolEfectivoEnEmpresa(user, myMember?.role);
+  if (!miRol) return NextResponse.json({ error: 'No eres miembro de este equipo' }, { status: 403 });
 
   // Plan del equipo (para el límite de usuarios)
   const [teamData] = await db
@@ -68,7 +71,7 @@ export async function GET() {
 
   return NextResponse.json({
     myUserId:   user.id,
-    isOwner:    myMember.role === 'owner',
+    isOwner:    miRol === 'owner',
     members,
     invitations: pendingInvites,
     roles,

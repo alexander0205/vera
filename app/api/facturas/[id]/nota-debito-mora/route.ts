@@ -12,6 +12,7 @@ import { ecfDocuments, teamMembers, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { auditarAccionPlataforma } from '@/lib/auth/plataforma-auditoria';
 import { generarNotaDebitoMora, previsualizarMoraDeFactura } from '@/lib/cobranza/nota-debito-mora';
 
 /**
@@ -53,6 +54,7 @@ export async function POST(
     db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
     db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
   ]);
+  auditarAccionPlataforma(user, teamId, 'facturas:crear');
   if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'facturas:crear')) {
     return NextResponse.json({ error: 'Sin permiso para crear documentos' }, { status: 403 });
   }

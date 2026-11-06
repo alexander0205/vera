@@ -17,6 +17,7 @@ import {
 import { cookies } from 'next/headers';
 import { unstable_cache } from 'next/cache';
 import { verifyToken } from '@/lib/auth/session';
+import { esAdminPlataforma } from '@/lib/auth/plataforma';
 import { getPlanDocLimit } from '@/lib/config/plans';
 import { calcularEstadoPago, retencionesQueSaldan } from '@/lib/facturas/estado-pago';
 import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
@@ -179,7 +180,7 @@ export const getTeamForUser = cache(async () => {
    * mismo team activo, y cuál de las dos use cada pantalla decide si el admin
    * puede entrar. Eso no es una regla, es una casualidad.
    */
-  if (user.platformRole === 'admin') {
+  if (esAdminPlataforma(user)) {
     return (await db.query.teams.findFirst({
       where: eq(teams.id, teamId),
       with: {
@@ -239,7 +240,7 @@ export const getTeamIdForUser = cache(async (): Promise<number | null> => {
     .from(users)
     .where(eq(users.id, sessionData.user.id))
     .limit(1);
-  const isPlatformAdmin = u?.platformRole === 'admin';
+  const isPlatformAdmin = esAdminPlataforma(u);
 
   if (sessionData.activeTeamId) {
     if (isPlatformAdmin) {
@@ -303,7 +304,7 @@ export async function getUserTeams() {
   if (!user) return [];
 
   // Platform admin → ver todas las empresas
-  if (user.platformRole === 'admin') {
+  if (esAdminPlataforma(user)) {
     return db
       .select({
         id: teams.id,

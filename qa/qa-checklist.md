@@ -1,6 +1,6 @@
 # QA Checklist EmiteDO — Cobertura Completa UI
 
-**Cuenta test**: `ferrerasalexander@gmail.com` / `Admin1822` (owner team YISRAEL TECHNOLOGY SRL)
+**Cuenta test**: `<correo-de-prueba>` / `<contraseña-de-prueba>` (owner team YISRAEL TECHNOLOGY SRL)
 **URL local**: http://localhost:3000
 **Ambiente DGII**: CerteCF
 

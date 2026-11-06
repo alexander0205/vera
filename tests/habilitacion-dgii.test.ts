@@ -13,6 +13,8 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 
 const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
+// La contraseña del usuario sembrado sale del entorno (la de `pnpm db:seed`): no se escribe en el código.
+const E2E_PASSWORD = process.env.E2E_PASSWORD ?? '';
 // RNC del team contra el que corren los tests. Default = RNC del seed local
 // (lib/config/test-data.ts). Sobreescribible para correr contra el dump dev.
 const RNC_SOLUCIONESDO = process.env.E2E_DGII_RNC ?? '133307391';
@@ -20,7 +22,7 @@ const RNC_SOLUCIONESDO = process.env.E2E_DGII_RNC ?? '133307391';
 // en el team — solo disponible en el dump dev. Actívalos con E2E_DGII_CERT=1.
 const CON_CERT = process.env.E2E_DGII_CERT === '1';
 const LOGIN_EMAIL = 'owner@emitedo.test';
-const LOGIN_PASS  = 'Admin1234!';
+const LOGIN_PASS  = E2E_PASSWORD;
 
 // ─── Helper — construye un e-CF tipo 31 firmable ─────────────────────────────
 // (XML sin firmar — para el test de recepción, el endpoint lo valida vía meta,

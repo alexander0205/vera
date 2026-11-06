@@ -6,12 +6,14 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
+// La contraseña del usuario sembrado sale del entorno (la de `pnpm db:seed`): no se escribe en el código.
+const E2E_PASSWORD = process.env.E2E_PASSWORD ?? '';
 
 // Helper: login con el usuario owner del seed
 async function login(page: Page) {
   await page.goto(`${BASE}/sign-in`);
   await page.fill('input[name="email"]', 'owner@emitedo.test');
-  await page.fill('input[name="password"]', 'Admin1234!');
+  await page.fill('input[name="password"]', E2E_PASSWORD);
   await Promise.all([
     page.waitForURL(`${BASE}/dashboard`, { timeout: 15000 }),
     page.click('button[type="submit"]'),

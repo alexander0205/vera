@@ -20,6 +20,7 @@ import { db } from '@/lib/db/drizzle';
 import { teamMembers, ecfDocuments, teams } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { auditarAccionPlataforma } from '@/lib/auth/plataforma-auditoria';
 import { faltaComprobanteExigido, vincularAdjuntos } from '@/lib/pagos/adjuntos';
 import { logAudit, getIp } from '@/lib/audit';
 
@@ -105,6 +106,7 @@ export async function POST(
      * es lo que hace falta de verdad; se aceptan los dos para no quitarle el
      * cobro a ningún rol que ya lo tenía.
      */
+    auditarAccionPlataforma(user, teamId, 'pagos:registrar');
     const puedeCobrar =
       await userCanForTeam(teamId, user.platformRole, member?.role, 'pagos:registrar')
       || await userCanForTeam(teamId, user.platformRole, member?.role, 'facturas:crear');

@@ -18,6 +18,7 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { auditarAccionPlataforma } from '@/lib/auth/plataforma-auditoria';
 import { logAudit, getIp } from '@/lib/audit';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
 
@@ -40,6 +41,7 @@ export async function POST(
     db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
     db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
   ]);
+  auditarAccionPlataforma(user, teamId, 'facturas:anular');
   if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'facturas:anular')) {
     return NextResponse.json({ error: 'Sin permiso para cancelar envíos' }, { status: 403 });
   }

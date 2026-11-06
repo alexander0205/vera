@@ -23,7 +23,7 @@ Tras `pnpm db:local:setup`, **todos los usuarios locales** quedan con el mismo p
 
 | Email | Password |
 |---|---|
-| (el owner que imprime el script al final) | `Dev1234!` |
+| (el owner que imprime el script al final) | la que imprime el script (o `DEV_PASSWORD` si la defines) |
 
 Cualquier email de la tabla `users` sirve con ese mismo password (solo en LOCAL).
 
@@ -49,7 +49,7 @@ El script:
 1. Verifica Docker.
 2. Levanta `emitedo_postgres` (puerto host 54322) y espera healthy.
 3. Restaura el dump (`--clean` → idempotente).
-4. Setea el password `Dev1234!` en todos los usuarios (solo LOCAL).
+4. Setea una contraseña de prueba en todos los usuarios (solo LOCAL): la de `DEV_PASSWORD` o una al azar que muestra al final.
 5. Imprime counts + login de prueba.
 
 ## Resetear desde cero

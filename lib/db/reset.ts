@@ -24,16 +24,26 @@ import {
 } from './schema';
 import { hashPassword } from '@/lib/auth/session';
 import { TEST_CONTRIBUYENTE } from '@/lib/config/test-data';
+import { credencialDeSiembra, mostrarCredencialUnaVez } from './credenciales-seed';
 
 // ─── Configuración del admin ──────────────────────────────────────────────────
 
-const ADMIN_EMAIL    = 'alexander.ferreras@yisraeltech.com';
-const ADMIN_PASSWORD = 'Admin1234!';
-const ADMIN_NAME     = 'Alexander Ferreras';
+// Nada de esto va escrito en el código (el repo es público): el correo y el
+// nombre vienen del entorno, y la contraseña también o, si falta, se genera al
+// azar y se muestra UNA sola vez al terminar.
+//   RESET_ADMIN_EMAIL (obligatorio) · RESET_ADMIN_NAME · RESET_ADMIN_PASSWORD (mín. 12)
+const ADMIN_EMAIL    = process.env.RESET_ADMIN_EMAIL?.trim().toLowerCase() ?? '';
+const ADMIN_NAME     = process.env.RESET_ADMIN_NAME?.trim() || 'Administrador';
+const ADMIN_CREDENCIAL = credencialDeSiembra('RESET_ADMIN_PASSWORD');
+const ADMIN_PASSWORD = ADMIN_CREDENCIAL.valor;
 
 // ─── Reset ────────────────────────────────────────────────────────────────────
 
 async function reset() {
+  if (!ADMIN_EMAIL) {
+    console.error('Falta RESET_ADMIN_EMAIL: indica con qué correo se crea el administrador. No se borró nada.');
+    process.exit(1);
+  }
   console.log('⚠️  RESET — borrando todos los datos de negocio...\n');
 
   // Orden: hijos antes que padres (foreign keys)
@@ -88,6 +98,7 @@ async function reset() {
     .returning();
 
   console.log(`✓ Usuario: ${ADMIN_EMAIL}`);
+  mostrarCredencialUnaVez('Contraseña del administrador', ADMIN_CREDENCIAL);
 
   // ─── Empresa ──────────────────────────────────────────────────────────────
   const [team] = await db
@@ -144,7 +155,7 @@ async function reset() {
   console.log('\n──────────────────────────────────────────────');
   console.log('✅ Reset completado. Credenciales:');
   console.log(`   Email:    ${ADMIN_EMAIL}`);
-  console.log(`   Password: ${ADMIN_PASSWORD}`);
+  console.log(ADMIN_CREDENCIAL.generada ? '   Password: la generada arriba (no se vuelve a mostrar)' : '   Password: la de RESET_ADMIN_PASSWORD');
   console.log(`   URL:      http://localhost:3002/sign-in`);
   console.log('──────────────────────────────────────────────\n');
 }

@@ -20,6 +20,7 @@ import { getPlan, PLANS } from '@/lib/config/plans';
 import { bloquearSiSoloLectura } from '@/lib/suscripcion/guard';
 import { eq, and, sql, isNull, gte, desc, inArray } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { auditarAccionPlataforma } from '@/lib/auth/plataforma-auditoria';
 import { validarPreciosDeCatalogo } from '@/lib/facturas/precio-guard';
 import { validarVariantes } from '@/lib/inventario/variante-guard';
 import { calcularTotales } from '@/lib/ecf/types';
@@ -519,6 +520,7 @@ export async function POST(request: NextRequest) {
       db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
       db.select().from(teams).where(eq(teams.id, teamId)).limit(1),
     ]);
+    auditarAccionPlataforma(user, teamId, 'facturas:crear');
     if (!await userCanForTeam(teamId, user.platformRole, m?.role, 'facturas:crear')) {
       return NextResponse.json({ error: 'Sin permiso para crear facturas' }, { status: 403 });
     }
@@ -595,6 +597,7 @@ export async function POST(request: NextRequest) {
     // Sin el permiso, cada línea tiene que venir del catálogo y al precio del
     // catálogo. El formulario ya deja los campos en solo lectura; esto es lo que
     // sostiene la regla cuando el POST no viene del formulario.
+    auditarAccionPlataforma(user, teamId, 'facturas:precio-editar');
     if (!await userCanForTeam(teamId, user.platformRole, m?.role, 'facturas:precio-editar')) {
       const errPrecio = await validarPreciosDeCatalogo({
         teamId,
@@ -633,6 +636,7 @@ export async function POST(request: NextRequest) {
       // El Set de Pruebas corre en TesteCF/CerteCF por definición; sin esta
       // excepción ninguna empresa podría completar la habilitación. Se exige
       // permiso de administrador porque salta el gate de ambiente.
+      auditarAccionPlataforma(user, teamId, 'configuracion:gestionar');
       if (!await userCanForTeam(teamId, user.platformRole, m?.role, 'configuracion:gestionar')) {
         return NextResponse.json(
           { error: 'Solo un administrador puede ejecutar el Set de Pruebas de habilitación.' },
