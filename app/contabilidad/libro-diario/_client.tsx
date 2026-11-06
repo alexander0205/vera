@@ -19,6 +19,7 @@ import TableHead from '@mui/material/TableHead';
 import TableBody from '@mui/material/TableBody';
 import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
+import { ORIGEN_LABEL, etiquetaOrigen } from '@/lib/contabilidad/origen-labels';
 import type { AsientoResumen, LineaDetalle, OrigenTipo } from '@/lib/contabilidad/libro-diario';
 
 export interface FiltrosUI {
@@ -42,8 +43,7 @@ function fecha(f: string) {
   // en vez de pasar por Date, que lo interpretaría como UTC y podría restar un
   // día al mostrarlo en hora RD.
   const [a, m, d] = f.split('-');
-  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-  return `${d} ${meses[Number(m) - 1]} ${a}`;
+  return `${d}/${m}/${a}`;
 }
 
 /**
@@ -52,37 +52,37 @@ function fecha(f: string) {
  * un vistazo al leer el libro.
  */
 const ORIGEN: Record<string, { label: string; icono: React.ReactNode; bg: string; fg: string; border: string }> = {
-  factura:   { label: 'Factura', icono: <FileText style={{ width: 12, height: 12 }} />,
+  factura:   { label: ORIGEN_LABEL.factura, icono: <FileText style={{ width: 12, height: 12 }} />,
                bg: '#f9fafb', fg: '#4b5563', border: '#e5e7eb' },
-  pago:      { label: 'Cobro', icono: <Banknote style={{ width: 12, height: 12 }} />,
+  pago:      { label: ORIGEN_LABEL.pago, icono: <Banknote style={{ width: 12, height: 12 }} />,
                bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0' },
-  nota:      { label: 'Nota de crédito', icono: <Undo2 style={{ width: 12, height: 12 }} />,
+  nota:      { label: ORIGEN_LABEL.nota, icono: <Undo2 style={{ width: 12, height: 12 }} />,
                bg: '#fffbeb', fg: '#b45309', border: '#fde68a' },
-  anulacion: { label: 'Anulación', icono: <Ban style={{ width: 12, height: 12 }} />,
+  anulacion: { label: ORIGEN_LABEL.anulacion, icono: <Ban style={{ width: 12, height: 12 }} />,
                bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca' },
-  manual:    { label: 'Manual', icono: <PenLine style={{ width: 12, height: 12 }} />,
+  manual:    { label: ORIGEN_LABEL.manual, icono: <PenLine style={{ width: 12, height: 12 }} />,
                bg: '#eef2ff', fg: '#4338ca', border: '#c7d2fe' },
-  compra:    { label: 'Compra', icono: <ShoppingCart style={{ width: 12, height: 12 }} />,
+  compra:    { label: ORIGEN_LABEL.compra, icono: <ShoppingCart style={{ width: 12, height: 12 }} />,
                bg: '#f0f9ff', fg: '#0369a1', border: '#bae6fd' },
-  gasto_caja:{ label: 'Gasto de caja', icono: <Wallet style={{ width: 12, height: 12 }} />,
+  gasto_caja:{ label: ORIGEN_LABEL.gasto_caja, icono: <Wallet style={{ width: 12, height: 12 }} />,
                bg: '#fdf4ff', fg: '#a21caf', border: '#f5d0fe' },
-  gasto_doc: { label: 'Gasto', icono: <Wallet style={{ width: 12, height: 12 }} />,
+  gasto_doc: { label: ORIGEN_LABEL.gasto_doc, icono: <Wallet style={{ width: 12, height: 12 }} />,
                bg: '#faf5ff', fg: '#7e22ce', border: '#e9d5ff' },
-  depreciacion:{ label: 'Depreciación', icono: <TrendingDown style={{ width: 12, height: 12 }} />,
+  depreciacion:{ label: ORIGEN_LABEL.depreciacion, icono: <TrendingDown style={{ width: 12, height: 12 }} />,
                bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa' },
-  compra_anulada:{ label: 'Compra anulada', icono: <Ban style={{ width: 12, height: 12 }} />,
+  compra_anulada:{ label: ORIGEN_LABEL.compra_anulada, icono: <Ban style={{ width: 12, height: 12 }} />,
                bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca' },
-  pago_proveedor:{ label: 'Pago a proveedor', icono: <Landmark style={{ width: 12, height: 12 }} />,
+  pago_proveedor:{ label: ORIGEN_LABEL.pago_proveedor, icono: <Landmark style={{ width: 12, height: 12 }} />,
                bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe' },
-  cierre:    { label: 'Cierre de ejercicio', icono: <Lock style={{ width: 12, height: 12 }} />,
+  cierre:    { label: ORIGEN_LABEL.cierre, icono: <Lock style={{ width: 12, height: 12 }} />,
                bg: '#f5f3ff', fg: '#6d28d9', border: '#ddd6fe' },
-  nomina:    { label: 'Nómina', icono: <Users style={{ width: 12, height: 12 }} />,
+  nomina:    { label: ORIGEN_LABEL.nomina, icono: <Users style={{ width: 12, height: 12 }} />,
                bg: '#ecfeff', fg: '#0e7490', border: '#a5f3fc' },
-  provision_nomina:{ label: 'Provisión de nómina', icono: <PiggyBank style={{ width: 12, height: 12 }} />,
+  provision_nomina:{ label: ORIGEN_LABEL.provision_nomina, icono: <PiggyBank style={{ width: 12, height: 12 }} />,
                bg: '#f0fdfa', fg: '#0f766e', border: '#99f6e4' },
-  pago_sueldos:{ label: 'Pago de sueldos', icono: <HandCoins style={{ width: 12, height: 12 }} />,
+  pago_sueldos:{ label: ORIGEN_LABEL.pago_sueldos, icono: <HandCoins style={{ width: 12, height: 12 }} />,
                bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0' },
-  pago_nomina:{ label: 'Pago TSS / DGII', icono: <Landmark style={{ width: 12, height: 12 }} />,
+  pago_nomina:{ label: ORIGEN_LABEL.pago_nomina, icono: <Landmark style={{ width: 12, height: 12 }} />,
                bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe' },
 };
 const ORIGEN_FALLBACK = { bg: '#f9fafb', fg: '#4b5563', border: '#e5e7eb' };
@@ -392,7 +392,7 @@ export function LibroDiarioClient({
                           bgcolor: tono.bg, color: tono.fg, border: `1px solid ${tono.border}`,
                         }}>
                           {o?.icono}
-                          {o?.label ?? a.origenTipo}
+                          {o?.label ?? etiquetaOrigen(a.origenTipo)}
                         </Box>
                       </TableCell>
                       <TableCell align="right" sx={{ ...celdaMonto, fontWeight: 500, color: '#111827' }}>

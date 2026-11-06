@@ -9,8 +9,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 const dialect = new PgDialect();
 const sentencias: string[] = [];
 let reclamo: unknown[] = [];
-let pagoExistente: unknown[] = [];
-let pagoPorIndice: unknown[] = [];
+let pagoPorIndice: unknown[][] = []; // respuestas, en orden, a «¿hay un pago de esta solicitud?»
 const registrar = vi.fn();
 
 vi.mock('@/lib/db/drizzle', () => ({
@@ -19,8 +18,7 @@ vi.mock('@/lib/db/drizzle', () => ({
       const t = dialect.sqlToQuery(q).sql.trim().replace(/\s+/g, ' ');
       sentencias.push(t);
       if (t.startsWith("UPDATE pagos_solicitudes SET estado = 'pagando'")) return reclamo;
-      if (t.includes('FROM pagos_proveedores') && t.includes('referencia =')) return pagoExistente;
-      if (t.includes('FROM pagos_proveedores') && t.includes('solicitud_id =')) return pagoPorIndice;
+      if (t.includes('FROM pagos_proveedores') && t.includes('solicitud_id =')) return pagoPorIndice.shift() ?? [];
       return [];
     },
   },
@@ -38,7 +36,6 @@ import { pantallaDeRuta } from '@/lib/config/pantallas';
 beforeEach(() => {
   sentencias.length = 0; registrar.mockReset();
   reclamo = [{ compraId: 5, monto: '1000', metodo: 'transferencia', cuentaId: null, nota: null }];
-  pagoExistente = [];
   pagoPorIndice = [];
 });
 
@@ -53,7 +50,7 @@ describe('pagarSolicitud: recuperar una solicitud atascada', () => {
   });
 
   it('si el pago de esa solicitud ya se había registrado, lo enlaza y NO paga de nuevo', async () => {
-    pagoExistente = [{ id: 321 }];
+    pagoPorIndice = [[{ id: 321 }]];
     const r = await pagarSolicitud(1, 3, 7, '2026-11-05');
     expect(r).toEqual({ pagoId: 321 });
     expect(registrar).not.toHaveBeenCalled();
@@ -83,8 +80,7 @@ describe('7 · un pago nace de una sola solicitud', () => {
 
   it('si el índice único salta (otro intento ya pagó), enlaza ese pago y no falla', async () => {
     registrar.mockRejectedValue(Object.assign(new Error('duplicate key'), { code: '23505' }));
-    pagoExistente = [];            // el chequeo previo no lo vio (carrera)…
-    pagoPorIndice = [{ id: 654 }]; // …pero el índice único sí lo atrapa
+    pagoPorIndice = [[], [{ id: 654 }]]; // el chequeo previo no lo vio (carrera)… pero el índice único sí lo atrapa
     const r = await pagarSolicitud(1, 3, 7, '2026-11-05');
     expect(r).toEqual({ pagoId: 654 });
     expect(sentencias.some((x) => x.includes("SET estado = 'pagado', pago_id ="))).toBe(true);

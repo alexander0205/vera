@@ -40,6 +40,8 @@ export interface ContextoRegistro {
   cuentaSalidaPorMetodo: Record<string, number>;
   rncEmpresa: string | null;
   hoy: string;
+  /** La empresa lleva Contabilidad: ahí está «Cuentas por pagar». */
+  contabilidadActiva: boolean;
   inicial: {
     proveedorRnc: string | null;
     proveedorNombre: string | null;
@@ -102,6 +104,12 @@ const CONCEPTO_LABEL: Record<ConceptoRetencion, string> = {
   seguridad: 'Seguridad y vigilancia',
   otros_servicios: 'Otros servicios',
 };
+
+/** Suma días a una fecha YYYY-MM-DD (en UTC, sin sorpresas de horario). */
+function sumarDias(ymd: string, dias: number): string {
+  const [a, m, d] = ymd.split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1, d + dias)).toISOString().slice(0, 10);
+}
 
 const TASA_LABEL: Record<TasaItbis, string> = { '0.18': '18 %', '0.16': '16 %', '0': '0 %', exento: 'Exento' };
 
@@ -871,7 +879,12 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="forma-pago">Forma de pago</Label>
-                  <NativeSelect id="forma-pago" value={formaPago} onChange={(e) => setFormaPago(e.target.value as 'contado' | 'credito')}>
+                  <NativeSelect id="forma-pago" value={formaPago} onChange={(e) => {
+                    const v = e.target.value as 'contado' | 'credito';
+                    setFormaPago(v);
+                    // Sin fecha de vencimiento no hay forma de saber qué está vencido: se propone 30 días (se puede cambiar).
+                    if (v === 'credito' && !fechaVencimiento) setFechaVencimiento(sumarDias(fecha, 30));
+                  }}>
                     <option value="contado">De contado</option>
                     <option value="credito">A crédito (cuenta por pagar)</option>
                   </NativeSelect>
@@ -901,6 +914,11 @@ export default function RegistrarCompraClient({ contexto }: { contexto: Contexto
                   </div>
                 )}
               </div>
+              {formaPago === 'credito' && contexto.contabilidadActiva && (
+                <p className="text-sm text-muted-foreground" data-testid="nota-credito">
+                  Quedará en Contabilidad › Cuentas por pagar hasta que la pagues. El vencimiento se propone a 30 días: cámbialo si el proveedor te dio otro plazo.
+                </p>
+              )}
               {esMixto && (
                 <div className="space-y-2 rounded-md border p-3" data-testid="pago-mixto">
                   <Label>Cómo se pagó</Label>

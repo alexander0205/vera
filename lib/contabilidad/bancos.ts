@@ -400,15 +400,20 @@ export async function conciliar(
 
   const lista = sql.join(validos.map((i) => sql`${i}`), sql`, `);
   if (!conciliada) {
-    const r = await db.execute(sql`DELETE FROM contabilidad_conciliaciones WHERE team_id = ${teamId} AND linea_id IN (${lista}) RETURNING id`) as unknown as unknown[];
-    // Si alguna estaba emparejada con una línea del estado de cuenta importado, esa línea vuelve a pendiente:
-    // si no, la bandeja diría «emparejada» de algo que el libro ya no tiene conciliado.
-    if (await tablaExiste('contabilidad_extracto_lineas')) {
-      await db.execute(sql`
-        UPDATE contabilidad_extracto_lineas
-        SET estado = 'pendiente', linea_id = NULL, metodo_emparejado = NULL, resuelta_por = NULL, resuelta_at = NULL
-        WHERE team_id = ${teamId} AND estado = 'emparejada' AND linea_id IN (${lista})`);
-    }
+    // Las dos cosas o ninguna: si se borra la marca y falla la línea del extracto, la bandeja diría «emparejada» de algo sin marca.
+    const tieneExtracto = await tablaExiste('contabilidad_extracto_lineas');
+    const r = await db.transaction(async (tx) => {
+      const borradas = await tx.execute(sql`DELETE FROM contabilidad_conciliaciones WHERE team_id = ${teamId} AND linea_id IN (${lista}) RETURNING id`) as unknown as unknown[];
+      // Si alguna estaba emparejada con una línea del estado de cuenta importado, esa línea vuelve a pendiente:
+      // si no, la bandeja diría «emparejada» de algo que el libro ya no tiene conciliado.
+      if (tieneExtracto) {
+        await tx.execute(sql`
+          UPDATE contabilidad_extracto_lineas
+          SET estado = 'pendiente', linea_id = NULL, metodo_emparejado = NULL, marca_previa = false, resuelta_por = NULL, resuelta_at = NULL
+          WHERE team_id = ${teamId} AND estado = 'emparejada' AND linea_id IN (${lista})`);
+      }
+      return borradas;
+    });
     return { cambiados: r.length, ignorados };
   }
   const r = await db.execute(sql`
