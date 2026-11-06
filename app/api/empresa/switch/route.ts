@@ -4,6 +4,7 @@ import { setActiveTeam } from '@/lib/auth/session';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers, teams } from '@/lib/db/schema';
 import { and, eq } from 'drizzle-orm';
+import { esAdminPlataforma } from '@/lib/auth/plataforma';
 
 export async function POST(req: NextRequest) {
   const user = await getUser();
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Platform admin → puede activar cualquier team que exista
-  if (user.platformRole === 'admin') {
+  if (esAdminPlataforma(user)) {
     const [t] = await db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId)).limit(1);
     if (!t) return NextResponse.json({ error: 'Empresa no existe' }, { status: 404 });
     await setActiveTeam(teamId);

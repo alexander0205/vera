@@ -22,6 +22,8 @@ import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
 import MenuItem from '@mui/material/MenuItem';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -48,7 +50,13 @@ interface ActivoFijo {
   enRevision: boolean;
   costoVigenteCents: number;
   acumuladaVigenteCents: number;
+  /** Aula donde está, estado y «solo control» (migración 0236). */
+  espacioId?: number | null;
+  estado?: string;
+  soloControl?: boolean;
 }
+
+interface EspacioOpcion { id: number; nombre: string }
 
 interface CuentaCobro { id: number; codigo: string; nombre: string }
 
@@ -93,8 +101,8 @@ const EXPORTAR: ExportTabla<ActivoFijo> = {
 const CARD = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' } as const;
 
 export function ActivosFijosClient({
-  activos, hoy, puedeGestionar, cuentasCobro = [],
-}: { activos: ActivoFijo[]; hoy: string; puedeGestionar: boolean; cuentasCobro?: CuentaCobro[] }) {
+  activos, hoy, puedeGestionar, cuentasCobro = [], espacios = [],
+}: { activos: ActivoFijo[]; hoy: string; puedeGestionar: boolean; cuentasCobro?: CuentaCobro[]; espacios?: EspacioOpcion[] }) {
   const router = useRouter();
   // Rango por fecha de adquisición.
   const [desde, setDesde] = useState('');
@@ -116,6 +124,8 @@ export function ActivosFijosClient({
   const [cantidad, setCantidad] = useState('1');
   const [ubicacion, setUbicacion] = useState('');
   const [categoria, setCategoria] = useState('');
+  const [espacioId, setEspacioId] = useState('');
+  const [soloControl, setSoloControl] = useState(false);
   const [guardando, setGuardando] = useState(false);
   // Baja y edición de una ficha
   const [baja, setBaja] = useState<ActivoFijo | null>(null);
@@ -129,7 +139,7 @@ export function ActivosFijosClient({
   const costoCents = aCentavos(costo);
   const residualCents = residual.trim() === '' ? 0 : aCentavos(residual);
   const cat = categoriaActivo(categoria);
-  const sinDepreciar = cat?.deprecia === false;
+  const sinDepreciar = cat?.deprecia === false || soloControl;
   const vidaMeses = sinDepreciar ? 1 : parseInt(vida, 10);
   const cantidadN = parseInt(cantidad, 10);
   const cuotaMensual = useMemo(() => {
@@ -159,7 +169,9 @@ export function ActivosFijosClient({
           fechaAdquisicion: fecha,
           cantidad: cantidadN,
           ubicacion: ubicacion.trim() || null,
-          categoria: categoria || null,
+          categoria: soloControl ? null : categoria || null,
+          soloControl,
+          espacioId: espacioId ? Number(espacioId) : null,
         }),
       });
       const data = await res.json();
@@ -168,7 +180,7 @@ export function ActivosFijosClient({
         setGuardando(false);
         return;
       }
-      setNombre(''); setCosto(''); setResidual(''); setVida(''); setFecha(hoy); setCantidad('1'); setUbicacion(''); setCategoria('');
+      setNombre(''); setCosto(''); setResidual(''); setVida(''); setFecha(hoy); setCantidad('1'); setUbicacion(''); setCategoria(''); setEspacioId(''); setSoloControl(false);
       setAbierto(false); setGuardando(false);
       router.refresh();
     } catch {
@@ -252,14 +264,20 @@ export function ActivosFijosClient({
         <Box sx={{ ...CARD, p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, color: '#111827' }}>Nuevo activo fijo</Typography>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-            <TextField
+            {!soloControl && <TextField
               label="Categoría" select value={categoria} onChange={(e) => setCategoria(e.target.value)}
               helperText={cat ? `Cuenta ${cat.cuentaActivo}${cat.deprecia ? ` · depreciación ${cat.cuentaDeprecAcum}` : ' · no se deprecia'}` : 'Decide su cuenta contable'}
               sx={{ width: 260 }}
             >
               <MenuItem value="">Sin categoría (cuenta general)</MenuItem>
               {CATEGORIAS_ACTIVO.map((c) => <MenuItem key={c.clave} value={c.clave}>{c.label}</MenuItem>)}
-            </TextField>
+            </TextField>}
+            {espacios.length > 0 && (
+              <TextField label="Aula" select value={espacioId} onChange={(e) => setEspacioId(e.target.value)} helperText="Opcional" sx={{ width: 200 }}>
+                <MenuItem value="">Sin aula</MenuItem>
+                {espacios.map((e) => <MenuItem key={e.id} value={String(e.id)}>{e.nombre}</MenuItem>)}
+              </TextField>
+            )}
             <TextField
               label="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)}
               placeholder="Ej.: Edificio principal" sx={{ flex: 1, minWidth: 240 }}
@@ -299,8 +317,14 @@ export function ActivosFijosClient({
             />}
           </Box>
 
+          {espacios.length > 0 && (
+            <FormControlLabel
+              control={<Checkbox size="small" checked={soloControl} onChange={(e) => setSoloControl(e.target.checked)} />}
+              label={<span style={{ fontSize: '0.8125rem' }}>Solo control de inventario (no se deprecia): para cosas baratas que se cuentan pero van al gasto</span>}
+            />
+          )}
           {sinDepreciar && (
-            <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>Un terreno no se deprecia: no hay vida útil que indicar.</Typography>
+            <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>{soloControl ? 'Solo control: se cuenta en unidades, sin depreciación ni asientos.' : 'Un terreno no se deprecia: no hay vida útil que indicar.'}</Typography>
           )}
           {cuotaMensual !== null && !sinDepreciar && (
             <Typography sx={{ fontSize: '0.8125rem', color: '#2a45c4' }}>
@@ -356,6 +380,9 @@ export function ActivosFijosClient({
                         {a.enRevision && (
                           <Chip label="Por confirmar" size="small" sx={{ height: 20, fontSize: '0.6875rem', bgcolor: '#fef3c7', color: '#92400e' }} />
                         )}
+                        {a.soloControl && (
+                          <Chip label="Solo control" size="small" sx={{ height: 20, fontSize: '0.6875rem', bgcolor: '#e0f2fe', color: '#075985' }} />
+                        )}
                         {!a.activa && (
                           <Chip label="Dada de baja" size="small" sx={{ height: 20, fontSize: '0.6875rem', bgcolor: '#f3f4f6', color: '#6b7280' }} />
                         )}
@@ -394,7 +421,7 @@ export function ActivosFijosClient({
       )}
 
       {baja && <BajaDialogo activo={baja} hoy={hoy} onCerrar={() => setBaja(null)} onListo={() => { setBaja(null); router.refresh(); }} />}
-      {edita && <EditarDialogo activo={edita} onCerrar={() => setEdita(null)} onListo={() => { setEdita(null); router.refresh(); }} />}
+      {edita && <EditarDialogo activo={edita} espacios={espacios} onCerrar={() => setEdita(null)} onListo={() => { setEdita(null); router.refresh(); }} />}
     </Box>
   );
 }
@@ -469,15 +496,18 @@ function BajaDialogo({ activo, hoy, onCerrar, onListo }: {
 }
 
 /** Editar la ficha, o confirmar una abierta desde una compra (categoría y vida útil). */
-function EditarDialogo({ activo, onCerrar, onListo }: { activo: ActivoFijo; onCerrar: () => void; onListo: () => void }) {
+function EditarDialogo({ activo, espacios, onCerrar, onListo }: { activo: ActivoFijo; espacios: EspacioOpcion[]; onCerrar: () => void; onListo: () => void }) {
   const [nombre, setNombre] = useState(activo.nombre);
   const [ubicacion, setUbicacion] = useState(activo.ubicacion ?? '');
   const [categoria, setCategoria] = useState(activo.categoria ?? '');
   const [vida, setVida] = useState(String(activo.vidaUtilMeses));
   const [residual, setResidual] = useState((activo.valorResidualCents / 100).toFixed(2));
+  const [espacioId, setEspacioId] = useState(activo.espacioId != null ? String(activo.espacioId) : '');
+  const [estado, setEstado] = useState(activo.estado ?? 'bien');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const sinDepreciar = categoriaActivo(categoria)?.deprecia === false;
+  const soloControl = activo.soloControl === true;
+  const sinDepreciar = categoriaActivo(categoria)?.deprecia === false || soloControl;
 
   async function enviar() {
     setError(null); setEnviando(true);
@@ -485,10 +515,13 @@ function EditarDialogo({ activo, onCerrar, onListo }: { activo: ActivoFijo; onCe
       const res = await fetch(`/api/contabilidad/activos-fijos/${activo.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nombre, ubicacion, categoria: categoria || null,
+          nombre, ubicacion,
+          // Una ficha de solo control no tiene categoría, vida útil ni residual que cambiar.
+          ...(soloControl ? {} : { categoria: categoria || null, valorResidualPesos: residual.trim() === '' ? 0 : residual }),
           ...(sinDepreciar ? {} : { vidaUtilMeses: parseInt(vida, 10) }),
-          valorResidualPesos: residual.trim() === '' ? 0 : residual,
           confirmar: activo.enRevision,
+          // Aula y estado: solo si la base ya los tiene (si no, la lista viene vacía y no se manda nada).
+          ...(espacios.length > 0 ? { espacioId: espacioId ? Number(espacioId) : null, estado } : {}),
         }),
       });
       const d = await res.json().catch(() => ({}));
@@ -512,6 +545,20 @@ function EditarDialogo({ activo, onCerrar, onListo }: { activo: ActivoFijo; onCe
           </TextField>
           <TextField label="Ubicación" value={ubicacion} onChange={(e) => setUbicacion(e.target.value)} slotProps={{ htmlInput: { maxLength: 160 } }} sx={{ minWidth: 200, flex: 1 }} />
         </Box>
+        {espacios.length > 0 && (
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+            <TextField label="Aula" select value={espacioId} onChange={(e) => setEspacioId(e.target.value)} sx={{ minWidth: 240, flex: 1 }}>
+              <MenuItem value="">Sin aula</MenuItem>
+              {espacios.map((e) => <MenuItem key={e.id} value={String(e.id)}>{e.nombre}</MenuItem>)}
+            </TextField>
+            <TextField label="Estado" select value={estado} onChange={(e) => setEstado(e.target.value)} sx={{ width: 160 }}>
+              <MenuItem value="bien">Bien</MenuItem>
+              <MenuItem value="regular">Regular</MenuItem>
+              <MenuItem value="danado">Dañado</MenuItem>
+            </TextField>
+          </Box>
+        )}
+        {soloControl && <Alert severity="info">Ficha de solo control: se cuenta en unidades, no se deprecia ni genera asientos.</Alert>}
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
           {!sinDepreciar && (
             <TextField label="Vida útil (meses)" type="number" value={vida} onChange={(e) => setVida(e.target.value)}

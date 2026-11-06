@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { registrarActivoFijo, ActivoFijoError } from '@/lib/contabilidad/depreciacion';
+import { invalidarPlanta } from '@/lib/cache/escolar';
 
 export async function POST(req: NextRequest) {
   const auth = await requirePermission('contabilidad:gestionar');
@@ -17,6 +18,7 @@ export async function POST(req: NextRequest) {
     nombre?: string; costoCents?: number; valorResidualCents?: number;
     vidaUtilMeses?: number; fechaAdquisicion?: string;
     cantidad?: number; ubicacion?: string | null; categoria?: string | null;
+    soloControl?: boolean; espacioId?: number | null;
   };
   try {
     body = await req.json();
@@ -36,9 +38,12 @@ export async function POST(req: NextRequest) {
         cantidad: body.cantidad === undefined ? 1 : Number(body.cantidad),
         ubicacion: typeof body.ubicacion === 'string' ? body.ubicacion : null,
         categoria: typeof body.categoria === 'string' && body.categoria ? body.categoria : null,
+        soloControl: body.soloControl === true,
       },
       auth.user.id,
+      { espacioId: Number.isSafeInteger(Number(body.espacioId)) && Number(body.espacioId) > 0 ? Number(body.espacioId) : null },
     );
+    if (body.espacioId) invalidarPlanta(auth.teamId);
     return NextResponse.json({ ok: true, id });
   } catch (e) {
     if (e instanceof ActivoFijoError) {

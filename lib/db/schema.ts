@@ -2833,6 +2833,19 @@ export const adminEscolarTareaMensajes = pgTable('admin_escolar_tarea_mensajes',
 ]);
 
 /**
+ * Qué persona del equipo de Zero atiende una tarea de Soporte (0237): la que la
+ * tomó o la última que respondió. Tabla aparte para que el código nuevo sin la
+ * migración solo deje de enseñarlo. Ver lib/administracion-escolar/tareas-atiende.ts.
+ */
+export const adminEscolarTareaAtiende = pgTable('admin_escolar_tarea_atiende', {
+  tareaId:       integer('tarea_id').primaryKey().references(() => adminEscolarTareas.id, { onDelete: 'cascade' }),
+  userId:        integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_tarea_atiende_user_idx').on(t.userId),
+]);
+
+/**
  * Una foto, un video o un documento de la conversación de una tarea (0210).
  * El archivo está en S3; llega por trozos (ver lib/storage/tareas.ts) y solo
  * se enseña cuando `subido`.

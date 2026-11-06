@@ -252,11 +252,12 @@ function SidebarContent({
   const activeTeam  = teams.find(t => t.id === activeTeamId) ?? teams[0];
   const role        = activeTeam?.role;
   const cajaHabilitada = activeTeam?.cajaHabilitada ?? false;
-  const hasPlan     = activeTeam ? teamHasPlan(activeTeam) : false;
 
   // Permisos efectivos (con overrides por empresa). null mientras carga →
   // canAccessHref usa el fallback estático del rol.
-  const { permissions, modules, pantallasOcultas, isLoading: permsLoading } = usePermissions();
+  const { permissions, modules, pantallasOcultas, esPlataforma, isLoading: permsLoading } = usePermissions();
+  // El equipo de Zero no queda encerrado por el plan de la empresa que mira.
+  const hasPlan = esPlataforma || (activeTeam ? teamHasPlan(activeTeam) : false);
   const permSet = useMemo(
     () => (permsLoading ? null : new Set<string>(permissions)),
     [permsLoading, permissions],

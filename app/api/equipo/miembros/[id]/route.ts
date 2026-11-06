@@ -10,15 +10,20 @@ import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { listTeamRoles } from '@/lib/auth/permissions';
+import { esAdminPlataforma, rolEfectivoEnEmpresa } from '@/lib/auth/plataforma';
+import { auditarAccionPlataforma } from '@/lib/auth/plataforma-auditoria';
 
-async function getCallerTeam(userId: number) {
+async function getCallerTeam(user: { id: number; platformRole?: string | null }) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return null;
   const [row] = await db
     .select({ teamId: teamMembers.teamId, role: teamMembers.role, memberId: teamMembers.id })
     .from(teamMembers)
-    .where(and(eq(teamMembers.userId, userId), eq(teamMembers.teamId, teamId)))
+    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
     .limit(1);
+  // El equipo de Zero actúa en cualquier empresa como su propietario, sin ser
+  // miembro; lo que cambie queda auditado con su usuario.
+  if (esAdminPlataforma(user)) return { teamId, role: rolEfectivoEnEmpresa(user, row?.role) as string, memberId: row?.memberId ?? null };
   return row ?? null;
 }
 
@@ -31,9 +36,10 @@ export async function PATCH(
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-  const caller = await getCallerTeam(user.id);
+  const caller = await getCallerTeam(user);
   if (!caller) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
   if (caller.role !== 'owner') return NextResponse.json({ error: 'Solo el propietario puede cambiar roles' }, { status: 403 });
+  auditarAccionPlataforma(user, caller.teamId, 'equipo:cambiar-rol');
 
   const { id } = await params;
   const memberId = parseInt(id);
@@ -80,7 +86,7 @@ export async function DELETE(
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-  const caller = await getCallerTeam(user.id);
+  const caller = await getCallerTeam(user);
   if (!caller) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
 
   const { id } = await params;
@@ -100,6 +106,7 @@ export async function DELETE(
   if (!isSelf && caller.role !== 'owner') {
     return NextResponse.json({ error: 'Solo el propietario puede eliminar miembros' }, { status: 403 });
   }
+  auditarAccionPlataforma(user, caller.teamId, 'equipo:quitar-miembro');
 
   // No puede eliminar al único owner
   if (target.role === 'owner') {

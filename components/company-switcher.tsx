@@ -27,6 +27,7 @@ import { Building2, Check, ChevronDown, Plus, Search } from 'lucide-react';
 import { planColorMui, getPlan } from '@/lib/config/plans';
 import { BILLING_ENABLED } from '@/lib/config/billing';
 import { ZeroLoader } from '@/components/zero-loader';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { Team } from '@/lib/db/schema';
 
 function teamHasPlan(t: Team) {
@@ -63,6 +64,7 @@ export function CompanySwitcher({
   onSwitch?: (teamId: number) => void;
 }) {
   const router = useRouter();
+  const { esPlataforma } = usePermissions();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [search, setSearch]     = useState('');
   const open = Boolean(anchorEl);
@@ -149,7 +151,7 @@ export function CompanySwitcher({
 
     onSwitch?.(teamId);
     startTransition(() => {
-      if (BILLING_ENABLED && (!target || !teamHasPlan(target))) {
+      if (BILLING_ENABLED && !esPlataforma && (!target || !teamHasPlan(target))) {
         // A la pantalla de suscripción, no a /pricing: es donde de verdad se
         // elige y se abre la prueba. Mismo destino que el redirect del banner.
         router.push('/dashboard/suscripcion');

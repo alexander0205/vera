@@ -41,11 +41,16 @@ DB_USER="postgres"
 COMPOSE_FILE="$REPO_ROOT/docker-compose.yml"
 HEALTH_TIMEOUT=60   # segundos máximos esperando el healthcheck
 
-# Password de prueba para desarrollo local. El hash bcrypt es seguro de commitear
-# (one-way). Tras restaurar, TODOS los usuarios quedan con este password en LOCAL,
-# así cualquier dev entra sin saber las contraseñas reales de prod.
-DEV_PASSWORD="Dev1234!"
-DEV_PASSWORD_HASH='$2b$10$j.xtWnrDqgDF3lK1Im9eFu8bDTcj4arpCCG/Yp9UTyRVSFetaImsO'
+# Password de prueba para desarrollo local. NO hay ninguna escrita aquí (el repo
+# es público): sale de DEV_PASSWORD (mín. 12 caracteres) o se genera al azar en
+# cada corrida y se muestra una sola vez al final. Tras restaurar, TODOS los
+# usuarios quedan con ella en LOCAL, así cualquier dev entra sin conocer las
+# contraseñas reales de prod. El hash se calcula con el bcryptjs del proyecto.
+DEV_PASSWORD="${DEV_PASSWORD:-}"
+if [[ ${#DEV_PASSWORD} -lt 12 ]]; then
+  DEV_PASSWORD="$(cd "$REPO_ROOT" && node -e "process.stdout.write(require('crypto').randomBytes(15).toString('base64url') + 'Aa1!')")"
+fi
+DEV_PASSWORD_HASH="$(cd "$REPO_ROOT" && DEV_PW="$DEV_PASSWORD" node -e "process.stdout.write(require('bcryptjs').hashSync(process.env.DEV_PW, 10))")"
 
 echo ""
 echo -e "${CYAN}========================================${RESET}"

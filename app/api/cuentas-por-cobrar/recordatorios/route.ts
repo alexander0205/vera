@@ -21,6 +21,7 @@ import { teamMembers, teams } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { auditarAccionPlataforma } from '@/lib/auth/plataforma-auditoria';
 import { sendRecordatorioCobroEmail } from '@/lib/email';
 import { registrarEvento } from '@/lib/cobranza/seguimiento';
 import { hoyRD } from '@/lib/utils/format';
@@ -54,6 +55,7 @@ export async function POST(req: NextRequest) {
 
   // Escribirle a un cliente es una acción hacia afuera: se exige el mismo
   // permiso que para facturar, no el de solo lectura.
+  auditarAccionPlataforma(user, teamId, 'facturas:crear');
   if (!await userCanForTeam(teamId, user.platformRole, member?.role, 'facturas:crear')) {
     return NextResponse.json({ error: 'Sin permiso para enviar recordatorios' }, { status: 403 });
   }

@@ -7,7 +7,7 @@ import { TablaTareas } from './_tabla';
 export const dynamic = 'force-dynamic';
 
 export default async function AdminTareasPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  await exigirAdmin();   // antes de tocar la base: ver lib/auth/admin-guard.ts
+  const yo = await exigirAdmin();   // antes de tocar la base: ver lib/auth/admin-guard.ts
   const sp = await searchParams;
 
   // `?tarea=` es el enlace de una notificación: resalta esa tarea, pero no
@@ -17,11 +17,11 @@ export default async function AdminTareasPage({ searchParams }: { searchParams: 
   const idResaltada = typeof tarea === 'string' && /^\d{1,9}$/.test(tarea) ? Number(tarea) : null;
 
   const [lista, colegios, resumen, resaltada] = await Promise.all([
-    consultarTareas(c),
+    consultarTareas(c, false, yo.id),
     colegiosConTareas(),
     resumenDeTareas(),
     idResaltada
-      ? consultarTareas({ ...c, pagina: 1, tamano: 10, filtros: { tarea: String(idResaltada), estado: 'todas' } }).then((r) => r.filas[0] ?? null)
+      ? consultarTareas({ ...c, pagina: 1, tamano: 10, filtros: { tarea: String(idResaltada), estado: 'todas' } }, false, yo.id).then((r) => r.filas[0] ?? null)
       : Promise.resolve(null),
   ]);
 

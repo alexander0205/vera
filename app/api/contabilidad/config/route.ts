@@ -17,6 +17,7 @@ import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { auditarAccionPlataforma } from '@/lib/auth/plataforma-auditoria';
 import {
   getConfig, getMetodosConfigurados, getOverridesIngreso, cuentasDeGasto,
   guardarConfig, guardarMetodo, borrarMetodo,
@@ -41,6 +42,8 @@ async function autorizar(permiso: 'contabilidad:ver' | 'contabilidad:configurar'
     .from(teamMembers)
     .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
     .limit(1);
+
+  auditarAccionPlataforma(user, teamId, permiso);
 
   if (!await userCanForTeam(teamId, user.platformRole, member?.role, permiso)) {
     return { error: NextResponse.json({ error: 'Sin permiso' }, { status: 403 }) };

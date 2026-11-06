@@ -28,6 +28,7 @@
 import useSWR from 'swr';
 import type { Permission } from '@/lib/config/roles';
 import type { ModuleKey } from '@/lib/config/modules';
+import { esAdminPlataforma } from '@/lib/auth/plataforma';
 
 interface UserPermissionsResponse {
   teamRole?: string | null;
@@ -35,6 +36,8 @@ interface UserPermissionsResponse {
   modules?: ModuleKey[];
   pantallasOcultas?: string[];
   academia?: boolean;
+  /** Viene de `users.platform_role` (lo decide el servidor, no el cliente). */
+  platformRole?: string | null;
 }
 
 // Fetch siempre /api/user, pero bajo una SWR key PROPIA (array) que NO coincide
@@ -57,6 +60,8 @@ export interface UsePermissionsResult {
   academiaActiva: boolean;
   /** Rol del usuario en el team activo (null si no aplica). */
   teamRole: string | null;
+  /** ¿Es del equipo de Zero? Solo sirve para MOSTRAR; el servidor decide siempre. */
+  esPlataforma: boolean;
   /** true mientras la primera carga está en curso. */
   isLoading: boolean;
 }
@@ -85,6 +90,7 @@ export function usePermissions(): UsePermissionsResult {
     pantallasOcultas,
     academiaActiva,
     teamRole,
+    esPlataforma: esAdminPlataforma(data),
     isLoading,
   };
 }

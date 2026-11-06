@@ -30,6 +30,7 @@ import { hoyRD } from '@/lib/utils/format';
 import { getConfig } from './config';
 import { CODIGO, asegurarCuentaBase } from './catalogo-base';
 import { categoriaActivo } from './activos-fijos';
+import { inventarioAulaDisponible, soloControlDisponible } from './activos-espacios';
 
 /** Una cuota mensual pendiente de un activo. `periodo` = 'YYYY-MM-01'. */
 export interface CuotaDepreciacion {
@@ -44,6 +45,20 @@ export interface ActivoParaDepreciar {
   vidaUtilMeses:       number;
   /** 'YYYY-MM-DD'. */
   fechaAdquisicion:    string;
+}
+
+/**
+ * ¿Esta ficha genera cuotas de depreciación? No, si es de «solo control» (se cuenta
+ * en unidades pero su costo fue al gasto), si es un terreno, si está sin confirmar
+ * (abierta desde una compra) o si ya no está activa. Pura: es la regla que aplica
+ * el generador además del filtro de la consulta.
+ */
+export function activoSeDeprecia(a: { soloControl?: boolean | null; enRevision?: boolean | null; categoria?: string | null; activa?: boolean | null }): boolean {
+  if (a.soloControl) return false;
+  if (a.enRevision) return false;
+  if (a.categoria === 'terrenos') return false;
+  if (a.activa === false) return false;
+  return true;
 }
 
 /** Suma n meses a un 'YYYY-MM-01', devolviendo otro 'YYYY-MM-01'. */
@@ -195,6 +210,11 @@ export interface NuevoActivoFijoInput {
   ubicacion?:         string | null;
   /** Clave de `CATEGORIAS_ACTIVO`: decide la cuenta del activo y la de su depreciación acumulada. */
   categoria?:         string | null;
+  /**
+   * Solo control de inventario: se cuenta en unidades pero no se deprecia ni
+   * genera asientos (cosas baratas que se fueron al gasto). Pide la migración 0236.
+   */
+  soloControl?:       boolean;
 }
 
 const tablaCompleta = { vista: false };
@@ -220,7 +240,7 @@ export async function registrarActivoFijo(
   teamId: number,
   input: NuevoActivoFijoInput,
   userId: number | null,
-  extra: { enRevision?: boolean; compraId?: number; compraLinea?: number } = {},
+  extra: { enRevision?: boolean; compraId?: number; compraLinea?: number; espacioId?: number | null; estado?: 'bien' | 'regular' | 'danado' } = {},
 ): Promise<number> {
   const nombre = input.nombre.trim();
   if (!nombre) throw new ActivoFijoError('El activo necesita un nombre.');
@@ -235,6 +255,8 @@ export async function registrarActivoFijo(
   }
   // Un terreno no se deprecia: la columna de vida útil es obligatoria, así que lleva 1 y nunca genera cuotas.
   if (categoriaActivo(input.categoria)?.deprecia === false && !(input.vidaUtilMeses > 0)) input = { ...input, vidaUtilMeses: 1 };
+  // «Solo control»: no hay vida útil ni residual que valgan; lleva 1 mes y residual 0 y nunca genera cuotas ni toca cuentas.
+  if (input.soloControl) input = { ...input, vidaUtilMeses: 1, valorResidualCents: 0, categoria: null };
   if (!Number.isInteger(input.vidaUtilMeses) || input.vidaUtilMeses <= 0) {
     throw new ActivoFijoError('La vida útil tiene que ser de al menos un mes.');
   }
@@ -250,6 +272,14 @@ export async function registrarActivoFijo(
   if (input.categoria && !categoria) throw new ActivoFijoError('La categoría del activo no es válida.');
 
   const completas = await activosCompletosDisponible();
+  const pideInventario = !!input.soloControl || extra.espacioId != null || (extra.estado != null && extra.estado !== 'bien');
+  if (pideInventario && !(await inventarioAulaDisponible())) {
+    throw new ActivoFijoError('El aula, el estado y «solo control» necesitan una actualización de la base que aún no se aplica.');
+  }
+  if (extra.espacioId != null) {
+    const [e] = await db.execute(sql`SELECT id FROM escolar_espacios WHERE id = ${extra.espacioId} AND team_id = ${teamId}`) as unknown as { id: number }[];
+    if (!e) throw new ActivoFijoError('El aula no existe.');
+  }
   if (!completas) {
     if (cantidad > 1 || ubicacion || categoria || extra.enRevision || extra.compraId) {
       throw new ActivoFijoError('Cantidad, ubicación y categoría necesitan una actualización de la base que aún no se aplica.');
@@ -284,7 +314,15 @@ export async function registrarActivoFijo(
     ON CONFLICT (team_id, compra_id, compra_linea) WHERE compra_id IS NOT NULL DO NOTHING
     RETURNING id
   `);
-  return (rows as unknown as { id: number }[])[0]?.id ?? 0;
+  const id = (rows as unknown as { id: number }[])[0]?.id ?? 0;
+  // Aula, estado y «solo control» (migración 0236): se anotan justo después del alta.
+  if (id && pideInventario) {
+    await db.execute(sql`
+      UPDATE contabilidad_activos_fijos
+      SET espacio_id = ${extra.espacioId ?? null}, estado = ${extra.estado ?? 'bien'}, solo_control = ${!!input.soloControl}
+      WHERE id = ${id} AND team_id = ${teamId}`);
+  }
+  return id;
 }
 
 /** Un activo fijo con su depreciación acumulada y su valor en libros. */
@@ -317,11 +355,18 @@ export interface ActivoFijoResumen {
   /** costoVigente − acumuladaVigente: lo que vale en libros lo que queda. */
   valorLibrosCents:   number;
   bajas:              { unidades: number; costoCents: number; deprecCents: number };
+  /** Aula o espacio donde está (migración 0236). Null = sin aula. */
+  espacioId:          number | null;
+  /** bien | regular | danado. */
+  estado:             string;
+  /** Se cuenta en unidades pero no se deprecia. */
+  soloControl:        boolean;
 }
 
 /** Lista los activos fijos del team con acumulada y valor en libros en una consulta. */
 export async function listarActivosFijos(teamId: number): Promise<ActivoFijoResumen[]> {
   const completas = await activosCompletosDisponible();
+  const inventario = completas && await inventarioAulaDisponible();
   const rows = (await db.execute(sql`
     SELECT a.id, a.nombre,
            a.costo_cents AS "costoCents",
@@ -336,6 +381,7 @@ export async function listarActivosFijos(teamId: number): Promise<ActivoFijoResu
            COALESCE(b.unidades, 0) AS "bajasUnidades",
            COALESCE(b.costo, 0)    AS "bajasCosto",
            COALESCE(b.deprec, 0)   AS "bajasDeprec"` : sql``}
+           ${inventario ? sql`, a.espacio_id AS "espacioId", a.estado, a.solo_control AS "soloControl"` : sql``}
     FROM contabilidad_activos_fijos a
     LEFT JOIN (
       SELECT activo_id, sum(monto_cents) AS acumulada, count(*) AS cuotas
@@ -370,6 +416,9 @@ export async function listarActivosFijos(teamId: number): Promise<ActivoFijoResu
       enRevision: Boolean(r.enRevision), compraId: r.compraId == null ? null : Number(r.compraId),
       costoVigenteCents: costoVigente, acumuladaVigenteCents: acumuladaVigente,
       valorLibrosCents: costoVigente - acumuladaVigente, bajas,
+      espacioId: r.espacioId == null ? null : Number(r.espacioId),
+      estado: r.estado ? String(r.estado) : 'bien',
+      soloControl: r.soloControl === true,
     };
   });
 }
@@ -407,6 +456,8 @@ export async function generarDepreciacionesPendientes(
 
   const mesActual = hoyRD();
   const completas = await activosCompletosDisponible();
+  // Las fichas de «solo control» (migración 0236) no se deprecian: se saltan en la consulta y otra vez abajo.
+  const hayControl = await soloControlDisponible();
 
   const activos = (await db.execute(sql`
     SELECT id, nombre, costo_cents AS "costoCents",
@@ -415,15 +466,18 @@ export async function generarDepreciacionesPendientes(
            to_char(fecha_adquisicion, 'YYYY-MM-DD') AS "fechaAdquisicion"
            ${completas ? sql`,
            cantidad, cuenta_deprec_acum_id AS "cuentaDeprecAcumId", cuenta_gasto_deprec_id AS "cuentaGastoDeprecId"` : sql``}
+           ${hayControl ? sql`, solo_control AS "soloControl"` : sql``}
     FROM contabilidad_activos_fijos
     WHERE team_id = ${teamId} AND activa = true
       -- Un terreno no se deprecia, y una ficha sin confirmar (abierta desde una compra) tampoco hasta que se confirme.
       ${completas ? sql`AND NOT en_revision AND COALESCE(categoria, '') <> 'terrenos'` : sql``}
+      ${hayControl ? sql`AND NOT solo_control` : sql``}
     ORDER BY id
   `)) as unknown as Array<{
     id: number; nombre: string; costoCents: number; valorResidualCents: number;
     vidaUtilMeses: number; fechaAdquisicion: string;
     cantidad?: number; cuentaDeprecAcumId?: number | null; cuentaGastoDeprecId?: number | null;
+    soloControl?: boolean;
   }>;
 
   // Las bajas por activo, para que la cuota baje con las unidades que quedan.
@@ -446,6 +500,7 @@ export async function generarDepreciacionesPendientes(
   }
 
   for (const a of activos) {
+    if (!activoSeDeprecia({ soloControl: a.soloControl })) continue;
     resumen.activosProcesados++;
 
     const yaHechas = (await db.execute(sql`

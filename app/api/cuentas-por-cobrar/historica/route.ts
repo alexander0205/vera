@@ -34,6 +34,7 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { auditarAccionPlataforma } from '@/lib/auth/plataforma-auditoria';
 import { logAudit, getIp } from '@/lib/audit';
 import { validarReferenciasDeEmpresa } from '@/lib/seguridad/pertenencia';
 import { clienteDeLaFactura } from '@/lib/clientes/cliente-de-factura';
@@ -64,6 +65,8 @@ export async function POST(req: NextRequest) {
       .from(teamMembers)
       .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
       .limit(1);
+
+    auditarAccionPlataforma(user, teamId, 'facturas:crear');
 
     if (!await userCanForTeam(teamId, user.platformRole, member?.role, 'facturas:crear')) {
       return NextResponse.json({ error: 'Sin permiso' }, { status: 403 });

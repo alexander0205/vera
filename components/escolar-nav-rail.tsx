@@ -20,7 +20,7 @@ import Box from '@mui/material/Box';
 import Link from 'next/link';
 import {
   Users, ClipboardList, Wallet, Settings, Contact, ClipboardCheck, FileText, BellRing,
-  LayoutDashboard, ListChecks, Plus, FilePlus2,
+  LayoutDashboard, ListChecks, Plus, FilePlus2, Boxes,
 } from 'lucide-react';
 
 /**
@@ -85,6 +85,10 @@ const SECCIONES: SeccionEscolar[] = [
   // eso vivía en un chat o en la memoria de alguien y terminaba en un arreglo
   // por SQL de soporte. La campana de arriba lleva aquí con su número.
   { tipo: 'item', id: 'escolar-por-revisar', href: '/escolar/por-revisar',  label: 'Tareas',    icon: ListChecks },
+  // Lo que hay en cada aula y cuánto vale. NO sale hasta que el colegio configura su
+  // Planta física y tiene activos con aula: el layout de /escolar la agrega a `ocultas`
+  // mientras tanto, así que no hay entrada ni pantalla para quien no la ha usado.
+  { tipo: 'item', id: 'escolar-inventario-aula', href: '/escolar/inventario-aula', label: 'Inventario por aula', icon: Boxes },
   // SIGERD se fue a Configuración: se usa al montar el colegio y una vez al
   // año, y aquí ocupaba el sitio de algo que se abre a diario.
   { tipo: 'item', id: 'escolar-configuracion', href: '/escolar/configuracion', label: 'Configuración', icon: Settings },

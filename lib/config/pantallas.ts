@@ -85,6 +85,10 @@ export const PANTALLAS: PantallaDef[] = [
   esc({ id: 'escolar-facturar',      label: 'Facturar por lote', href: '/escolar/facturar', descripcion: 'Crear en borrador las facturas de muchos alumnos de una vez' }),
   esc({ id: 'escolar-avisos',        label: 'Avisos', href: '/escolar/avisos', descripcion: 'Recordatorios de cobro que se enviaron' }),
   esc({ id: 'escolar-por-revisar',   label: 'Tareas', href: '/escolar/por-revisar', descripcion: 'Tareas de los alumnos y las familias que alguien tiene que revisar' }),
+  // Solo sale en el menú cuando el colegio ya configuró sus espacios y tiene activos con aula
+  // (lo decide el layout de /escolar con `estadoPlantaDe`); el dueño además puede apagarla por rol.
+  esc({ id: 'escolar-inventario-aula', label: 'Inventario por aula', href: '/escolar/inventario-aula', descripcion: 'Qué hay en cada aula, cuánto vale y qué toca reponer',
+    aviso: 'Solo aparece si el colegio ya configuró su Planta física y tiene activos con aula.' }),
   esc({ id: 'escolar-configuracion', label: 'Configuración', href: '/escolar/configuracion', rutas: ['/escolar/sigerd', '/escolar/personal'], descripcion: 'Períodos, cursos, tarifas y conceptos' }),
 
   // ── Facturación ──

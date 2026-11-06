@@ -19,6 +19,7 @@
 
 import { redirect } from 'next/navigation';
 import { getTeamForUser, getUser } from '@/lib/db/queries';
+import { esAdminPlataforma } from '@/lib/auth/plataforma';
 
 /**
  * Las dos puertas de entrada, en este orden.
@@ -39,6 +40,11 @@ export async function exigirOnboarding() {
   if (!user) return;
 
   if (!user.emailVerified) redirect('/verifica-tu-correo');
+
+  // El equipo de Zero entra a mirar cualquier empresa, termine o no su
+  // onboarding: el muro es para quien está montando SU empresa, no para quien
+  // da soporte. (Quien quiera completarlo por un cliente entra a /bienvenida.)
+  if (esAdminPlataforma(user)) return;
 
   const equipo = await getTeamForUser();
   if (!equipo) return;
