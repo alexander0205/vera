@@ -6,6 +6,7 @@ import { ALL_PERMISSIONS, type Permission } from '@/lib/config/roles';
 import { getEffectivePermissions } from '@/lib/auth/permissions';
 import { getUserModules, type ModuleKey } from '@/lib/auth/modules';
 import { pantallasOcultasDe } from '@/lib/auth/pantallas';
+import { hayAcademia } from '@/lib/academia/datos';
 
 export async function GET() {
   const user = await getUser();
@@ -20,7 +21,7 @@ export async function GET() {
 
   // Las tres lecturas dependen solo del team y del rol: van a la vez. Esta ruta
   // se pide en cada carga de cada módulo, y en fila sumaban sus esperas.
-  const [permissions, modules, pantallasOcultas] = await Promise.all([
+  const [permissions, modules, pantallasOcultas, academia] = await Promise.all([
     // platformRole='admin' → acceso total (espejo de userCanForTeam). Para el
     // resto, permisos efectivos del rol en el team (con overrides por empresa).
     user.platformRole === 'admin'
@@ -32,9 +33,11 @@ export async function GET() {
     // Pantallas que el dueño le apagó a este rol: el menú de cada módulo y su
     // bloqueo las leen de aquí. En caché, y no lanza.
     teamId ? pantallasOcultasDe(teamId, user.platformRole, teamRole) : Promise.resolve<string[]>([]),
+    // ¿Hay algún video publicado? Sin ninguno la Academia no se muestra (consulta mínima, en caché corta; no lanza).
+    hayAcademia(),
   ]);
 
-  return Response.json({ ...safe, teamRole, permissions, modules, pantallasOcultas });
+  return Response.json({ ...safe, teamRole, permissions, modules, pantallasOcultas, academia });
 }
 
 export async function PATCH(req: Request) {

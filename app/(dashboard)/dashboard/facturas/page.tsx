@@ -8,6 +8,8 @@ import Chip from '@mui/material/Chip';
 import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { NotasMoraTable } from '@/components/notas-mora-table';
+import { TutorialDePantalla } from '@/components/academia/TutorialDePantalla';
+import { puedeOfrecerPrimeraVez } from '@/lib/academia/tarjeta';
 import { ImportModal } from '@/components/import-modal';
 import { fmtDOP, fmtFechaCorta, fmtFechaRD, diasVencido, fmtCodigoCorto } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
@@ -111,6 +113,8 @@ export default function FacturasPage() {
   const [docs, setDocs]       = useState<Doc[]>([]);
   const [total, setTotal]     = useState(0);
   const [loading, setLoading] = useState(true);
+  // La última carga respondió bien: sin esto, un error se leía como «0 facturas» y salía la tarjeta de primera vez.
+  const [cargaOk, setCargaOk] = useState(false);
   const [page, setPage]       = useState(1);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [showImport, setShowImport] = useState(false);
@@ -140,6 +144,9 @@ export default function FacturasPage() {
       const data = await res.json();
       setDocs(data.docs ?? data);
       setTotal(data.total ?? data.length);
+      setCargaOk(true);
+    } else {
+      setCargaOk(false);
     }
     setLoading(false);
   }, [filterValues, page]);
@@ -432,14 +439,23 @@ export default function FacturasPage() {
         emptyState={{
           icon: FileText,
           title: 'No se encontraron comprobantes',
-          cta: canCrear ? (
-            <Link href="/dashboard/facturas/nueva" className="inline-flex items-center gap-1 text-sm text-zero-600 hover:underline">
-              <Plus className="h-4 w-4" /> Emitir primer comprobante
-            </Link>
-          ) : undefined,
+          cta: (
+            <div className="flex flex-col items-center gap-4">
+              {canCrear && (
+                <Link href="/dashboard/facturas/nueva" className="inline-flex items-center gap-1 text-sm text-zero-600 hover:underline">
+                  <Plus className="h-4 w-4" /> Emitir primer comprobante
+                </Link>
+              )}
+              {/* Sin facturas y sin búsqueda: es la primera vez, se ofrece el tutorial (si hay video publicado). */}
+              {puedeOfrecerPrimeraVez({ cargando: loading, cargaOk, total, filtros: filterValues }) && (
+                <TutorialDePantalla pantalla="fact-facturas" modo="tarjeta" className="w-full max-w-3xl" />
+              )}
+            </div>
+          ),
         }}
         headerActions={
           <>
+            <TutorialDePantalla pantalla="fact-facturas" modo="boton" />
             {canCrear && (
               <button onClick={() => setShowImport(true)}
                 className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors">

@@ -35,6 +35,7 @@ interface UserPermissionsResponse {
   permissions?: Permission[];
   modules?: ModuleKey[];
   pantallasOcultas?: string[];
+  academia?: boolean;
   /** Viene de `users.platform_role` (lo decide el servidor, no el cliente). */
   platformRole?: string | null;
 }
@@ -55,6 +56,8 @@ export interface UsePermissionsResult {
   modules: ModuleKey[];
   /** Pantallas apagadas para su rol (lib/config/pantallas.ts). */
   pantallasOcultas: string[];
+  /** ¿Hay algún video publicado en la Academia? Si no, no se muestra nada de ella (por defecto, no). */
+  academiaActiva: boolean;
   /** Rol del usuario en el team activo (null si no aplica). */
   teamRole: string | null;
   /** ¿Es del equipo de Zero? Solo sirve para MOSTRAR; el servidor decide siempre. */
@@ -78,12 +81,14 @@ export function usePermissions(): UsePermissionsResult {
   const modules = data?.modules ?? [];
   const pantallasOcultas = data?.pantallasOcultas ?? [];
   const teamRole = data?.teamRole ?? null;
+  const academiaActiva = data?.academia === true;
 
   return {
     can: (permission: Permission) => permissions.includes(permission),
     permissions,
     modules,
     pantallasOcultas,
+    academiaActiva,
     teamRole,
     esPlataforma: esAdminPlataforma(data),
     isLoading,

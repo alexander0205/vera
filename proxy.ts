@@ -6,7 +6,7 @@ import {
   moduleForHost, esHostApp, esRutaDeCuenta, MODULE_HOME,
 } from '@/lib/config/modules';
 
-const protectedRoutes = ['/dashboard', '/pos', '/cuenta', '/escolar', '/nomina', '/contabilidad'];
+const protectedRoutes = ['/dashboard', '/pos', '/cuenta', '/escolar', '/nomina', '/contabilidad', '/academia'];
 
 /**
  * Quita la cookie de sesión de una respuesta.

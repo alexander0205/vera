@@ -86,7 +86,7 @@ const PROPORCION_SIMBOLO = 305.6 / 171.8;
 const ANCHO_SIMBOLO = ALTO_MARCA * PROPORCION_SIMBOLO;
 export const SANGRIA_MARCA = (ANCHO_RAIL - ANCHO_SIMBOLO) / 2;
 
-export function RailBrand({ modulo: _modulo }: { modulo: ModuleKey }) {
+export function RailBrand({ modulo: _modulo }: { modulo: ModuleKey | null }) {
   return (
     <Box
       sx={{

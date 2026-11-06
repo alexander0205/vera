@@ -164,6 +164,10 @@ describe('inventario de rutas que modifican datos', () => {
     '/admin/empresas/[id]/simulacion/start', '/auth/2fa/disable', '/auth/2fa/setup', '/auth/send-verification', '/ecf/preview',
     // El WhatsApp de la propia persona, para avisarle de sus tareas (29-10-2026).
     '/cuenta/whatsapp',
+    // La Academia: videos públicos de Zero para cualquier persona con sesión. Estas tres solo
+    // guardan lo propio de quien las llama (su avance y su tarjeta) o preguntan al asistente
+    // sobre videos publicados; ninguna toca datos de una empresa.
+    '/academia/buscar', '/academia/progreso', '/academia/tarjeta',
     '/empresa', '/empresa/switch', '/equipo/miembros/[id]', '/metricas/factura-tiempo', '/notes', '/novedades/vistas',
     '/pdf/factura/preview', '/rnc/sync', '/user', '/zero-tickets/tickets/rating', '/zero-tickets/tickets', '/zero-tickets/tickets/typing',
   ]);
