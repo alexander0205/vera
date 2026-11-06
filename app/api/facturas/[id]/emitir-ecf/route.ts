@@ -30,6 +30,7 @@ import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente } from '@/lib/ecf-api/contribuyente';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 import { bloqueoDocumentoYaEmitido, bloqueoMoraYaEmitida } from '@/lib/facturas/promover-borrador';
+import { creditoNotaCents } from '@/lib/facturas/credito-nota';
 import { fechaLimiteParaEmitir } from '@/lib/facturas/fecha-limite-pago';
 import { hoyRD } from '@/lib/utils/format';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
@@ -756,6 +757,15 @@ export async function POST(
       console.warn(`[emitir-ecf] eNCF DIVERGENTE: local=${encfAsignado} ecf-api=${encfFinal} (seq.id=${sequenceConsumedId})`);
     }
 
+    // Al promover un borrador de NC el saldo a favor se recalcula con lo pagado
+    // de la factura de origen EN ESTE MOMENTO (pudo cambiar desde el borrador).
+    const creditoNc = tipoEcf === '34'
+      ? await creditoNotaCents(db, {
+          montoNcCents: Math.round(totales.montoTotal * 100),
+          origenDocumentoId: parentDoc?.id ?? doc.origenDocumentoId ?? null,
+        })
+      : null;
+
     // Update the existing document in-place (within audit context so trigger captures user)
     await withRequestAuditContext(
       (tx) => tx
@@ -777,6 +787,7 @@ export async function POST(
           // Persistir el NCF modificado/código realmente enviados a DGII
           ...(ncfModFinal ? { ncfModificado: ncfModFinal } : {}),
           ...(codModFinal !== undefined ? { codigoModificacion: codModFinal } : {}),
+          ...(creditoNc != null ? { creditoGeneradoCents: creditoNc } : {}),
           updatedBy:       user.id,
           updatedAt:       new Date(),
         })

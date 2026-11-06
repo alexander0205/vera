@@ -9,6 +9,8 @@
  * emitedo guarda el resultado para auditoría, PDFs y webhooks salientes.
  */
 
+import { creditoNotaCents } from '@/lib/facturas/credito-nota';
+import { getNotasCreditoDisponibles } from '@/lib/facturas/notas-credito';
 import { bloqueoEmitirConBorrador } from '@/lib/facturas/promover-borrador';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -248,6 +250,8 @@ const emitirSchema = z.object({
     /** A qué cuenta bancaria entró esta parte. Igual que en el pago simple. */
     cuenta: z.string().max(100).optional(),
     cuentaBancoId: z.number().int().positive().nullable().optional(),
+    /** NC que paga esta parte (metodo='nota_credito'). */
+    notaCreditoId: z.number().int().positive().nullable().optional(),
   })).optional(),
 
   clientId:   z.number().int().positive().optional(),
@@ -763,16 +767,10 @@ export async function POST(request: NextRequest) {
     // factura conserva su comportamiento de saldo.
     let creditoGeneradoCents: number | null = null;
     if (data.tipoEcf === '34') {
-      const montoNcCts = Math.round(calcularTotales(data.items).montoTotal * 100);
-      if (padreDoc) {
-        const [pg] = await db
-          .select({ pagado: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)` })
-          .from(pagosRecibidos)
-          .where(eq(pagosRecibidos.ecfDocumentId, padreDoc.id));
-        creditoGeneradoCents = Math.min(montoNcCts, Number(pg?.pagado ?? 0));
-      } else {
-        creditoGeneradoCents = montoNcCts;
-      }
+      creditoGeneradoCents = await creditoNotaCents(db, {
+        montoNcCents: Math.round(calcularTotales(data.items).montoTotal * 100),
+        origenDocumentoId: padreDoc?.id ?? null,
+      });
     }
 
     // Las notas 33/34 solo pueden EMITIRSE a DGII referenciando un e-NCF real.
@@ -921,6 +919,44 @@ export async function POST(request: NextRequest) {
         ? Math.round(data.retenciones.reduce((s, r) => s + r.monto, 0) * 100)
         : 0,
     };
+
+    // Pago con nota de crédito: la NC debe ser de este cliente, tener saldo y no
+    // repetirse. Se valida ANTES de hablar con la DGII; un borrador que se
+    // re-guarda ya consumió su propia NC, así que ahí no se revalida.
+    const lineasNc = (data.pagos ?? []).filter(p => p.metodo === 'nota_credito' && p.valor > 0);
+    if (lineasNc.length > 0 && !(data.modo === 'borrador' && data.borradorId)) {
+      if (!clienteFinal) {
+        return NextResponse.json(
+          { error: 'La factura no tiene cliente; no se puede pagar con nota de crédito.' },
+          { status: 422 },
+        );
+      }
+      const disponibles = await getNotasCreditoDisponibles(teamId, clienteFinal);
+      const porId = new Map(disponibles.map(n => [n.id, n]));
+      const vistas = new Set<number>();
+      for (const l of lineasNc) {
+        if (!l.notaCreditoId) {
+          return NextResponse.json({ error: 'Falta seleccionar la nota de crédito.' }, { status: 422 });
+        }
+        if (vistas.has(l.notaCreditoId)) {
+          return NextResponse.json({ error: 'No puedes usar la misma nota de crédito dos veces.' }, { status: 422 });
+        }
+        vistas.add(l.notaCreditoId);
+        const nc = porId.get(l.notaCreditoId);
+        if (!nc) {
+          return NextResponse.json(
+            { error: 'La nota de crédito no está disponible (no existe, ya se usó o no es de este cliente).' },
+            { status: 422 },
+          );
+        }
+        if (Math.round(l.valor * 100) > nc.montoCents) {
+          return NextResponse.json(
+            { error: `El monto excede el saldo de la nota ${nc.codigo ?? nc.id} (RD$${(nc.montoCents / 100).toFixed(2)}).` },
+            { status: 422 },
+          );
+        }
+      }
+    }
 
     // ── MODO BORRADOR ──────────────────────────────────────────────────────────
     if (data.modo === 'borrador') {
@@ -1089,7 +1125,7 @@ export async function POST(request: NextRequest) {
               turnoCajaId:   turnoPagoBorrador,
               pagos: data.pagos
                 .filter(p => p.valor > 0)
-                .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo, cuenta: p.cuenta || null, cuentaBancoId: p.cuentaBancoId ?? null })),
+                .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo, cuenta: p.cuenta || null, cuentaBancoId: p.cuentaBancoId ?? null, notaCreditoId: p.notaCreditoId ?? null })),
             });
           } catch (e) { console.error('[editar borrador registrarPagosSplit]', e); }
         } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
@@ -1327,7 +1363,7 @@ export async function POST(request: NextRequest) {
               turnoCajaId:   turnoPagoBorradorNuevo,
               pagos: data.pagos
                 .filter(p => p.valor > 0)
-                .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo, cuenta: p.cuenta || null, cuentaBancoId: p.cuentaBancoId ?? null })),
+                .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo, cuenta: p.cuenta || null, cuentaBancoId: p.cuentaBancoId ?? null, notaCreditoId: p.notaCreditoId ?? null })),
             }).catch((e) => console.error('[emitir borrador registrarPagosSplit]', e))
           : (data.pagoRecibido && data.pagoValor && data.pagoValor > 0
               ? registrarPago({
@@ -1538,6 +1574,7 @@ export async function POST(request: NextRequest) {
             origenDocumentoId:    padreDoc?.id ?? null,
             codigoModificacion:   data.codigoModificacion ?? null,
             razonModificacion:    data.razonModificacion || null,
+            creditoGeneradoCents,
             lineasJson:           lineasParaGuardar(data),
             tipoPago:             data.tipoPago ?? 1,
             fechaLimitePago:      data.fechaLimitePago ?? null,
@@ -1670,6 +1707,8 @@ export async function POST(request: NextRequest) {
         origenDocumentoId:    padreDoc?.id ?? null,
         codigoModificacion:   data.codigoModificacion ?? null,
         razonModificacion:    data.razonModificacion || null,
+        // Saldo a favor de la NC emitida directo (igual que en el borrador).
+        creditoGeneradoCents,
         fechaEmision:         new Date(resultado.fechaEmision),
         lineasJson:           lineasJsonParaGuardar,
         tipoPago:             data.tipoPago ?? 1,
@@ -1708,7 +1747,7 @@ export async function POST(request: NextRequest) {
           turnoCajaId:   turnoParaPago,
           pagos: data.pagos
             .filter(p => p.valor > 0)
-            .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo, cuenta: p.cuenta || null, cuentaBancoId: p.cuentaBancoId ?? null })),
+            .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo, cuenta: p.cuenta || null, cuentaBancoId: p.cuentaBancoId ?? null, notaCreditoId: p.notaCreditoId ?? null })),
         });
       } catch (e) { console.error('[emitir registrarPagosSplit]', e); }
     } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {

@@ -36,7 +36,7 @@ import { ClasificacionFactura, type ClasifAsig } from './sections/ClasificacionF
 import { ColumnasToggle } from './sections/ColumnasToggle';
 import { RetencionesSection } from './sections/RetencionesSection';
 import { ResumenSidebar } from './sections/ResumenSidebar';
-import type { PagoLinea } from '@/components/pagos/PagoMetodos';
+import type { PagoLinea, NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
 import { sumaPagos } from '@/components/pagos/PagoMetodos';
 import { subirPendientes, type Pendiente } from '@/components/pagos/ComprobantesUploader';
 import { Terminos, Notas } from './sections/TerminosNotas';
@@ -323,6 +323,23 @@ export default function NuevaFacturaForm({
 
   // ── Cliente / comprador ────────────────────────────────────────────────────
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
+  // NC del cliente elegido usables como pago: UNA llamada por cliente, igual que
+  // «Registrar pago» de una factura emitida.
+  const [notasCredito, setNotasCredito] = useState<NotaCreditoDisponible[]>([]);
+  const [notasCreditoCargando, setNotasCreditoCargando] = useState(false);
+  const clienteIdParaNc = clienteSeleccionado?.id ?? null;
+  useEffect(() => {
+    if (!clienteIdParaNc) { setNotasCredito([]); setNotasCreditoCargando(false); return; }
+    let vivo = true;
+    setNotasCredito([]);
+    setNotasCreditoCargando(true);
+    fetch(`/api/clientes/${clienteIdParaNc}/notas-credito-disponibles`)
+      .then(r => r.json())
+      .then(j => { if (vivo) setNotasCredito(Array.isArray(j.notas) ? j.notas : []); })
+      .catch(() => { if (vivo) setNotasCredito([]); })
+      .finally(() => { if (vivo) setNotasCreditoCargando(false); });
+    return () => { vivo = false; };
+  }, [clienteIdParaNc]);
   const [rncManual, setRncManual]             = useState(initialData?.rncComprador ?? '');
   const [rncManualNombre, setRncManualNombre] = useState(initialData?.razonSocialComprador ?? '');
   const [emailManual, setEmailManual]         = useState(initialData?.emailComprador ?? '');
@@ -2771,6 +2788,8 @@ export default function NuevaFacturaForm({
               pagoRecibido={pagoRecibido} setPagoRecibido={setPagoRecibido}
               pagoFecha={pagoFecha} setPagoFecha={setPagoFecha}
               pagoLineas={pagoLineas} setPagoLineas={setPagoLineas}
+              notasCredito={notasCredito}
+              notasCreditoCargando={notasCreditoCargando}
               comprobantesPendientes={comprobantesPendientes}
               setComprobantesPendientes={setComprobantesPendientes}
               enPaso={modoColegio}

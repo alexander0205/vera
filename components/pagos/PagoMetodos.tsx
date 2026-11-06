@@ -83,6 +83,8 @@ interface PagoMetodosProps {
   metodos?: MetodoOption[];
   /** NCs disponibles del cliente. Si hay, se ofrece el método 'Nota de crédito'. */
   notasCredito?: NotaCreditoDisponible[];
+  /** Las NC del cliente aún están llegando: se muestra «Nota de crédito (cargando…)». */
+  notasCreditoCargando?: boolean;
 }
 
 // ─── Helpers exportados ───────────────────────────────────────────────────────
@@ -132,6 +134,7 @@ export function PagoMetodos({
   showReferencia = false,
   metodos = METODOS_PAGO,
   notasCredito,
+  notasCreditoCargando = false,
 }: PagoMetodosProps) {
   const hayNc = !!notasCredito && notasCredito.length > 0;
   // Ofrecer 'Nota de crédito' como método solo si el cliente tiene NCs disponibles.
@@ -256,6 +259,11 @@ export function PagoMetodos({
                 {metodosUI.map(m => (
                   <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
                 ))}
+                {notasCreditoCargando && !hayNc && (
+                  <MenuItem value={METODO_NOTA_CREDITO} disabled>
+                    {METODO_PAGO_LABELS[METODO_NOTA_CREDITO]} (cargando…)
+                  </MenuItem>
+                )}
               </Select>
             </Box>
 
