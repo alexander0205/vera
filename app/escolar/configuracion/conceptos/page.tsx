@@ -1,4 +1,5 @@
 import { ConceptosCatalogo } from '@/components/administracion-escolar/ConceptosCatalogo';
+import { TutorialDePantalla } from '@/components/academia/TutorialDePantalla';
 import { FacturacionAutomatica } from '@/components/administracion-escolar/FacturacionAutomatica';
 
 /**
@@ -9,6 +10,8 @@ import { FacturacionAutomatica } from '@/components/administracion-escolar/Factu
 export default function Page() {
   return (
     <div className="space-y-4">
+      {/* Tutorial en video de la configuración (no dibuja nada si no hay video publicado) */}
+      <TutorialDePantalla pantalla="escolar-configuracion" modo="tarjeta" />
       <FacturacionAutomatica />
       <ConceptosCatalogo />
     </div>

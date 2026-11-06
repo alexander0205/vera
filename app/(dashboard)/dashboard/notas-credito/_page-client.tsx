@@ -9,6 +9,7 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import { Plus, FileText, Download, TrendingDown, CheckCircle, Clock, FileX } from 'lucide-react';
+import { TutorialDePantalla } from '@/components/academia/TutorialDePantalla';
 import { DataTable, type DataTableColumn, type RowAction, type ExportTabla } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { protegerFormulaCsv } from '@/lib/export/csv';
@@ -259,6 +260,9 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
         </Box>
       )}
 
+      {/* Tutorial en video de esta pantalla (no dibuja nada si no hay video publicado) */}
+      <TutorialDePantalla pantalla="fact-notas-credito" modo="tarjeta" />
+
       <DataTable<NotaCredito>
         data={filtered}
         columns={columns}
@@ -292,6 +296,7 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
         }}
         headerActions={
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <TutorialDePantalla pantalla="fact-notas-credito" modo="boton" />
             <Button variant="outlined" size="small" startIcon={<FileX size={16} />}
                 onClick={() => exportCSV(filtered)}
                 disabled={filtered.length === 0}

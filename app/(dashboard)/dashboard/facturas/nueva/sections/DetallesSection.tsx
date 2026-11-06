@@ -236,10 +236,12 @@ export function DetallesSection({
 
       {/* En una compra o un gasto (41/43/47) el dinero sale: ahí «queda por
           pagar», no «por cobrar».
+          Una nota de crédito (34) no se cobra: el aviso no aplica. La de débito (33)
+          sí queda por cobrar, así que ahí se conserva.
           De contado sin pago: la factura queda por cobrar, sin vencimiento y sin
           mora. No se cambia sola —la condición de pago se le reporta a la DGII,
           así que la decisión es del usuario—; aquí solo se hace visible. */}
-      {!esCredito && condicionPago === '1' && sinPagoRegistrado && (
+      {tipoEcf !== '34' && !esCredito && condicionPago === '1' && sinPagoRegistrado && (
         <Box sx={{ bgcolor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', px: 1.5, py: 1.25, display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
           <Info size={16} color="#b45309" style={{ flexShrink: 0, marginTop: 2 }} />
           <Box>

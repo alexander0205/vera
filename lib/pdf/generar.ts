@@ -321,10 +321,11 @@ export async function generarFacturaPdf(opts: {
     codigo:        doc.codigo ?? undefined,
     tipoEcf:       doc.tipoEcf,
     tipoEcfNombre: TIPO_NOMBRE[doc.tipoEcf] ?? `Tipo ${doc.tipoEcf}`,
-    // Fecha calendario del documento (medianoche UTC = fecha pura; si no, hora RD).
-    fechaEmision:  fechaLargaPdf(doc.fechaEmision),
-    // La condición sale del tipo de pago real del documento, no fija en Contado.
-    tipoPagoNombre: TIPO_PAGO_NOMBRE[doc.tipoPago ?? 1] ?? 'Contado',
+    ncfModificado: doc.ncfModificado ?? undefined,
+    fechaEmision:  new Date(doc.fechaEmision).toLocaleDateString('es-DO', {
+      year: 'numeric', month: 'long', day: 'numeric',
+    }),
+    tipoPagoNombre: TIPO_PAGO_NOMBRE[1] ?? 'Contado',
     estado:        doc.estado,
     // B3 fix: solo watermark BORRADOR si no tiene pago registrado.
     // Factura sin NCF pero con pago = documento final, no borrador real.

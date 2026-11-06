@@ -11,6 +11,8 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { planUserLimit } from '@/lib/plans';
 import { listTeamRoles } from '@/lib/auth/permissions';
 import { rolEfectivoEnEmpresa } from '@/lib/auth/plataforma';
+import { getUserModules } from '@/lib/auth/modules';
+import type { ModuleKey } from '@/lib/config/modules';
 
 export async function GET() {
   const user = await getUser();
@@ -44,7 +46,7 @@ export async function GET() {
   const userLimit = planUserLimit(teamData?.planName);
 
   // Miembros activos con info de usuario
-  const members = await db
+  const filas = await db
     .select({
       id:       teamMembers.id,
       userId:   teamMembers.userId,
@@ -56,6 +58,16 @@ export async function GET() {
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
     .where(eq(teamMembers.teamId, teamId));
+
+  // Módulos a los que entra cada miembro según la empresa y su rol. platformRole
+  // va en null a propósito: muestra lo de la empresa, no lo que ve el equipo
+  // de Zero. Una consulta por rol distinto, no por persona.
+  const modulosPorRol = new Map<string, ModuleKey[]>();
+  for (const rol of new Set(filas.map(f => f.role))) {
+    const mods = await getUserModules(teamId, null, rol);
+    modulosPorRol.set(rol, mods.filter(m => m !== 'administracion'));
+  }
+  const members = filas.map(f => ({ ...f, modulos: modulosPorRol.get(f.role) ?? [] }));
 
   // Invitaciones pendientes
   const pendingInvites = await db
