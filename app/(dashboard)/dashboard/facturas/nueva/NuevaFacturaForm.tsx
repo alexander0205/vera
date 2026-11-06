@@ -425,7 +425,9 @@ export default function NuevaFacturaForm({
   const [ncfModificado, setNcfModificado]     = useState(initialData?.ncfModificado ?? '');
   const [motivoNota, setMotivoNotaRaw]        = useState<string>('');
   const [codigoModificacion, setCodigoModificacion] = useState<string>('');
-  const [fechaNcfModificado, setFechaNcfModificado] = useState<string>('');
+  const [fechaNcfModificado, setFechaNcfModificado] = useState<string>(
+    () => (initialData?.padreOrigen && /^E\d/.test(initialData.padreOrigen.encf) ? initialData.padreOrigen.fechaEmision ?? '' : ''),
+  );
 
   // e-NCF modificado con formato válido (E + 10-12 dígitos). Permite emitir una
   // NC/ND aunque la factura de origen no tenga e-CF en el sistema (p. ej. emitida
@@ -448,7 +450,16 @@ export default function NuevaFacturaForm({
     id: number; codigo: string | null; encf: string; estado: string; conEcfReal: boolean;
     tipoEcf?: string;
     montoTotal?: string; razonSocial?: string; fechaEmision?: string;
-  } | null>(null);
+  } | null>(() => {
+    // Editar una nota: la factura de origen viene del servidor (campo no vacío).
+    const po = initialData?.padreOrigen;
+    if (!po) return null;
+    return {
+      id: po.id, codigo: po.codigo, encf: po.encf, estado: po.estado,
+      conEcfReal: /^E\d/.test(po.encf), tipoEcf: po.tipoEcf,
+      razonSocial: po.razonSocial ?? undefined, fechaEmision: po.fechaEmision ?? undefined,
+    };
+  });
 
   // Factura de origen sin-ncf (sin comprobante fiscal): no tiene e-NCF ni lo
   // tendrá → la nota es interna (borrador), sin referencia DGII (no se pide e-NCF).

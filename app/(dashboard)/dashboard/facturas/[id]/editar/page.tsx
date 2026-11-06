@@ -15,6 +15,8 @@ import { getTeamIdForUser } from '@/lib/db/queries';
 import EditarBorradorClient from './_editar-client';
 import type { EmpresaPerfil } from '../../nueva/page';
 import { hasPermission } from '@/lib/auth/page-guard';
+import { origenIdDeNota } from '@/lib/facturas/nota-origen';
+import { fechaEmisionCalendario } from '@/lib/utils/format';
 
 export default async function EditarBorradorPage({
   params,
@@ -160,6 +162,26 @@ export default async function EditarBorradorPage({
     telefonoComprador = cl?.telefono ?? null;
   }
 
+  // Factura de origen de la nota (33/34): vínculo manual o de mora. Sin esto el
+  // campo «Factura de origen» abría vacío al editar.
+  let padreOrigen: {
+    id: number; encf: string; codigo: string | null; estado: string; tipoEcf: string;
+    razonSocial: string | null; fechaEmision: string | null;
+  } | null = null;
+  const origenId = origenIdDeNota(doc);
+  if (origenId != null && (doc.tipoEcf === '33' || doc.tipoEcf === '34')) {
+    const [p] = await db
+      .select({
+        id: ecfDocuments.id, encf: ecfDocuments.encf, codigo: ecfDocuments.codigo,
+        estado: ecfDocuments.estado, tipoEcf: ecfDocuments.tipoEcf,
+        razonSocial: ecfDocuments.razonSocialComprador, fechaEmision: ecfDocuments.fechaEmision,
+      })
+      .from(ecfDocuments)
+      .where(and(eq(ecfDocuments.id, origenId), eq(ecfDocuments.teamId, teamId)))
+      .limit(1);
+    if (p) padreOrigen = { ...p, fechaEmision: fechaEmisionCalendario(p.fechaEmision) };
+  }
+
   const perfil: EmpresaPerfil = team ?? {
     razonSocial: null, nombreComercial: null, logo: null, rnc: null, firma: null,
   };
@@ -182,6 +204,7 @@ export default async function EditarBorradorPage({
     ncfProveedor:         doc.ncfProveedor ?? null,
     fechaGasto:           doc.fechaGasto ?? null,
     ncfModificado:        doc.ncfModificado,
+    padreOrigen,
     notas:                doc.notas,
     terminosCondiciones:  doc.terminosCondiciones,
     pieFactura:           doc.pieFactura,
