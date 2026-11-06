@@ -13,6 +13,21 @@
 /** Métodos de cobro en los que preguntar «¿a qué banco entró?» es parte del registro. */
 export const METODOS_CON_BANCO: ReadonlySet<string> = new Set(['transferencia', 'deposito']);
 
+/**
+ * ¿Se muestra ya el campo «Referencia» de una línea de pago?
+ *
+ * Todo método que no sea efectivo (transferencia, depósito, cheque, tarjeta…)
+ * deja un número que anotar, así que el campo va abierto. En efectivo sigue
+ * detrás de «+ Referencia», salvo que ya traiga texto o se haya abierto a mano.
+ */
+export function referenciaVisible(
+  metodo: string,
+  referencia: string | null | undefined,
+  abiertoAMano: boolean,
+): boolean {
+  return !!referencia || abiertoAMano || metodo !== 'efectivo';
+}
+
 // ── Etiquetas de cuenta ─────────────────────────────────────────────────────
 
 /** Una cuenta de la empresa, lista para ofrecerla en un desplegable. */
