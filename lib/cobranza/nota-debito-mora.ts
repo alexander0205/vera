@@ -26,6 +26,8 @@ import {
   type ConfigMora, type ModoMora,
 } from '@/lib/cobranza/mora-calculo';
 import { graciaParaMora } from '@/lib/cobranza/elegibilidad-mora-escolar';
+import { fechaLimiteCredito } from '@/lib/facturas/fecha-limite-pago';
+import { hoyRD } from '@/lib/utils/format';
 
 /**
  * Días de gracia que aplican a UNA factura.
@@ -304,6 +306,7 @@ export async function generarNotaDebitoMora(
       compuesta:        teams.recargoMoraCompuesta,
       topeBps:          teams.recargoMoraTopeBps,
       maxPeriodos:      teams.recargoMoraMaxPeriodos,
+      plazoPagoDefaultDias: teams.plazoPagoDefaultDias,
     })
     .from(teams)
     .where(eq(teams.id, padre.teamId))
@@ -419,6 +422,9 @@ export async function generarNotaDebitoMora(
   // ── Servicio "Interés por mora" del catálogo (find-or-create, reutilizable) ─
   // La línea de la ND referencia este producto en vez de texto suelto. El % de
   // mora NO vive aquí: sigue en teams.recargo_mora_porcentaje (fuente única).
+  const hoy = hoyRD();
+  const fechaLimitePago = fechaLimiteCredito(hoy, team?.plazoPagoDefaultDias);
+
   const moraProductoId = await getOrCreateMoraProducto(padre.teamId, opts.createdBy ?? null);
 
   // ── Insertar la ND tipo 33 (BORRADOR, exenta de ITBIS) ─────────────────────
@@ -446,7 +452,11 @@ export async function generarNotaDebitoMora(
       totalItbis:           0,            // EXENTA
       tipoPago:             2,            // crédito (por cobrar)
       estadoPago,
-      fechaEmision:         new Date(),
+      // Fecha pura (medianoche UTC del día RD): así se lee igual en pantalla, PDF y
+      // reportes, sin correrse un día de noche.
+      fechaEmision:         new Date(`${hoy}T00:00:00Z`),
+      // Crédito exige fecha límite (DGII): hoy + días de crédito de la empresa.
+      fechaLimitePago,
       // Referencia fiscal solo si el padre tiene un e-NCF real (empieza con 'E').
       ncfModificado:        padre.encf.startsWith('E') ? padre.encf : null,
       moraOrigenId:         padre.id,

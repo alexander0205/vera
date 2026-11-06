@@ -29,6 +29,10 @@ import { emision, EcfApiError } from '@/lib/ecf-api/client';
 import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente } from '@/lib/ecf-api/contribuyente';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
+import { bloqueoDocumentoYaEmitido, bloqueoMoraYaEmitida } from '@/lib/facturas/promover-borrador';
+import { creditoNotaCents } from '@/lib/facturas/credito-nota';
+import { fechaLimiteParaEmitir } from '@/lib/facturas/fecha-limite-pago';
+import { hoyRD } from '@/lib/utils/format';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
 import { getAmbienteTenant, mensajeAmbienteNoProduccion, puedeEmitirADgii } from '@/lib/ecf-api/ambiente';
 
@@ -159,12 +163,24 @@ export async function POST(
     // Permitir emisión para documentos SIN e-CF real: BORRADOR, HISTORICA
     // (importadas por CSV) o sin-ncf. Bloquear los que ya fueron a DGII o
     // están anulados.
-    const yaEnDgii = ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(doc.estado);
-    if (doc.estado === 'ANULADO' || yaEnDgii) {
-      return NextResponse.json(
-        { error: `El documento ya fue procesado (estado: ${doc.estado}). Solo se pueden enviar a DGII facturas sin e-CF (borrador, histórica o sin-ncf).` },
-        { status: 422 },
-      );
+    const bloqueoEstado = bloqueoDocumentoYaEmitido(doc.estado);
+    if (bloqueoEstado) {
+      return NextResponse.json({ error: bloqueoEstado.error, code: bloqueoEstado.code }, { status: bloqueoEstado.status });
+    }
+
+    // Nota por mora: si ese período ya tiene otra nota emitida, esta sería la
+    // misma mora dos veces ante la DGII.
+    if (doc.moraOrigenId != null) {
+      const hermanas = await db
+        .select({ id: ecfDocuments.id, estado: ecfDocuments.estado, moraPeriodo: ecfDocuments.moraPeriodo })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.moraOrigenId, doc.moraOrigenId)));
+      const bloqueoMora = bloqueoMoraYaEmitida({
+        docId: doc.id, moraOrigenId: doc.moraOrigenId, moraPeriodo: doc.moraPeriodo ?? null, hermanas,
+      });
+      if (bloqueoMora) {
+        return NextResponse.json({ error: bloqueoMora.error, code: bloqueoMora.code }, { status: bloqueoMora.status });
+      }
     }
 
     if (!team?.rnc) {
@@ -554,6 +570,21 @@ export async function POST(
 
     // Build mapper payload
     const tipoPago = (doc.tipoPago ?? 1) as 1 | 2 | 3 | 4;
+    // Crédito exige fecha límite (DGII). Un borrador a crédito sin ella (p. ej. una
+    // nota de mora vieja) recibe la de por defecto en vez de fallar con 422.
+    const fechaLimiteFinal = fechaLimiteParaEmitir({
+      tipoPago,
+      fechaLimitePago:      doc.fechaLimitePago,
+      esNotaMora:           doc.moraOrigenId != null,
+      hoy:                  hoyRD(),
+      plazoPagoDefaultDias: team.plazoPagoDefaultDias,
+    });
+    if (fechaLimiteFinal && fechaLimiteFinal !== doc.fechaLimitePago) {
+      await db
+        .update(ecfDocuments)
+        .set({ fechaLimitePago: fechaLimiteFinal, updatedAt: new Date() })
+        .where(and(eq(ecfDocuments.id, docId), eq(ecfDocuments.teamId, teamId)));
+    }
     const { tipo, dto: ecfApiDto } = mapToEcfApiDto({
       tipoEcf,
       items,
@@ -562,7 +593,7 @@ export async function POST(
       razonSocialComprador:       doc.razonSocialComprador ?? undefined,
       emailComprador:             doc.emailComprador ?? undefined,
       tipoPago,
-      fechaLimitePago:            doc.fechaLimitePago ?? undefined,
+      fechaLimitePago:            fechaLimiteFinal ?? doc.fechaLimitePago ?? undefined,
       ncfModificado:              ncfModFinal ?? undefined,
       codigoModificacion:         codModFinal,
       fechaNcfModificado:         fechaNcfModFinal,
@@ -726,6 +757,15 @@ export async function POST(
       console.warn(`[emitir-ecf] eNCF DIVERGENTE: local=${encfAsignado} ecf-api=${encfFinal} (seq.id=${sequenceConsumedId})`);
     }
 
+    // Al promover un borrador de NC el saldo a favor se recalcula con lo pagado
+    // de la factura de origen EN ESTE MOMENTO (pudo cambiar desde el borrador).
+    const creditoNc = tipoEcf === '34'
+      ? await creditoNotaCents(db, {
+          montoNcCents: Math.round(totales.montoTotal * 100),
+          origenDocumentoId: parentDoc?.id ?? doc.origenDocumentoId ?? null,
+        })
+      : null;
+
     // Update the existing document in-place (within audit context so trigger captures user)
     await withRequestAuditContext(
       (tx) => tx
@@ -747,6 +787,7 @@ export async function POST(
           // Persistir el NCF modificado/código realmente enviados a DGII
           ...(ncfModFinal ? { ncfModificado: ncfModFinal } : {}),
           ...(codModFinal !== undefined ? { codigoModificacion: codModFinal } : {}),
+          ...(creditoNc != null ? { creditoGeneradoCents: creditoNc } : {}),
           updatedBy:       user.id,
           updatedAt:       new Date(),
         })

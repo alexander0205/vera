@@ -75,6 +75,11 @@ export interface BorradorInicial {
   /** Fecha de emisión guardada (YYYY-MM-DD) — para restaurar al editar. */
   fechaEmision:         string | null;
   ncfModificado:        string | null;
+  /** Factura de origen de una nota 33/34 (origen manual o de mora), para mostrarla al editar. */
+  padreOrigen?: {
+    id: number; encf: string; codigo: string | null; estado: string; tipoEcf: string;
+    razonSocial: string | null; fechaEmision: string | null;
+  } | null;
   notas:                string | null;
   terminosCondiciones:  string | null;
   pieFactura:           string | null;

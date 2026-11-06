@@ -36,7 +36,7 @@ import { ClasificacionFactura, type ClasifAsig } from './sections/ClasificacionF
 import { ColumnasToggle } from './sections/ColumnasToggle';
 import { RetencionesSection } from './sections/RetencionesSection';
 import { ResumenSidebar } from './sections/ResumenSidebar';
-import type { PagoLinea } from '@/components/pagos/PagoMetodos';
+import type { PagoLinea, NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
 import { sumaPagos } from '@/components/pagos/PagoMetodos';
 import { subirPendientes, type Pendiente } from '@/components/pagos/ComprobantesUploader';
 import { Terminos, Notas } from './sections/TerminosNotas';
@@ -323,6 +323,23 @@ export default function NuevaFacturaForm({
 
   // ── Cliente / comprador ────────────────────────────────────────────────────
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
+  // NC del cliente elegido usables como pago: UNA llamada por cliente, igual que
+  // «Registrar pago» de una factura emitida.
+  const [notasCredito, setNotasCredito] = useState<NotaCreditoDisponible[]>([]);
+  const [notasCreditoCargando, setNotasCreditoCargando] = useState(false);
+  const clienteIdParaNc = clienteSeleccionado?.id ?? null;
+  useEffect(() => {
+    if (!clienteIdParaNc) { setNotasCredito([]); setNotasCreditoCargando(false); return; }
+    let vivo = true;
+    setNotasCredito([]);
+    setNotasCreditoCargando(true);
+    fetch(`/api/clientes/${clienteIdParaNc}/notas-credito-disponibles`)
+      .then(r => r.json())
+      .then(j => { if (vivo) setNotasCredito(Array.isArray(j.notas) ? j.notas : []); })
+      .catch(() => { if (vivo) setNotasCredito([]); })
+      .finally(() => { if (vivo) setNotasCreditoCargando(false); });
+    return () => { vivo = false; };
+  }, [clienteIdParaNc]);
   const [rncManual, setRncManual]             = useState(initialData?.rncComprador ?? '');
   const [rncManualNombre, setRncManualNombre] = useState(initialData?.razonSocialComprador ?? '');
   const [emailManual, setEmailManual]         = useState(initialData?.emailComprador ?? '');
@@ -425,7 +442,9 @@ export default function NuevaFacturaForm({
   const [ncfModificado, setNcfModificado]     = useState(initialData?.ncfModificado ?? '');
   const [motivoNota, setMotivoNotaRaw]        = useState<string>('');
   const [codigoModificacion, setCodigoModificacion] = useState<string>('');
-  const [fechaNcfModificado, setFechaNcfModificado] = useState<string>('');
+  const [fechaNcfModificado, setFechaNcfModificado] = useState<string>(
+    () => (initialData?.padreOrigen && /^E\d/.test(initialData.padreOrigen.encf) ? initialData.padreOrigen.fechaEmision ?? '' : ''),
+  );
 
   // e-NCF modificado con formato válido (E + 10-12 dígitos). Permite emitir una
   // NC/ND aunque la factura de origen no tenga e-CF en el sistema (p. ej. emitida
@@ -448,7 +467,16 @@ export default function NuevaFacturaForm({
     id: number; codigo: string | null; encf: string; estado: string; conEcfReal: boolean;
     tipoEcf?: string;
     montoTotal?: string; razonSocial?: string; fechaEmision?: string;
-  } | null>(null);
+  } | null>(() => {
+    // Editar una nota: la factura de origen viene del servidor (campo no vacío).
+    const po = initialData?.padreOrigen;
+    if (!po) return null;
+    return {
+      id: po.id, codigo: po.codigo, encf: po.encf, estado: po.estado,
+      conEcfReal: /^E\d/.test(po.encf), tipoEcf: po.tipoEcf,
+      razonSocial: po.razonSocial ?? undefined, fechaEmision: po.fechaEmision ?? undefined,
+    };
+  });
 
   // Factura de origen sin-ncf (sin comprobante fiscal): no tiene e-NCF ni lo
   // tendrá → la nota es interna (borrador), sin referencia DGII (no se pide e-NCF).
@@ -1891,17 +1919,33 @@ export default function NuevaFacturaForm({
       // borrador. Reintentar por esa ruta REUSA el mismo número; volver a
       // /api/ecf/emitir tomaría el siguiente y abriría un hueco en la secuencia.
       const payload = buildPayload(modoEfectivo);
-      const res = reservaDocId
-        ? await fetch(`/api/facturas/${reservaDocId}/emitir-ecf`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tipoEcf: payload.tipoEcf,
-              ...(payload.rncComprador         ? { rncComprador:         payload.rncComprador }         : {}),
-              ...(payload.razonSocialComprador ? { razonSocialComprador: payload.razonSocialComprador } : {}),
-            }),
-          })
-        : await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, _traza: traza }) });
+      // Editando un borrador existente: /api/ecf/emitir en modo emitir crearía un
+      // documento NUEVO (otro e-NCF, sin sus vínculos) y dejaría vivo el borrador.
+      // Se guardan los cambios sobre el MISMO documento y se promueve por
+      // emitir-ecf, igual que el reintento tras un fallo.
+      const idAPromover = reservaDocId ?? (modoEfectivo === 'emitir' && initialData?.id ? initialData.id : null);
+      const promover = (id: number) => fetch(`/api/facturas/${id}/emitir-ecf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipoEcf: payload.tipoEcf,
+          ...(payload.rncComprador         ? { rncComprador:         payload.rncComprador }         : {}),
+          ...(payload.razonSocialComprador ? { razonSocialComprador: payload.razonSocialComprador } : {}),
+        }),
+      });
+      const postEmitir = (body: unknown) => fetch('/api/ecf/emitir', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      let res: Response;
+      if (reservaDocId) {
+        res = await promover(reservaDocId);
+      } else if (idAPromover) {
+        // Guardar los cambios sobre el mismo borrador; solo si guardó, promoverlo.
+        res = await postEmitir({ ...buildPayload('borrador'), _traza: traza });
+        if (res.ok) res = await promover(idAPromover);
+      } else {
+        res = await postEmitir({ ...payload, _traza: traza });
+      }
       const data = await res.json();
       if (!res.ok) {
         // Sin turno de caja abierto (solo si la empresa usa el módulo de caja):
@@ -2744,6 +2788,8 @@ export default function NuevaFacturaForm({
               pagoRecibido={pagoRecibido} setPagoRecibido={setPagoRecibido}
               pagoFecha={pagoFecha} setPagoFecha={setPagoFecha}
               pagoLineas={pagoLineas} setPagoLineas={setPagoLineas}
+              notasCredito={notasCredito}
+              notasCreditoCargando={notasCreditoCargando}
               comprobantesPendientes={comprobantesPendientes}
               setComprobantesPendientes={setComprobantesPendientes}
               enPaso={modoColegio}

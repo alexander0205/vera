@@ -7,7 +7,8 @@ import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
-import { fmtFechaHora, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtFechaHora, fmtFechaCorta, fmtEmisionDocumento } from '@/lib/utils/format';
+import { condicionPagoTexto } from '@/lib/facturas/fecha-limite-pago';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -322,17 +323,6 @@ function fmtDate(iso: string | null): string {
     return new Date(iso).toLocaleDateString('es-DO', {
       year: 'numeric', month: '2-digit', day: '2-digit',
     });
-  } catch {
-    return iso;
-  }
-}
-
-/** Fecha + hora — para el detalle, donde sí interesa a qué hora se emitió. */
-function fmtDateHora(iso: string | null): string {
-  if (!iso) return '—';
-  try {
-    const d = new Date(iso);
-    return `${fmtDate(iso)} ${d.toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit' })}`;
   } catch {
     return iso;
   }
@@ -990,7 +980,7 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
                 <span className="mx-1.5">·</span>
               </>
             )}
-            {fmtDateHora(factura.fechaEmision)}
+            {fmtEmisionDocumento(factura.fechaEmision)}
             {factura.fechaLimitePago && (
               <>
                 <span className="mx-1.5">·</span>
@@ -1298,7 +1288,7 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
           />
           <CifraCard
             label={factura.fechaLimitePago ? 'Vence' : 'Condición'}
-            valor={factura.fechaLimitePago ? fmtDate(factura.fechaLimitePago) : 'De contado'}
+            valor={factura.fechaLimitePago ? fmtDate(factura.fechaLimitePago) : condicionPagoTexto(factura.tipoPago)}
             tono={vencimiento?.tono ?? 'neutro'}
             pie={vencimiento?.texto}
           />

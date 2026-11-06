@@ -8,7 +8,7 @@ import TextField from '@mui/material/TextField';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import ComprobantesUploader, { type Pendiente } from '@/components/pagos/ComprobantesUploader';
-import { PagoMetodos, sumaPagos, type PagoLinea } from '@/components/pagos/PagoMetodos';
+import { PagoMetodos, sumaPagos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
 import type { EmpresaPerfil, Retencion, ItemLinea } from '../utils/types';
 import { calcularMontoItem } from '../utils/calculos';
 
@@ -34,6 +34,9 @@ interface Props {
   /** Líneas de pago (1 línea = pago normal). Controladas por el padre. */
   pagoLineas?: PagoLinea[];
   setPagoLineas?: (v: PagoLinea[]) => void;
+  /** NC del cliente elegido, usables como pago («Nota de crédito»). */
+  notasCredito?: NotaCreditoDisponible[];
+  notasCreditoCargando?: boolean;
   /**
    * Comprobantes elegidos antes de que la factura exista. El padre los sube en
    * cuanto la crea; aquí solo se recogen. Sin estas props el bloque no se
@@ -91,6 +94,7 @@ export function ResumenSidebar({
   pagoRecibido = false, setPagoRecibido,
   pagoFecha = '', setPagoFecha,
   pagoLineas = [{ metodo: 'efectivo', valor: '' }], setPagoLineas,
+  notasCredito, notasCreditoCargando = false,
   comprobantesPendientes, setComprobantesPendientes,
   enPaso = false,
 }: Props) {
@@ -424,6 +428,8 @@ export function ResumenSidebar({
                     onChange={(v) => setPagoLineas?.(v)}
                     total={totalNeto}
                     showCuenta
+                    notasCredito={notasCredito}
+                    notasCreditoCargando={notasCreditoCargando}
                   />
 
                   {/* Comprobante en el mismo acto de facturar. `docId={null}`
