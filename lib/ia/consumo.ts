@@ -10,7 +10,7 @@
  */
 import { modeloPorId } from './modelos';
 
-export type UsoConsumo = 'asistente' | 'decisiones' | 'plantillas' | 'captura' | 'redaccion' | 'academia';
+export type UsoConsumo = 'asistente' | 'decisiones' | 'plantillas' | 'captura' | 'redaccion' | 'academia' | 'revision_tono';
 export type ProveedorConsumo = 'anthropic' | 'gateway' | 'google' | 'typesafe';
 
 export interface Consumo {

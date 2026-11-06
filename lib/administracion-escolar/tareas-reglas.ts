@@ -140,6 +140,8 @@ export const textoEvento = {
   reabierta: (autor: string) => `${autor} volvió a abrir la tarea`,
   enProceso: (autor: string) => `${autor} tomó la tarea y la está trabajando`,
   revision: (autor: string) => `${autor} pasó la tarea a revisión`,
+  /** «Tomar la tarea» (uno por lado): quien va a contestar por su equipo. */
+  tomada: (autor: string) => `${autor} tomó la tarea`,
 };
 
 /** Lo que deja el cron al cerrar sola una tarea que se quedó en revisión. */
@@ -149,11 +151,78 @@ export const TEXTO_CIERRE_AUTOMATICO = 'Se cerró automáticamente: pasaron 24 h
 /** Cuánto espera una tarea en revisión (plantilla de Soporte) antes de cerrarse sola, y una parada antes del aviso urgente. */
 export const HORAS_SIN_RESPUESTA = 24;
 
-/** `urgente`: 24 horas sin movimiento, a quien le toca contestar (cron `escolar-tareas`). */
+/**
+ * Cuánto puede esperar una tarea sin que nadie diga nada antes de que salga el
+ * aviso URGENTE a quien le toca (cron `escolar-tareas`). Fue 24 horas hasta el
+ * 06-11-2026.
+ */
+export const HORAS_ALERTA = 2;
+
+/** `urgente`: HORAS_ALERTA sin movimiento, a quien le toca contestar (cron `escolar-tareas`). */
 export type AvisoTarea = 'creada' | 'mensaje' | 'completada' | 'reabierta' | 'en_proceso' | 'revision' | 'adjunto' | 'urgente';
 
+/** Los dos lados de una tarea: el colegio y el equipo de Zero. */
+export type Lado = 'colegio' | 'zero';
+
+export const ETIQUETA_ESPERA: Record<Lado, string> = {
+  colegio: 'Espera respuesta del colegio',
+  zero: 'Espera respuesta de Zero',
+};
+
+export const esLado = (v: unknown): v is Lado => v === 'colegio' || v === 'zero';
+export const otroLado = (l: Lado): Lado => (l === 'zero' ? 'colegio' : 'zero');
+/** De qué lado está quien escribe: el equipo de Zero (rol `admin`) o el colegio. */
+export const ladoDe = (a: { esSoporte: boolean }): Lado => (a.esSoporte ? 'zero' : 'colegio');
+
+/** A quién le toca al crear la tarea: Soporte es trabajo de Zero; una persona, del colegio. */
+export const esperaInicial = (asignadaA: string): Lado => (asignadaA === 'soporte' ? 'zero' : 'colegio');
+
 /**
- * A quién le toca contestar una tarea parada, para el correo urgente.
+ * A quién le toca tras un cambio de estado (completar, tomar, revisión,
+ * reabrir): a nadie si quedó completada; si es de Soporte, a Zero mientras la
+ * trabaja y al colegio cuando está en revisión; si es de una persona, al colegio.
+ * Es lo mismo que decidía `turnoDe` antes de guardarlo.
+ */
+export function esperaTrasEstado(asignadaA: string, estado: string): Lado | null {
+  if (estado === 'completada') return null;
+  if (asignadaA === 'soporte') return estado === 'en_revision' ? 'colegio' : 'zero';
+  return 'colegio';
+}
+
+/**
+ * ¿Enviar este mensaje le pasa la tarea al otro lado? Solo en una tarea de
+ * Soporte, que no esté completada, cuando le tocaba contestar a quien escribe.
+ * Si ya usó «Completar» o «Pasar a revisión», o la tarea ya está del otro lado,
+ * no pasa nada y la pantalla no pregunta. Una tarea de una persona del colegio
+ * es siempre del colegio.
+ */
+export function pasaElTurno(t: { asignadaA: string; estado: string; espera: Lado | null; lado: Lado }): boolean {
+  return t.asignadaA === 'soporte' && t.estado !== 'completada' && t.espera === t.lado;
+}
+
+/**
+ * «Tomar la tarea»: antes de responder, si nadie de SU lado la ha tomado, la
+ * pantalla pide tomarla primero. Una completada no lo pide. `tomadaPor` ausente
+ * (una respuesta de antes de la migración 0241) tampoco: no se bloquea nada.
+ */
+export function debeTomar(t: { estado: string; tomadaPor?: Partial<Record<Lado, unknown>> | null }, lado: Lado): boolean {
+  return t.tomadaPor != null && t.estado !== 'completada' && !t.tomadaPor[lado];
+}
+
+/** A quién le toca después de un mensaje. `pasar` es lo que pidió la pantalla («Enviar sin pasar» = false). */
+export function esperaTrasMensaje(
+  t: { asignadaA: string; estado: string; espera: Lado | null; lado: Lado }, pasar: boolean,
+): Lado | null {
+  return pasar && pasaElTurno(t) ? otroLado(t.lado) : t.espera;
+}
+
+/**
+ * A quién le toca contestar una tarea parada, para el aviso urgente.
+ *
+ * Con `espera` (lo guardado en la tarea, 0241) manda eso: 'zero' es del equipo
+ * de Zero; 'colegio' es del colegio, y entonces `usuarios` es la persona a la
+ * que le toca allí. Sin `espera` (una fila de antes de la migración) se deduce
+ * como siempre:
  *
  * Una tarea de Soporte es trabajo nuestro mientras esté abierta, aunque lo
  * último lo hayamos dicho nosotros («lo vamos a agregar»): nos toca a
@@ -166,15 +235,83 @@ export type AvisoTarea = 'creada' | 'mensaje' | 'completada' | 'reabierta' | 'en
 export function turnoDe(t: {
   estado: string; asignadaA: string; asignadaUserId: number | null; creadaPorUserId: number | null;
   ultimo: { userId: number | null; esSoporte: boolean } | null;
+  espera?: Lado | null;
 }): { soporte: boolean; colegio: boolean; usuarios: number[] } {
   const colegio = (...ids: (number | null)[]) =>
     ({ soporte: false, colegio: true, usuarios: [...new Set(ids.filter((x): x is number => x != null))] });
+  const zero = { soporte: true, colegio: false, usuarios: [] as number[] };
+  if (t.espera === 'zero') return zero;
   if (t.asignadaA === 'soporte') {
-    return t.estado === 'en_revision' ? colegio(t.creadaPorUserId) : { soporte: true, colegio: false, usuarios: [] };
+    return t.espera === 'colegio' || t.estado === 'en_revision' ? colegio(t.creadaPorUserId) : zero;
   }
   if (!t.ultimo || t.ultimo.esSoporte) return colegio(t.asignadaUserId);
   return colegio(t.ultimo.userId === t.asignadaUserId ? t.creadaPorUserId : t.asignadaUserId);
 }
+
+// ── Alerta a las 2 horas ─────────────────────────────────────────────────────
+
+/**
+ * ¿Toca avisar de una tarea parada? Es la misma condición que lleva la consulta
+ * del cron (`avisarTareasSinRespuesta`): pendiente, sin plazo de cierre, sin
+ * pausa vigente, con HORAS_ALERTA sin movimiento y sin haber avisado ya de
+ * ESTA parada (un aviso por parada: `urgenteEnviadoEn` anterior al último
+ * movimiento).
+ */
+export function alertaDebida(t: {
+  estado: string; revisionVenceEn: Date | null; actualizadoEn: Date; pausaHasta: Date | null; urgenteEnviadoEn: Date | null;
+}, ahora: Date = new Date()): boolean {
+  if (!PENDIENTES.includes(t.estado as EstadoTarea) || t.revisionVenceEn) return false;
+  if (t.pausaHasta && t.pausaHasta.getTime() > ahora.getTime()) return false;
+  if (t.actualizadoEn.getTime() >= ahora.getTime() - HORAS_ALERTA * 3_600_000) return false;
+  return !t.urgenteEnviadoEn || t.urgenteEnviadoEn.getTime() < t.actualizadoEn.getTime();
+}
+
+/**
+ * A quién llega la alerta: a quien tomó la tarea de ese lado; si nadie la
+ * tomó, a todo el equipo de ese lado (el equipo de Zero entero, o quien creó la
+ * tarea, la persona a la que se asignó y los dueños del colegio).
+ */
+export function aQuienAlertar(t: {
+  lado: Lado; tomo: number | null; deColegio: number[];
+}): { usuarios: number[]; zeroSoloA: number[]; soporte: boolean; duenos: boolean } {
+  if (t.tomo != null) {
+    return t.lado === 'zero'
+      ? { usuarios: [], zeroSoloA: [t.tomo], soporte: false, duenos: false }
+      : { usuarios: [t.tomo], zeroSoloA: [], soporte: false, duenos: false };
+  }
+  if (t.lado === 'zero') return { usuarios: [], zeroSoloA: [], soporte: true, duenos: false };
+  return { usuarios: [...new Set(t.deColegio)], zeroSoloA: [], soporte: false, duenos: true };
+}
+
+/** Hasta cuándo se puede pausar: más allá, es que se olvidó de la tarea. */
+export const MAX_DIAS_PAUSA = 30;
+const MIN_MINUTOS_PAUSA = 5;
+
+/** La hora que la persona dijo para «Esto tomará más tiempo», o el error para ella. */
+export function validarPausa(hasta: unknown, ahora: Date = new Date()): { ok: true; fecha: Date } | { ok: false; error: string } {
+  const f = typeof hasta === 'string' ? new Date(hasta) : null;
+  if (!f || Number.isNaN(f.getTime())) return { ok: false, error: 'Elige para cuándo estará.' };
+  if (f.getTime() < ahora.getTime() + MIN_MINUTOS_PAUSA * 60_000) return { ok: false, error: 'Elige una fecha y hora que todavía no haya pasado.' };
+  if (f.getTime() > ahora.getTime() + MAX_DIAS_PAUSA * 86_400_000) return { ok: false, error: `Elige una fecha dentro de los próximos ${MAX_DIAS_PAUSA} días.` };
+  return { ok: true, fecha: f };
+}
+
+/** «viernes 7 de noviembre, 3:30 p. m.» en hora dominicana. */
+export function fechaLegible(f: Date): string {
+  return f.toLocaleString('es-DO', {
+    weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit', timeZone: 'America/Santo_Domingo',
+  });
+}
+
+export type Seguimiento = 'mas_tiempo' | 'sigo';
+export const esSeguimiento = (v: unknown): v is Seguimiento => v === 'mas_tiempo' || v === 'sigo';
+
+/** El mensaje que le llega al otro lado con cada botón rápido. */
+export const textoSeguimiento = {
+  mas_tiempo: (hasta: Date) => `Esto va a tomar un poco más de tiempo. Calculamos tenerlo para el ${fechaLegible(hasta)}. `
+    + 'Te avisamos apenas esté listo.',
+  sigo: () => 'Sigo trabajando en esto. En cuanto tenga novedades te escribo por aquí.',
+};
 
 // ── Plantillas de Soporte IT ─────────────────────────────────────────────────
 

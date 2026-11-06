@@ -3,9 +3,11 @@
  *
  *  1. Las que Soporte dejó «en revisión» con la plantilla y nadie contestó en
  *     24 horas se cierran solas, con su mensaje y su aviso.
- *  2. Cualquier tarea pendiente con 24 horas sin movimiento manda un correo
- *     URGENTE a quien le toca contestar: al colegio si lo último lo dijimos
- *     nosotros, a Soporte si lo dijeron ellos. Uno por cada parada.
+ *  2. Cualquier tarea pendiente con 2 horas (HORAS_ALERTA) sin movimiento y
+ *     sin pausa avisa URGENTE a quien le toca contestar (guardado en la tarea):
+ *     a quien la tomó por ese lado o, si nadie, a todo ese equipo; por campana,
+ *     push y correo, y por Slack si es el lado de Zero. Nunca WhatsApp. Uno
+ *     por cada parada. Es el MISMO cron por hora, sin cambiar su horario.
  *
  * Cada hora de 07:05 a 19:05 hora dominicana (`11-23` UTC), como los demás
  * crons que despiertan a Neon: una tarea que vence de noche se cierra o avisa

@@ -101,7 +101,7 @@ const TIPO: Record<string, { icono: typeof Receipt; etiqueta: string; circulo: s
   tarea: { icono: ListChecks, etiqueta: 'Tarea', circulo: 'bg-violet-100 text-violet-700', etiquetaClase: 'bg-violet-50 text-violet-800' },
 };
 const TIPO_OTRO = { icono: Bell, etiqueta: 'Aviso', circulo: 'bg-gray-100 text-gray-600', etiquetaClase: 'bg-gray-100 text-gray-700' };
-/** Una tarea con 24 horas sin respuesta (cron `escolar-tareas`): en rojo, que no pase por una más. */
+/** Una tarea con 2 horas sin respuesta (cron `escolar-tareas`): en rojo, que no pase por una más. */
 const URGENTE = { icono: AlertTriangle, etiqueta: 'Urgente', circulo: 'bg-red-100 text-red-700', etiquetaClase: 'bg-red-50 text-red-800' };
 
 /**

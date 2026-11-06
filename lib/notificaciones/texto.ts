@@ -8,6 +8,7 @@
 
 import { fmtDOP } from '@/lib/utils/format';
 import type { TipoDeEmpresa } from './tipos';
+import { HORAS_ALERTA } from '@/lib/administracion-escolar/tareas-reglas';
 
 export interface NotificacionNueva {
   tipo: TipoDeEmpresa;
@@ -155,7 +156,7 @@ export function notificacionDeTarea(d: DatosTarea): { titulo: string; detalle: s
   const texto = d.texto?.trim() ? (d.cambio === 'adjunto' ? `📎 ${d.texto.trim()}` : d.texto.trim()) : null;
   const detalle = texto ? `${d.titulo}: ${texto}` : d.titulo;
   return {
-    titulo: (d.cambio === 'urgente' ? 'URGENTE: 24 horas sin respuesta' : `${d.autor} ${QUE_HIZO[d.cambio]}`).slice(0, 160),
+    titulo: (d.cambio === 'urgente' ? `URGENTE: ${HORAS_ALERTA} horas sin respuesta` : `${d.autor} ${QUE_HIZO[d.cambio]}`).slice(0, 160),
     detalle: detalle.length > 280 ? `${detalle.slice(0, 279).trimEnd()}…` : detalle,
     enlace: enlaceDeTarea(d.tareaId),
   };

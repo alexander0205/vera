@@ -13,7 +13,7 @@
 
 import { resend, assertSent } from '@/lib/email';
 import { baseDeEnlaces } from '@/lib/config/enlaces';
-import { DE_COLEGIO, type AvisoTarea } from '@/lib/administracion-escolar/tareas-reglas';
+import { DE_COLEGIO, HORAS_ALERTA, type AvisoTarea } from '@/lib/administracion-escolar/tareas-reglas';
 
 const DE = 'Zero <noreply@zero.com.do>';
 const AZUL = '#2a45c4';
@@ -65,7 +65,7 @@ function redactar(d: DatosAvisoTarea): { asunto: string; intro: string } {
     case 'adjunto':
       return { asunto: `${d.autor} subió un archivo: ${t}`, intro: `${d.autor} subió un archivo a una tarea de ${d.colegio}.` };
     case 'urgente':
-      return { asunto: `URGENTE · 24 horas sin respuesta: ${t}`, intro: `Una tarea de ${d.colegio} lleva más de 24 horas sin respuesta.` };
+      return { asunto: `URGENTE · ${HORAS_ALERTA} horas sin respuesta: ${t}`, intro: `Una tarea de ${d.colegio} lleva más de ${HORAS_ALERTA} horas sin respuesta.` };
   }
 }
 

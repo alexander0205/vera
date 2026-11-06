@@ -12,6 +12,7 @@
  */
 
 import type { DatosTarea } from './texto';
+import { HORAS_ALERTA } from '@/lib/administracion-escolar/tareas-reglas';
 
 const HIZO: Record<DatosTarea['cambio'], string> = {
   creada: 'creó una tarea para Soporte',
@@ -32,7 +33,7 @@ export function notificacionDeTareaParaZero(d: DatosTarea, colegio: string | nul
   const cuerpo = texto ? `${d.titulo}: ${texto}` : d.titulo;
   const detalle = [colegio?.trim(), cuerpo].filter(Boolean).join(' · ');
   return {
-    titulo: (d.cambio === 'urgente' ? 'URGENTE: 24 horas sin respuesta' : `${d.autor} ${HIZO[d.cambio]}`).slice(0, 160),
+    titulo: (d.cambio === 'urgente' ? `URGENTE: ${HORAS_ALERTA} horas sin respuesta` : `${d.autor} ${HIZO[d.cambio]}`).slice(0, 160),
     detalle: detalle.length > 280 ? `${detalle.slice(0, 279).trimEnd()}…` : detalle,
     enlace: enlaceDeTareaEnPanel(d.tareaId),
   };

@@ -11,7 +11,7 @@
 
 import { enviarAlertaSlackBlocks } from '@/lib/slack';
 import { urlDeTarea } from '@/lib/email/escolar-tareas';
-import { DE_COLEGIO, ETIQUETA_ESTADO, type AvisoTarea, type EstadoTarea } from './tareas-reglas';
+import { DE_COLEGIO, ETIQUETA_ESTADO, HORAS_ALERTA, type AvisoTarea, type EstadoTarea } from './tareas-reglas';
 
 export interface DatosSlackTarea {
   aviso: AvisoTarea;
@@ -39,7 +39,7 @@ const QUE_PASO: Record<AvisoTarea, { icono: string; verbo: string }> = {
   revision: { icono: '🔎', verbo: 'pasó a revisión' },
   completada: { icono: '✅', verbo: 'completó' },
   reabierta: { icono: '↩️', verbo: 'volvió a abrir' },
-  urgente: { icono: '🚨', verbo: 'avisa: 24 horas sin respuesta en' },
+  urgente: { icono: '🚨', verbo: `avisa: ${HORAS_ALERTA} horas sin respuesta en` },
 };
 
 export function armarSlackTarea(d: DatosSlackTarea): { blocks: object[]; texto: string } {
