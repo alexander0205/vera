@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
+import { avisoCedula } from '@/lib/nomina/avisos-datos';
 import { toast } from '@/lib/toast';
 import {
   Loader2, Wallet, Landmark, FileText, Download, Upload, X, Trash2,
@@ -256,7 +257,12 @@ export function EmpleadoWizard({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Campo label="Nombres *"><Input value={form.nombres} onChange={(e) => set('nombres')(e.target.value)} /></Campo>
             <Campo label="Apellidos *"><Input value={form.apellidos} onChange={(e) => set('apellidos')(e.target.value)} /></Campo>
-            <Campo label="Cédula"><Input value={form.cedula} onChange={(e) => set('cedula')(e.target.value)} placeholder="Solo dígitos" inputMode="numeric" /></Campo>
+            <Campo label="Cédula (11 dígitos)">
+              <Input value={form.cedula} onChange={(e) => set('cedula')(e.target.value)} placeholder="Solo dígitos" inputMode="numeric" aria-describedby="aviso-cedula" />
+              {avisoCedula(form.cedula) && (
+                <p id="aviso-cedula" className="text-xs text-amber-700" data-testid="aviso-cedula">{avisoCedula(form.cedula)}</p>
+              )}
+            </Campo>
             <Campo label="Sexo">
               <NativeSelect value={form.sexo} onChange={(e) => set('sexo')(e.target.value)}>
                 <option value="">—</option>
