@@ -9,11 +9,13 @@ import CircularProgress from '@mui/material/CircularProgress';
 
 export function Autocomplete<T extends { id: number }>({
   placeholder, onSearch, renderOption, onSelect, value, onClear, onCreate, createLabel,
-  onFreeText, freeTextLabel, dropdownMinWidth, multilinea = false,
+  onFreeText, freeTextLabel, dropdownMinWidth, multilinea = false, getOptionKey,
 }: {
   placeholder: string;
   onSearch: (q: string) => Promise<T[]>;
   renderOption: (item: T) => React.ReactNode;
+  /** Clave única de cada opción. Por defecto `id`; hay que darla cuando los ids de las opciones pueden repetirse (p. ej. productos mezclados con cuotas). */
+  getOptionKey?: (item: T) => string;
   onSelect: (item: T) => void;
   value: string;
   onClear: () => void;
@@ -260,7 +262,7 @@ export function Autocomplete<T extends { id: number }>({
       ) : (
         results.map((item, idx) => (
           <Box
-            key={item.id}
+            key={getOptionKey ? getOptionKey(item) : item.id}
             component="button"
             type="button"
             role="option"

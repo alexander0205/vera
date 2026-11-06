@@ -62,6 +62,7 @@ import { useDropdownsCatalog } from './hooks/useDropdownsCatalog';
 import { useItemsState } from './hooks/useFacturaState';
 
 import { calcularTotales } from './utils/calculos';
+import { sinOpcionesRepetidas } from './utils/opcionesProducto';
 import { buildPayload as buildPayloadFn } from './utils/buildPayload';
 import { datosComprador } from './utils/comprador';
 import { validate as validateEcf } from '@/lib/factura/validator';
@@ -1408,7 +1409,7 @@ export default function NuevaFacturaForm({
     const data = await res.json();
     // Las cuotas del alumno van PRIMERO: quien está facturando a una familia
     // busca el mes, no el producto genérico del catálogo.
-    return [...cuotasComoProductos(dependienteId, q), ...(data.productos ?? [])];
+    return sinOpcionesRepetidas([...cuotasComoProductos(dependienteId, q), ...(data.productos ?? [])]);
   }
 
   function seleccionarProducto(idx: number, p: Producto) {
