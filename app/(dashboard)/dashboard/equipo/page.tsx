@@ -25,6 +25,7 @@ import {
   AlertTriangle, Eye, UserCog,
 } from 'lucide-react';
 import { ROLES as ROLE_DEFS } from '@/lib/config/roles';
+import { MODULE_LABELS, type ModuleKey } from '@/lib/config/modules';
 
 /** Módulos que otorga un rol de sistema (según sus permisos modulo:*). Para
  *  roles custom sin catálogo estático devuelve null (no se muestra el hint). */
@@ -46,6 +47,8 @@ interface Member {
   joinedAt: string;
   name: string | null;
   email: string;
+  /** Módulos a los que entra (empresa ∩ rol). Ausente en respuestas viejas. */
+  modulos?: ModuleKey[];
 }
 
 interface Invitation {
@@ -573,14 +576,19 @@ export default function EquipoPage() {
                       owner siempre entra a todo. Deja ver de un vistazo quién
                       usa Facturación, quién el POS o ambos. */}
                   {(() => {
-                    const mods = isOwner
-                      ? { facturacion: true, pos: true }
-                      : modulosDeRol(m.role);
-                    if (!mods) return null;
-                    const activos = [
-                      mods.facturacion && 'Facturación',
-                      mods.pos && 'Punto de Venta',
-                    ].filter(Boolean) as string[];
+                    let activos: string[];
+                    if (m.modulos) {
+                      activos = m.modulos.map(k => MODULE_LABELS[k] ?? k);
+                    } else {
+                      const mods = isOwner
+                        ? { facturacion: true, pos: true }
+                        : modulosDeRol(m.role);
+                      if (!mods) return null;
+                      activos = [
+                        mods.facturacion && 'Facturación',
+                        mods.pos && 'Punto de Venta',
+                      ].filter(Boolean) as string[];
+                    }
                     return (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.75, flexWrap: 'wrap' }}>
                         <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#9ca3af' }}>
