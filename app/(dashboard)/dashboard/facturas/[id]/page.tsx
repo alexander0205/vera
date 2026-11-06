@@ -1373,7 +1373,7 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
             <div className="flex items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
               <p className="text-sm text-orange-900">
                 Nota de débito por mora de la factura{' '}
-                <span className="font-semibold">{factura.moraOrigen.codigo ?? factura.moraOrigen.encf}</span>
+                <span className="font-semibold">{etiquetaFacturaOrigen(factura.moraOrigen)}</span>
               </p>
               <Link
                 href={`/dashboard/facturas/${factura.moraOrigen.id}`}
