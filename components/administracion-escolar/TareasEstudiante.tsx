@@ -19,6 +19,8 @@ import {
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { autorAMostrar, etiquetaAtiende, inicialesDe, type PersonaEquipo } from '@/lib/administracion-escolar/tareas-equipo';
 import { AvatarEquipo } from './AvatarEquipo';
+import { MenuMenciones, TextoConMenciones, useMencionesCaja } from './MencionesTarea';
+import { textoPlano } from '@/lib/administracion-escolar/tareas-menciones';
 
 /**
  * Las tareas por revisar de un alumno y de su familia, desde su ficha.
@@ -346,7 +348,7 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
                       {t.ultimo && (
                         <span className="block truncate text-xs text-gray-600">
                           {t.ultimo.tipo !== 'evento' && <strong className="font-semibold text-gray-700">{t.ultimo.autor}: </strong>}
-                          {t.ultimo.tipo === 'adjunto' && '📎 '}{t.ultimo.texto}
+                          {t.ultimo.tipo === 'adjunto' && '📎 '}{textoPlano(t.ultimo.texto)}
                         </span>
                       )}
                       <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
@@ -441,6 +443,7 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
   const [corrigiendo, setCorrigiendo] = useState(false);
   const [textoAnterior, setTextoAnterior] = useState<string | null>(null);
   const elegir = useRef<HTMLInputElement>(null);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
   // Enviar: primero la revisión del tono (solo el equipo de Zero), luego 5 s para arrepentirse si el mensaje le pasa la tarea al otro lado.
   const [revisandoTono, setRevisandoTono] = useState(false);
   const [tono, setTono] = useState<{ motivo: string; sugerencia: string } | null>(null);
@@ -449,6 +452,9 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
   // «Esto tomará más tiempo»: pide para cuándo.
   const [pidiendoFecha, setPidiendoFecha] = useState(false);
   const [fechaEstimada, setFechaEstimada] = useState('');
+
+  // El menú de «@»: personas, padres, estudiantes, facturas y notas.
+  const menciones = useMencionesCaja({ tareaId: tarea.id, texto, setTexto, areaRef, activo: puedeGestionar && !plantilla });
 
   // Mi lado, a quién le toca y si nadie de mi lado la ha tomado.
   const miLado: Lado = soporte ? 'zero' : 'colegio';
@@ -568,12 +574,13 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plantilla, texto: t }),
           })
           : await fetch(`/api/administracion-escolar/tareas/${tarea.id}/mensajes`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto: t, pasarTurno: pasar }),
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto: menciones.tokenizar(t), pasarTurno: pasar }),
           });
         const d = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(d.error ?? 'No se pudo enviar');
         if (plantilla) toast.success('Enviado: le llega por correo y en la campana');
         setTexto('');
+        menciones.reiniciar();
         setTextoAnterior(null);
         setPlantilla(null);
         setTono(null);
@@ -654,7 +661,7 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
                     mio ? 'rounded-tr-sm bg-zero-600 text-white'
                       : ia ? 'rounded-tl-sm border border-violet-200 bg-violet-50 text-violet-950'
                       : 'rounded-tl-sm border border-gray-200 bg-white text-gray-900'}`}>
-                    {m.texto}
+                    <TextoConMenciones texto={m.texto} sobreOscuro={mio} />
                   </div>
                 )}
               </div>
@@ -757,12 +764,21 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
             </div>
           )}
           {!necesitaTomar && (
-            <textarea id={`responder-${tarea.id}`} rows={plantilla || textoAnterior != null ? 5 : 2} value={texto} onChange={(e) => setTexto(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void enviar(); }}
-              onPaste={(e) => agregar(archivosDePegado(e))}
-              readOnly={corrigiendo || cuenta != null || revisandoTono}
-              placeholder="Escribe una respuesta, o pega una captura o un archivo…"
-              className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100" />
+            <div className="relative">
+              <MenuMenciones m={menciones} />
+              <textarea id={`responder-${tarea.id}`} ref={areaRef} rows={plantilla || textoAnterior != null ? 5 : 2} value={texto}
+                onChange={(e) => menciones.alEscribir(e.target.value, e.target.selectionStart)}
+                onSelect={(e) => menciones.alMoverCursor(e.currentTarget.selectionStart)}
+                onKeyDown={(e) => {
+                  if (menciones.onTecla(e)) return;
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void enviar();
+                }}
+                onPaste={(e) => agregar(archivosDePegado(e))}
+                readOnly={corrigiendo || cuenta != null || revisandoTono}
+                role="combobox" aria-expanded={menciones.abierto} aria-haspopup="listbox" aria-autocomplete="list"
+                placeholder="Escribe una respuesta, escribe @ para mencionar, o pega una captura o un archivo…"
+                className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100" />
+            </div>
           )}
           {!necesitaTomar && <ArchivosPorEnviar archivos={porEnviar} onQuitar={(i) => setPorEnviar((a) => a.filter((_, j) => j !== i))} />}
           {subiendo && (

@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { leerTarea } from '@/lib/administracion-escolar/tareas';
+import { textoPlano } from '@/lib/administracion-escolar/tareas-menciones';
 import { redactarEnTarea } from '@/lib/administracion-escolar/tareas-redaccion';
 import { esModoRedaccion, MODOS_REDACCION, validarMensaje } from '@/lib/administracion-escolar/tareas-reglas';
 
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const texto = await redactarEnTarea({
       teamId: auth.teamId, userId: auth.user.id, modo: body.modo,
-      titulo: tarea.titulo, borrador, mensajes: tarea.mensajes,
+      titulo: tarea.titulo, borrador, mensajes: tarea.mensajes.map((m) => ({ ...m, texto: textoPlano(m.texto) })),
     });
     if (texto == null) return NextResponse.json({ error: 'El corrector no está disponible ahora mismo.' }, { status: 503 });
     return NextResponse.json({ texto });
