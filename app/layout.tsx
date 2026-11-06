@@ -1,6 +1,6 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
-import { Inter, Sora } from 'next/font/google';
+import localFont from 'next/font/local';
 import { getUser, getTeamForUser } from '@/lib/db/queries';
 import { SWRConfig } from 'swr';
 import { Toaster } from 'sonner';
@@ -42,17 +42,28 @@ export const viewport: Viewport = {
  * Inter para el cuerpo: es la que aguanta tablas densas y textos largos sin
  * cansar. Sora queda para títulos y marca — le da el carácter de Zero, pero en
  * párrafo larga se lee peor.
+ *
+ * Las dos van en el repo (`app/fonts/`, licencia OFL en `OFL.txt`) y no por
+ * `next/font/google`: esa descarga la tipografía de Google en cada compilación
+ * y, cuando Google no contesta a tiempo, el deploy de producción se cae en
+ * «Build de producción» sin que el código tenga nada (pasó el 10-oct, el 3-nov
+ * y el 5-nov). Son los mismos archivos que servía Google: el subconjunto latino
+ * de cada una, que cubre todo el español. Las dos son variables, así que un
+ * solo archivo da todos los gruesos.
  */
-const inter = Inter({
-  subsets: ['latin'],
+const inter = localFont({
+  src: './fonts/inter-latin.woff2',
+  weight: '100 900',
+  style: 'normal',
   display: 'swap',
   variable: '--font-sans',
 });
 
-const sora = Sora({
-  subsets: ['latin'],
+const sora = localFont({
+  src: './fonts/sora-latin.woff2',
+  weight: '400 700',
+  style: 'normal',
   display: 'swap',
-  weight: ['400', '500', '600', '700'],
   variable: '--font-display',
 });
 
