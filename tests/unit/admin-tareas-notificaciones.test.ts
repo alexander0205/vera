@@ -96,7 +96,7 @@ describe('el texto para el equipo de Zero', () => {
     const frases = (['creada', 'mensaje', 'adjunto', 'revision', 'completada', 'reabierta'] as const)
       .map((cambio) => notificacionDeTareaParaZero({ ...d, cambio, texto: null }, 'C').titulo);
     expect(new Set(frases).size).toBe(6);
-    expect(notificacionDeTareaParaZero({ ...d, cambio: 'urgente' }, 'C').titulo).toBe('URGENTE: 24 horas sin respuesta');
+    expect(notificacionDeTareaParaZero({ ...d, cambio: 'urgente' }, 'C').titulo).toBe('URGENTE: 2 horas sin respuesta');
   });
 
   it('recorta lo larguísimo y tolera un colegio vacío', () => {
@@ -142,8 +142,9 @@ describe('ningún camino a WhatsApp en lo nuevo (lo que dice el código)', () =>
 
   it('en avisarDeTarea el aviso al equipo va solo cuando le toca a Soporte y el WhatsApp sigue recibiendo únicamente a los usuarios del colegio', () => {
     const s = leer('lib', 'administracion-escolar', 'tareas.ts');
-    const i = s.indexOf('if (soporte) {\n      await notificarEquipoZeroDeTarea(');
-    expect(i, 'el aviso al equipo debe estar dentro de `if (soporte)`').toBeGreaterThan(-1);
+    // Solo cuando le toca a Soporte, o a la persona del equipo que tomó la tarea (alerta de 2 horas).
+    const i = s.indexOf('if (soporte || (opts.zeroSoloA?.length ?? 0) > 0) {\n      await notificarEquipoZeroDeTarea(');
+    expect(i, 'el aviso al equipo debe estar dentro de `if (soporte || zeroSoloA)`').toBeGreaterThan(-1);
     // Una sola llamada a WhatsApp, la de siempre, con `usuarios` (nunca la lista de admins).
     expect(s.match(/avisarTareaPorWhatsApp\(/g)).toHaveLength(1);
     expect(s).toMatch(/avisarTareaPorWhatsApp\(usuarios,/);

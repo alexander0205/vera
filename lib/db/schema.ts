@@ -2805,14 +2805,21 @@ export const adminEscolarTareas = pgTable('admin_escolar_tareas', {
   completadaEn:        timestamp('completada_en'),
   /** Se cierra sola a esta hora si sigue en revisión sin respuesta (0212; la pone la plantilla de Soporte). */
   revisionVenceEn:     timestamp('revision_vence_en'),
-  /** Último correo URGENTE por 24 horas sin movimiento (0212). */
+  /** Último aviso URGENTE por una parada sin respuesta (0212; hoy a las 2 horas, ver HORAS_ALERTA). */
   urgenteEnviadoEn:    timestamp('urgente_enviado_en'),
+  /** A quién le toca contestar: 'colegio' | 'zero'; NULL en una completada (0241). Ver tareas-reglas.ts. */
+  esperaRespuestaDe:   varchar('espera_respuesta_de', { length: 8 }),
+  /** Sin alertas hasta esta hora: «Esto tomará más tiempo» (0241). */
+  pausaHasta:          timestamp('pausa_hasta'),
   creadoEn:            timestamp('creado_en').notNull().defaultNow(),
   actualizadoEn:       timestamp('actualizado_en').notNull().defaultNow(),
 }, (t) => [
   index('admin_escolar_tareas_estudiante_idx').on(t.teamId, t.estudianteId, t.estado),
   index('admin_escolar_tareas_familia_idx').on(t.teamId, t.clientId, t.estado),
   index('admin_escolar_tareas_abiertas_idx').on(t.teamId, t.estado, t.asignadaA),
+  // Lo que mira el cron de las alertas cada hora: solo las pendientes sin plazo de cierre (0241).
+  index('admin_escolar_tareas_paradas_idx').on(t.actualizadoEn)
+    .where(sql`${t.estado} in ('abierta', 'en_proceso', 'en_revision') and ${t.revisionVenceEn} is null`),
 ]);
 
 /** La conversación de una tarea: mensajes, eventos (creada, completada…) y lo que propone Zero AI. */
@@ -2838,10 +2845,13 @@ export const adminEscolarTareaMensajes = pgTable('admin_escolar_tarea_mensajes',
  * migración solo deje de enseñarlo. Ver lib/administracion-escolar/tareas-atiende.ts.
  */
 export const adminEscolarTareaAtiende = pgTable('admin_escolar_tarea_atiende', {
-  tareaId:       integer('tarea_id').primaryKey().references(() => adminEscolarTareas.id, { onDelete: 'cascade' }),
+  tareaId:       integer('tarea_id').notNull().references(() => adminEscolarTareas.id, { onDelete: 'cascade' }),
+  /** Una persona por lado: 'zero' (lo de 0237) o 'colegio' (0241). */
+  lado:          varchar('lado', { length: 8 }).notNull().default('zero'),
   userId:        integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
 }, (t) => [
+  primaryKey({ columns: [t.tareaId, t.lado], name: 'admin_escolar_tarea_atiende_pkey' }),
   index('admin_escolar_tarea_atiende_user_idx').on(t.userId),
 ]);
 

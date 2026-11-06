@@ -201,7 +201,7 @@ describe('plantillas de Soporte IT', () => {
   });
 });
 
-describe('24 horas sin respuesta', () => {
+describe('horas sin respuesta (aviso urgente)', () => {
   const soporte = { estado: 'abierta', asignadaA: 'soporte', asignadaUserId: null, creadaPorUserId: 35 };
   it('una tarea de Soporte abierta es trabajo nuestro, aunque lo último lo hayamos dicho nosotros', async () => {
     const { turnoDe } = await import('@/lib/administracion-escolar/tareas-reglas');
@@ -225,7 +225,7 @@ describe('24 horas sin respuesta', () => {
   });
   it('el correo urgente lo dice en el asunto; la plantilla de revisión avisa del cierre en 24 horas', async () => {
     const { PLANTILLAS_SOPORTE } = await import('@/lib/administracion-escolar/tareas-reglas');
-    expect(armarCorreoTarea({ ...BASE, aviso: 'urgente', texto: 'x' }).asunto).toBe('URGENTE · 24 horas sin respuesta: Saber');
+    expect(armarCorreoTarea({ ...BASE, aviso: 'urgente', texto: 'x' }).asunto).toBe('URGENTE · 2 horas sin respuesta: Saber');
     expect(PLANTILLAS_SOPORTE.revision.texto({ nombre: 'Lizandro', url: 'u' })).toContain('Si no recibimos respuesta en 24 horas, la cerramos automáticamente.');
     const { blocks } = armarSlackTarea({ ...BASE, aviso: 'urgente', estado: 'abierta', texto: 'x' });
     expect(JSON.stringify(blocks)).toContain('🚨');

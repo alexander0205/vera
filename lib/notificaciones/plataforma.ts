@@ -34,6 +34,8 @@ export async function notificarEquipoZeroDeTarea(
     autorUserId: number | null;
     /** Los que ya recibieron el aviso del colegio (un admin que participó en la tarea): no se les repite. */
     yaAvisados: readonly number[];
+    /** Solo a estas personas del equipo, en vez de a todos (la alerta a quien tomó la tarea). */
+    soloA?: readonly number[];
   },
 ): Promise<number> {
   try {
@@ -41,7 +43,8 @@ export async function notificarEquipoZeroDeTarea(
       .where(and(eq(users.platformRole, 'admin'), isNull(users.deletedAt)));
     const omitir = new Set<number>(opts.yaAvisados);
     if (opts.autorUserId != null) omitir.add(opts.autorUserId);
-    const para = admins.map((a) => a.id).filter((id) => !omitir.has(id));
+    const solo = opts.soloA ? new Set<number>(opts.soloA) : null;
+    const para = admins.map((a) => a.id).filter((id) => !omitir.has(id) && (!solo || solo.has(id)));
     if (para.length === 0) return 0;
 
     const n = notificacionDeTareaParaZero(d, colegio);

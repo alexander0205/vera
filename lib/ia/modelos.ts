@@ -43,7 +43,7 @@ export const MODELOS_IA: readonly ModeloIa[] = [
   { id: 'google/gemini-3-flash', nombre: 'Gemini 3 Flash', proveedor: 'Google', nota: 'Más nuevo; razona antes de contestar', entradaUsd: 0.5, salidaUsd: 3 },
 ];
 
-export type UsoIa = 'asistente' | 'analisis' | 'plantillas' | 'captura' | 'redaccion' | 'academia';
+export type UsoIa = 'asistente' | 'analisis' | 'plantillas' | 'captura' | 'redaccion' | 'academia' | 'revision_tono';
 
 export interface UsoIaInfo {
   uso: UsoIa;
@@ -105,10 +105,18 @@ export function usosIa(env: Record<string, string | undefined> = {}): UsoIaInfo[
       principal: env.ACADEMIA_IA_MODELO || 'google/gemini-2.5-flash-lite',
       respaldo: env.ACADEMIA_IA_MODELO_RESPALDO || 'google/gemini-2.5-flash',
     },
+    {
+      uso: 'revision_tono',
+      nombre: 'Tareas: revisión del tono',
+      descripcion: 'Antes de enviar, lee el borrador que el equipo de Zero le va a mandar a un colegio y avisa si puede dañar al cliente (culpar, tono duro, prometer de más, datos de otro cliente). Nunca bloquea el envío: tiene 3 segundos y, si falla o no hay llave, se envía normal.',
+      // Gratis con la llave de Google AI Studio (GOOGLE_GENERATIVE_AI_API_KEY): va directo, sin gateway.
+      principal: env.REVISION_TONO_IA_MODELO || 'google/gemini-2.5-flash-lite',
+      respaldo: env.REVISION_TONO_IA_MODELO_RESPALDO || 'google/gemini-2.5-flash-lite',
+    },
   ];
 }
 
-export const USOS_IA: readonly UsoIa[] = ['asistente', 'analisis', 'plantillas', 'captura', 'redaccion', 'academia'];
+export const USOS_IA: readonly UsoIa[] = ['asistente', 'analisis', 'plantillas', 'captura', 'redaccion', 'academia', 'revision_tono'];
 
 export interface ModelosDeUso { principal: string; respaldo: string }
 

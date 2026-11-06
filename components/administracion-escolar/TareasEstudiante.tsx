@@ -5,20 +5,22 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import Drawer from '@mui/material/Drawer';
 import {
-  ArrowLeft, Bell, Check, Download, ExternalLink, FileText, Loader2, MessageSquareText, Paperclip, Plus, RotateCcw, ScanSearch,
-  Sparkles, Users, Wrench, X,
+  ArrowLeft, Bell, Check, Clock, Download, ExternalLink, FileText, HandHelping, Loader2, MessageSquareText, Paperclip, Plus, RotateCcw,
+  ScanSearch, Sparkles, TriangleAlert, Users, Wrench, X,
 } from 'lucide-react';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { toast } from 'sonner';
 import {
-  ACEPTA_ADJUNTOS, archivosDelPegado, claseDeMime, DE_COLEGIO, ETIQUETA_ESTADO, MODOS_REDACCION, nombreDePegado,
-  PLANTILLAS_SOPORTE, validarAdjunto,
-  type AccionEstado, type Asignacion, type EstadoTarea, type ModoRedaccion, type PlantillaSoporte,
+  ACEPTA_ADJUNTOS, archivosDelPegado, claseDeMime, DE_COLEGIO, ETIQUETA_ESTADO, HORAS_ALERTA, MODOS_REDACCION, nombreDePegado,
+  debeTomar, pasaElTurno, PLANTILLAS_SOPORTE, validarAdjunto,
+  type AccionEstado, type Asignacion, type EstadoTarea, type Lado, type ModoRedaccion, type PlantillaSoporte,
 } from '@/lib/administracion-escolar/tareas-reglas';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { autorAMostrar, etiquetaAtiende, inicialesDe, type PersonaEquipo } from '@/lib/administracion-escolar/tareas-equipo';
 import { AvatarEquipo } from './AvatarEquipo';
+import { MenuMenciones, TextoConMenciones, useMencionesCaja } from './MencionesTarea';
+import { textoPlano } from '@/lib/administracion-escolar/tareas-menciones';
 
 /**
  * Las tareas por revisar de un alumno y de su familia, desde su ficha.
@@ -54,8 +56,16 @@ interface Mensaje {
   /** Solo en los de tipo «adjunto», cuando el archivo ya subió entero. */
   adjunto: { id: number; mime: string; bytes: number } | null;
 }
+/** Quién tomó la tarea por cada lado (primer nombre). */
+export type TomadaPor = Record<Lado, { userId: number; nombre: string } | null>;
 export interface TareaCompleta {
   id: number; titulo: string; estado: EstadoTarea; de: string; fichaId: number | null; asignada: string;
+  /** 'soporte' | 'persona'. */
+  asignadaA?: string;
+  /** A quién le toca contestar (guardado); `null` en una completada. */
+  espera?: Lado | null;
+  pausaHasta?: string | null;
+  tomadaPor?: TomadaPor;
   documento: string | null; ecfDocumentId: number | null; creadaPorIa: boolean; venceEl: string | null; mensajes: Mensaje[];
   turno: Turno | null;
   atiende?: PersonaEquipo | null;
@@ -195,22 +205,22 @@ function espera(desde: string, ahora = Date.now()) {
 }
 
 /**
- * «Le toca a Soporte IT · 3 h» o «Le toca al colegio · Lizandro · 26 h»: quién
- * tiene que contestar y cuánto lleva esperando. En rojo pasadas las 24 horas,
- * que es cuando sale el correo urgente.
+ * «Espera respuesta de Zero · 3 h» o «Espera respuesta del colegio · Ana ·
+ * 26 h»: a quién le toca contestar y cuánto lleva esperando. En rojo pasadas
+ * las HORAS_ALERTA horas, que es cuando sale el aviso urgente.
  */
 export function TurnoChip({ turno }: { turno: Turno | null }) {
   if (!turno) return null;
   const e = espera(turno.desde);
-  const tarde = e.horas >= 24;
-  const quien = turno.quien === 'soporte' ? 'Le toca al Departamento de IT' : `Le toca al colegio${turno.nombre ? ` · ${turno.nombre}` : ''}`;
+  const tarde = e.horas >= HORAS_ALERTA;
+  const quien = turno.quien === 'soporte' ? 'Espera respuesta de Zero' : `Espera respuesta del colegio${turno.nombre ? ` · ${turno.nombre}` : ''}`;
   const color = tarde ? 'bg-red-50 text-red-800 ring-red-200'
     : turno.quien === 'soporte' ? 'bg-violet-50 text-violet-800 ring-violet-200' : 'bg-amber-50 text-amber-900 ring-amber-200';
   const cierra = turno.cierraEn
     ? ` · se cierra sola ${new Date(turno.cierraEn).toLocaleString('es-DO', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/Santo_Domingo' })}`
     : '';
   return (
-    <span title={tarde ? 'Más de 24 horas sin respuesta: ya salió el correo urgente' : 'Quién tiene que contestar y cuánto lleva esperando'}
+    <span title={tarde ? `Más de ${HORAS_ALERTA} horas sin respuesta: ya salió el aviso urgente` : 'A quién le toca contestar y cuánto lleva esperando'}
       className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${color}`}>
       {quien} · {e.texto}{cierra}
     </span>
@@ -338,7 +348,7 @@ export function TareasEstudiante({ estudianteId, nombre, puedeGestionar }: {
                       {t.ultimo && (
                         <span className="block truncate text-xs text-gray-600">
                           {t.ultimo.tipo !== 'evento' && <strong className="font-semibold text-gray-700">{t.ultimo.autor}: </strong>}
-                          {t.ultimo.tipo === 'adjunto' && '📎 '}{t.ultimo.texto}
+                          {t.ultimo.tipo === 'adjunto' && '📎 '}{textoPlano(t.ultimo.texto)}
                         </span>
                       )}
                       <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
@@ -397,9 +407,22 @@ export function CabeceraHilo({ tarea }: { tarea: TareaCompleta }) {
       {tarea.venceEl && <span className="rounded-md bg-gray-100 px-2 py-0.5 text-gray-700">Para el {tarea.venceEl.split('-').reverse().join('/')}</span>}
       <TurnoChip turno={tarea.turno} />
       <QuienAtiende persona={tarea.atiende} />
+      {tarea.tomadaPor?.colegio && (
+        <span className="rounded-md bg-amber-50 px-2 py-0.5 text-amber-900">La tomó {tarea.tomadaPor.colegio.nombre} (colegio)</span>
+      )}
+      {tarea.tomadaPor?.zero && !tarea.atiende && (
+        <span className="rounded-md bg-violet-50 px-2 py-0.5 text-violet-800">La tomó {tarea.tomadaPor.zero.nombre} (Zero)</span>
+      )}
+      {tarea.pausaHasta && new Date(tarea.pausaHasta).getTime() > Date.now() && (
+        <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2 py-0.5 text-sky-800">
+          <Clock className="h-3 w-3" />Sin alertas hasta {new Date(tarea.pausaHasta).toLocaleString('es-DO', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/Santo_Domingo' })}
+        </span>
+      )}
     </div>
   );
 }
+
+const SEGUNDOS_PARA_CANCELAR = 5;
 
 export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
   tarea: TareaCompleta; yo: number;
@@ -420,6 +443,66 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
   const [corrigiendo, setCorrigiendo] = useState(false);
   const [textoAnterior, setTextoAnterior] = useState<string | null>(null);
   const elegir = useRef<HTMLInputElement>(null);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+  // Enviar: primero la revisión del tono (solo el equipo de Zero), luego 5 s para arrepentirse si el mensaje le pasa la tarea al otro lado.
+  const [revisandoTono, setRevisandoTono] = useState(false);
+  const [tono, setTono] = useState<{ motivo: string; sugerencia: string } | null>(null);
+  const [cuenta, setCuenta] = useState<{ restante: number; texto: string } | null>(null);
+  const [tomando, setTomando] = useState(false);
+  // «Esto tomará más tiempo»: pide para cuándo.
+  const [pidiendoFecha, setPidiendoFecha] = useState(false);
+  const [fechaEstimada, setFechaEstimada] = useState('');
+
+  // El menú de «@»: personas, padres, estudiantes, facturas y notas.
+  const menciones = useMencionesCaja({ tareaId: tarea.id, texto, setTexto, areaRef, activo: puedeGestionar && !plantilla });
+
+  // Mi lado, a quién le toca y si nadie de mi lado la ha tomado.
+  const miLado: Lado = soporte ? 'zero' : 'colegio';
+  const tomo = tarea.tomadaPor?.[miLado] ?? null;
+  const necesitaTomar = debeTomar(tarea, miLado);
+  const loTomeYo = tomo != null && tomo.userId === yo;
+  const meToca = tarea.espera === miLado && tarea.estado !== 'completada';
+  const pasaria = pasaElTurno({ asignadaA: tarea.asignadaA ?? 'persona', estado: tarea.estado, espera: tarea.espera ?? null, lado: miLado });
+  const etiquetaDestino = miLado === 'zero' ? 'Respuesta del colegio' : 'Respuesta de Zero';
+
+  // La cuenta atrás de 5 s: al llegar a 0 se envía y la tarea pasa.
+  useEffect(() => {
+    if (!cuenta) return;
+    if (cuenta.restante <= 0) { const t = cuenta.texto; setCuenta(null); void enviarAhora(true, t); return; }
+    const t = setTimeout(() => setCuenta({ ...cuenta, restante: cuenta.restante - 1 }), 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cuenta]);
+
+  async function tomar() {
+    setTomando(true);
+    try {
+      const res = await fetch(`/api/administracion-escolar/tareas/${tarea.id}/tomar`, { method: 'POST' });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error ?? 'No se pudo tomar la tarea');
+      onCambio();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo tomar la tarea');
+      onCambio();
+    } finally { setTomando(false); }
+  }
+
+  async function seguimiento(tipo: 'sigo' | 'mas_tiempo') {
+    setEnviando(true);
+    try {
+      const res = await fetch(`/api/administracion-escolar/tareas/${tarea.id}/seguimiento`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tipo === 'sigo' ? { tipo } : { tipo, hasta: new Date(fechaEstimada).toISOString() }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error ?? 'No se pudo enviar');
+      setPidiendoFecha(false);
+      setFechaEstimada('');
+      onCambio();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo enviar');
+    } finally { setEnviando(false); }
+  }
 
   async function corregir(modo: ModoRedaccion) {
     setMenuCorrector(null);
@@ -448,24 +531,59 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
     }
   }
 
+  /** Pulsar «Enviar»: revisa el tono (equipo de Zero) y, si el mensaje pasa la tarea al otro lado, abre los 5 s. Nada se escribe aún. */
   async function enviar() {
     if (ocupado || !hayQueEnviar) return;
+    // Una plantilla cambia el estado enseguida (completar o revisión): no hay turno que pasar con el mensaje.
+    if (plantilla || !texto.trim()) return void enviarAhora(false, texto);
+    if (soporte) {
+      setRevisandoTono(true);
+      const r = await revisarTono(texto);
+      setRevisandoTono(false);
+      if (r) { setTono(r); return; }
+    }
+    seguirConEnvio(texto);
+  }
+
+  /** Después del tono: con turno que pasar, 5 s; si no, sale ya. */
+  function seguirConEnvio(t: string) {
+    if (pasaria) setCuenta({ restante: SEGUNDOS_PARA_CANCELAR, texto: t });
+    else void enviarAhora(false, t);
+  }
+
+  /** La revisión nunca bloquea: con 3,5 s, error o sin riesgo, se envía normal (`null`). */
+  async function revisarTono(t: string): Promise<{ motivo: string; sugerencia: string } | null> {
+    const ctrl = new AbortController();
+    const reloj = setTimeout(() => ctrl.abort(), 3500);
+    try {
+      const res = await fetch(`/api/administracion-escolar/tareas/${tarea.id}/tono`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto: t }), signal: ctrl.signal,
+      });
+      const d = await res.json().catch(() => null) as { riesgo?: boolean; motivo?: string; sugerencia?: string } | null;
+      return res.ok && d?.riesgo && d.motivo && d.sugerencia ? { motivo: d.motivo, sugerencia: d.sugerencia } : null;
+    } catch { return null; } finally { clearTimeout(reloj); }
+  }
+
+  /** El envío de verdad. `pasar`: el mensaje le pasa la tarea al otro lado. */
+  async function enviarAhora(pasar: boolean, t: string) {
     setEnviando(true);
     try {
-      if (texto.trim()) {
+      if (t.trim()) {
         const res = plantilla
           ? await fetch(`/api/administracion-escolar/tareas/${tarea.id}/plantilla`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plantilla, texto }),
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plantilla, texto: t }),
           })
           : await fetch(`/api/administracion-escolar/tareas/${tarea.id}/mensajes`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto }),
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto: menciones.tokenizar(t), pasarTurno: pasar }),
           });
         const d = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(d.error ?? 'No se pudo enviar');
         if (plantilla) toast.success('Enviado: le llega por correo y en la campana');
         setTexto('');
+        menciones.reiniciar();
         setTextoAnterior(null);
         setPlantilla(null);
+        setTono(null);
         onCambio();
       }
       await subirPorEnviar();
@@ -505,7 +623,7 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
 
   const agregar = (archivos: File[]) => setPorEnviar((a) => [...a, ...soloValidos(archivos)]);
 
-  const ocupado = enviando || subiendo != null || corrigiendo;
+  const ocupado = enviando || subiendo != null || corrigiendo || revisandoTono || cuenta != null || tono != null;
   const hayQueEnviar = Boolean(texto.trim()) || porEnviar.length > 0;
 
   return (
@@ -543,7 +661,7 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
                     mio ? 'rounded-tr-sm bg-zero-600 text-white'
                       : ia ? 'rounded-tl-sm border border-violet-200 bg-violet-50 text-violet-950'
                       : 'rounded-tl-sm border border-gray-200 bg-white text-gray-900'}`}>
-                    {m.texto}
+                    <TextoConMenciones texto={m.texto} sobreOscuro={mio} />
                   </div>
                 )}
               </div>
@@ -553,8 +671,81 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
       </div>
       {puedeGestionar && (
         <div className="space-y-2 border-t border-gray-100 bg-white px-5 py-3">
-          <label className="sr-only" htmlFor={`responder-${tarea.id}`}>Responder</label>
-          {plantilla && (
+          {necesitaTomar && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-zero-200 bg-zero-50 px-3 py-2.5 text-sm text-zero-900">
+              <HandHelping className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1">
+                {miLado === 'zero' ? 'Nadie del equipo de Zero ha tomado esta tarea.' : 'Nadie del colegio ha tomado esta tarea.'} Tómala para poder responder.
+              </span>
+              <button type="button" onClick={() => void tomar()} disabled={tomando}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-zero-600 px-3 text-sm font-semibold text-white hover:bg-zero-700 disabled:opacity-50">
+                {tomando ? <Loader2 className="h-4 w-4 animate-spin" /> : <HandHelping className="h-4 w-4" />}Tomar la tarea
+              </button>
+            </div>
+          )}
+          {!necesitaTomar && loTomeYo && meToca && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-gray-500">Te toca contestar:</span>
+                <button type="button" onClick={() => void seguimiento('sigo')} disabled={ocupado}
+                  title="Le escribe al otro lado que sigues con esto y reinicia el reloj de la alerta"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                  <Wrench className="h-3.5 w-3.5" />Sigo trabajando en ello
+                </button>
+                <button type="button" onClick={() => setPidiendoFecha((v) => !v)} disabled={ocupado} aria-expanded={pidiendoFecha}
+                  title="Le dice al otro lado para cuándo estará y no hay alertas hasta entonces"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                  <Clock className="h-3.5 w-3.5" />Esto tomará más tiempo
+                </button>
+              </div>
+              {pidiendoFecha && (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                  <label htmlFor={`estimada-${tarea.id}`}>¿Para cuándo estará?</label>
+                  <input id={`estimada-${tarea.id}`} type="datetime-local" value={fechaEstimada} onChange={(e) => setFechaEstimada(e.target.value)}
+                    className="h-8 rounded-md border border-gray-300 bg-white px-2 text-xs focus:border-zero-500 focus:outline-none" />
+                  <button type="button" onClick={() => void seguimiento('mas_tiempo')} disabled={ocupado || !fechaEstimada}
+                    className="h-8 rounded-md bg-zero-600 px-3 text-xs font-semibold text-white hover:bg-zero-700 disabled:opacity-50">
+                    Avisar
+                  </button>
+                  <button type="button" onClick={() => setPidiendoFecha(false)} className="text-xs font-semibold text-gray-600 hover:underline">Cancelar</button>
+                </div>
+              )}
+            </div>
+          )}
+          {!necesitaTomar && <label className="sr-only" htmlFor={`responder-${tarea.id}`}>Responder</label>}
+          {tono && (
+            <div role="alert" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
+              <p className="flex items-start gap-2">
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <span><span className="font-semibold">Revisa el tono antes de enviar.</span> {tono.motivo}</span>
+              </p>
+              <p className="whitespace-pre-wrap rounded-md bg-white/70 px-2.5 py-1.5 text-xs text-amber-900">
+                <span className="font-semibold">Sugerencia: </span>{tono.sugerencia}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => { const t = tono.sugerencia; setTexto(t); setTextoAnterior(texto); setTono(null); seguirConEnvio(t); }}
+                  className="h-8 rounded-md bg-amber-600 px-3 text-xs font-semibold text-white hover:bg-amber-700">Usar sugerencia</button>
+                <button type="button" onClick={() => { setTono(null); document.getElementById(`responder-${tarea.id}`)?.focus(); }}
+                  className="h-8 rounded-md border border-amber-400 bg-white px-3 text-xs font-semibold text-amber-900 hover:bg-amber-100">Editar</button>
+                <button type="button" onClick={() => { setTono(null); seguirConEnvio(texto); }}
+                  className="h-8 rounded-md border border-amber-400 bg-white px-3 text-xs font-semibold text-amber-900 hover:bg-amber-100">Enviar igual</button>
+              </div>
+            </div>
+          )}
+          {cuenta && (
+            <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-sky-600" />
+              <span className="min-w-0 flex-1">
+                Enviando… pasará a <span className="font-semibold">{etiquetaDestino}</span>
+                <span className="ml-1 tabular-nums text-sky-700">({cuenta.restante} s)</span>
+              </span>
+              <button type="button" onClick={() => setCuenta(null)}
+                className="h-8 rounded-md border border-sky-400 bg-white px-3 text-xs font-semibold text-sky-900 hover:bg-sky-100">Cancelar</button>
+              <button type="button" onClick={() => { const t = cuenta.texto; setCuenta(null); void enviarAhora(false, t); }}
+                className="h-8 rounded-md bg-sky-600 px-3 text-xs font-semibold text-white hover:bg-sky-700">Enviar sin pasar</button>
+            </div>
+          )}
+          {!necesitaTomar && plantilla && (
             <div className="flex items-center gap-2 rounded-lg bg-violet-50 px-3 py-1.5 text-xs text-violet-900">
               <MessageSquareText className="h-3.5 w-3.5 shrink-0" />
               <span className="min-w-0 flex-1">
@@ -564,7 +755,7 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
                 className="font-semibold hover:underline">Quitar</button>
             </div>
           )}
-          {textoAnterior != null && (
+          {!necesitaTomar && cuenta == null && textoAnterior != null && (
             <div className="flex items-center gap-2 rounded-lg bg-violet-50 px-3 py-1.5 text-xs text-violet-900">
               <Sparkles className="h-3.5 w-3.5 shrink-0" />
               <span className="min-w-0 flex-1">Lo reescribió la IA: revísalo antes de enviarlo.</span>
@@ -572,13 +763,24 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
                 className="font-semibold hover:underline">Deshacer</button>
             </div>
           )}
-          <textarea id={`responder-${tarea.id}`} rows={plantilla || textoAnterior != null ? 5 : 2} value={texto} onChange={(e) => setTexto(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void enviar(); }}
-            onPaste={(e) => agregar(archivosDePegado(e))}
-            readOnly={corrigiendo}
-            placeholder="Escribe una respuesta, o pega una captura o un archivo…"
-            className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100" />
-          <ArchivosPorEnviar archivos={porEnviar} onQuitar={(i) => setPorEnviar((a) => a.filter((_, j) => j !== i))} />
+          {!necesitaTomar && (
+            <div className="relative">
+              <MenuMenciones m={menciones} />
+              <textarea id={`responder-${tarea.id}`} ref={areaRef} rows={plantilla || textoAnterior != null ? 5 : 2} value={texto}
+                onChange={(e) => menciones.alEscribir(e.target.value, e.target.selectionStart)}
+                onSelect={(e) => menciones.alMoverCursor(e.currentTarget.selectionStart)}
+                onKeyDown={(e) => {
+                  if (menciones.onTecla(e)) return;
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void enviar();
+                }}
+                onPaste={(e) => agregar(archivosDePegado(e))}
+                readOnly={corrigiendo || cuenta != null || revisandoTono}
+                role="combobox" aria-expanded={menciones.abierto} aria-haspopup="listbox" aria-autocomplete="list"
+                placeholder="Escribe una respuesta, escribe @ para mencionar, o pega una captura o un archivo…"
+                className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-zero-500 focus:outline-none focus:ring-2 focus:ring-zero-100" />
+            </div>
+          )}
+          {!necesitaTomar && <ArchivosPorEnviar archivos={porEnviar} onQuitar={(i) => setPorEnviar((a) => a.filter((_, j) => j !== i))} />}
           {subiendo && (
             <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-700">
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-zero-600" />
@@ -616,7 +818,7 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
               </button>
             )}
             <span className="flex-1" />
-            {soporte && (
+            {soporte && !necesitaTomar && (
               <>
                 <button type="button" onClick={(e) => setMenuPlantillas(e.currentTarget)} disabled={ocupado}
                   title="Plantillas del Departamento de IT (solo el equipo de Zero)"
@@ -652,17 +854,21 @@ export function Hilo({ tarea, yo, soporte = false, puedeGestionar, onCambio }: {
                 </Menu>
               </>
             )}
-            <input ref={elegir} type="file" multiple accept={ACEPTA_ADJUNTOS} className="hidden"
-              onChange={(e) => { agregar([...(e.target.files ?? [])]); e.target.value = ''; }} />
-            <button type="button" onClick={() => elegir.current?.click()} disabled={ocupado}
-              aria-label="Adjuntar fotos, videos o documentos" title="Adjuntar fotos, videos o documentos"
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50">
-              <Paperclip className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={() => void enviar()} disabled={ocupado || !hayQueEnviar}
-              className="h-9 rounded-lg bg-zero-600 px-4 text-sm font-semibold text-white hover:bg-zero-700 disabled:opacity-50">
-              {plantilla ? PLANTILLAS_SOPORTE[plantilla].boton : 'Enviar'}
-            </button>
+            {!necesitaTomar && (
+              <>
+                <input ref={elegir} type="file" multiple accept={ACEPTA_ADJUNTOS} className="hidden"
+                  onChange={(e) => { agregar([...(e.target.files ?? [])]); e.target.value = ''; }} />
+                <button type="button" onClick={() => elegir.current?.click()} disabled={ocupado}
+                  aria-label="Adjuntar fotos, videos o documentos" title="Adjuntar fotos, videos o documentos"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+                  <Paperclip className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={() => void enviar()} disabled={ocupado || !hayQueEnviar}
+                  className="h-9 rounded-lg bg-zero-600 px-4 text-sm font-semibold text-white hover:bg-zero-700 disabled:opacity-50">
+                  {revisandoTono ? 'Revisando el tono…' : plantilla ? PLANTILLAS_SOPORTE[plantilla].boton : 'Enviar'}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

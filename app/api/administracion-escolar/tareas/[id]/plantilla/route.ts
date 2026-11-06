@@ -59,7 +59,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!v.ok) return NextResponse.json({ error: v.error }, { status: 400 });
 
   const autor = autorTarea(auth.user);
-  await agregarMensaje(auth.teamId, id, autor, v.texto);
+  // La plantilla cambia el estado enseguida: ahí se decide a quién le toca, no con el mensaje.
+  await agregarMensaje(auth.teamId, id, autor, v.texto, { pasarTurno: false });
   // Si ya estaba así (p. ej. ya completada) solo sale el mensaje.
   const cambio = await cambiarEstadoTarea(auth.teamId, id, autor, p.accion);
   if (p.accion === 'revision') await venceRevisionEn(auth.teamId, id);

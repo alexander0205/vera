@@ -172,11 +172,11 @@ export default function PorRevisarClient() {
         )}
         {/* Quién tiene que contestar: lo que pide el equipo de Zero para ver primero lo que debe. */}
         <label className="ml-auto flex items-center gap-2 text-sm text-gray-600">
-          Le toca a
+          Espera respuesta de
           <select value={esperando} onChange={(e) => setEsperando(e.target.value)}
             className="h-9 rounded-lg border border-gray-300 bg-white px-2.5 text-sm focus:border-zero-500 focus:outline-none">
             <option value="">Cualquiera</option>
-            <option value="soporte">Departamento de IT · Zero</option>
+            <option value="soporte">Zero</option>
             <option value="colegio">El colegio</option>
           </select>
         </label>
