@@ -20,7 +20,7 @@ import type { RailSeccion } from '@/components/rail/tipos';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { Permission } from '@/lib/config/roles';
 import {
-  LayoutDashboard, BookOpen, PenLine, ListTree, BarChart3, Receipt, Building2, Lock, Settings, FileSearch, Landmark,
+  LayoutDashboard, BookOpen, PenLine, ListTree, BarChart3, Receipt, Building2, Lock, Settings, FileSearch, Landmark, Boxes,
 } from 'lucide-react';
 
 type SeccionContable = RailSeccion & { permiso?: Permission };
@@ -50,6 +50,7 @@ const SECCIONES: SeccionContable[] = [
   },
   { tipo: 'item', id: 'contabilidad-cxp', href: '/contabilidad/cuentas-por-pagar', label: 'Cuentas por pagar', icon: Receipt },
   { tipo: 'item', id: 'contabilidad-activos', href: '/contabilidad/activos-fijos', label: 'Activos fijos', icon: Building2 },
+  { tipo: 'item', id: 'contabilidad-inventario', href: '/contabilidad/inventario', label: 'Valor del inventario', icon: Boxes },
   { tipo: 'item', id: 'contabilidad-cierre', href: '/contabilidad/cierre-ejercicio', label: 'Cierre de ejercicio', icon: Lock },
   { tipo: 'item', id: 'contabilidad-config', href: '/contabilidad/configuracion', label: 'Configuración', icon: Settings },
 ];

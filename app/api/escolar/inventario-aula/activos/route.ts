@@ -2,7 +2,9 @@
  * POST /api/escolar/inventario-aula/activos — agrega un activo desde la pantalla de
  * un aula, con el aula ya elegida. Es la misma creación de ficha de contabilidad:
  *   { espacioId, nombre, costoPesos, valorResidualPesos?, vidaUtilMeses?, fechaAdquisicion,
- *     cantidad?, categoria?, soloControl?, estado? }
+ *     cantidad?, categoria?, soloControl?, estado?, deprecAcumPesos? }
+ * La ficha se anota como «ya está en los libros»: no asienta la compra (para eso, Contabilidad › Activos fijos
+ * o Compras). `deprecAcumPesos` es lo que ya lleva depreciado en libros.
  * Requiere `administracion-escolar:configurar` (crea una ficha contable).
  */
 import { NextRequest, NextResponse } from 'next/server';
@@ -31,6 +33,12 @@ export async function POST(req: NextRequest) {
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: 400 });
     residual = r.cents;
   }
+  let deprecAcumCents = 0;
+  if (b.deprecAcumPesos !== undefined && b.deprecAcumPesos !== '' && b.deprecAcumPesos !== 0 && b.deprecAcumPesos !== '0') {
+    const d = parseMontoPesos(b.deprecAcumPesos, 'La depreciación acumulada');
+    if (!d.ok) return NextResponse.json({ error: d.error }, { status: 400 });
+    deprecAcumCents = d.cents;
+  }
   if (!fechaRazonable(b.fechaAdquisicion)) return NextResponse.json({ error: 'La fecha de adquisición no es válida' }, { status: 400 });
 
   try {
@@ -44,6 +52,7 @@ export async function POST(req: NextRequest) {
       categoria: typeof b.categoria === 'string' && b.categoria ? b.categoria : null,
       soloControl: b.soloControl === true,
       estado: typeof b.estado === 'string' ? b.estado : undefined,
+      deprecAcumCents,
     });
     invalidarPlanta(auth.teamId);
     logAudit({ teamId: auth.teamId, userId: auth.user.id, actor: auth.user.email, action: 'ESCOLAR_ESPACIO_CAMBIO', resource: `activo:${id}`, ip: getIp(req), meta: { cambio: 'activo-creado', espacioId } });

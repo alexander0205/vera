@@ -6,6 +6,7 @@ import { MODULOS_CONTABLES } from '@/lib/contabilidad/panorama';
 const CLAVES_PENDIENTES = [
   'ventas', 'saldos_iniciales', 'notas', 'cobros', 'anulaciones', 'compras', 'compras_anuladas', 'pagos_proveedor', 'gastos_caja', 'gastos_doc',
   'nomina_devengo', 'nomina_provision', 'nomina_pagados_sin_pago', 'nomina_pagos_sueldos', 'nomina_obligaciones',
+  'costos_venta', 'ajustes_inventario',
 ];
 
 describe('panorama contable', () => {

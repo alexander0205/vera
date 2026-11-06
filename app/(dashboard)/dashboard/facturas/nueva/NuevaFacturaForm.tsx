@@ -451,6 +451,8 @@ export default function NuevaFacturaForm({
   // fuera de emitedo): el usuario escribe el e-NCF real y se confía en él.
   const ncfModificadoValido = /^E\d{10,12}$/.test(ncfModificado.trim());
   const [razonModificacion, setRazonModificacion]   = useState<string>('');
+  // Nota de crédito: ¿el cliente devolvió la mercancía? Solo entonces el stock vuelve.
+  const [devuelveMercancia, setDevuelveMercancia]   = useState<boolean>(initialData?.devuelveMercancia ?? false);
 
   const setMotivoNota = (v: string) => {
     setMotivoNotaRaw(v);
@@ -1656,6 +1658,7 @@ export default function NuevaFacturaForm({
       tipoPago: parseInt(condicionPago, 10), fechaLimitePago, ncfModificado, items,
       codigoModificacion, fechaNcfModificado, razonModificacion,
       origenDocumentoId: padreNota?.id ?? null,
+      devuelveMercancia,
       tipoIngresos,
       retenciones, notas, terminosCondiciones, pieFactura, comentario,
       pagoRecibido, pagoLineas, pagoFecha,
@@ -2647,6 +2650,28 @@ export default function NuevaFacturaForm({
                   razonModificacion={razonModificacion} setRazonModificacion={setRazonModificacion}
                   today={today}
                 />
+              )}
+
+              {tipoEcf === '34' && items.some((i) => i.productoId && i.indicadorBienoServicio === '1') && (
+                <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', bgcolor: '#fff', p: 2 }}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={devuelveMercancia}
+                      onChange={(e) => setDevuelveMercancia(e.target.checked)}
+                      style={{ marginTop: 3, width: 16, height: 16 }}
+                    />
+                    <span>
+                      <Typography component="span" sx={{ display: 'block', fontWeight: 600, fontSize: '0.875rem', color: '#111827' }}>
+                        ¿El cliente devolvió la mercancía?
+                      </Typography>
+                      <Typography component="span" sx={{ display: 'block', fontSize: '0.8rem', color: '#6b7280' }}>
+                        Si lo marcas, las unidades de esta nota vuelven al inventario y el costo de ventas se revierte con el costo de la venta original.
+                        Si no, la nota solo corrige el dinero y el inventario no se mueve.
+                      </Typography>
+                    </span>
+                  </label>
+                </Box>
               )}
 
               {esGasto ? (

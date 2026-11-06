@@ -48,7 +48,7 @@ export interface FuenteContable {
 }
 
 export interface ModuloContable {
-  clave: 'facturacion' | 'compras' | 'caja' | 'nomina' | 'activos' | 'contabilidad';
+  clave: 'facturacion' | 'inventario' | 'compras' | 'caja' | 'nomina' | 'activos' | 'contabilidad';
   label: string;
   descripcion: string;
   fuentes: FuenteContable[];
@@ -69,6 +69,14 @@ export const MODULOS_CONTABLES: ModuloContable[] = [
       { origen: 'nota', label: 'Notas de crédito', pendientes: ['notas'] },
       { origen: 'pago', label: 'Cobros', pendientes: ['cobros'] },
       { origen: 'anulacion', label: 'Anulaciones', pendientes: ['anulaciones'] },
+    ],
+  },
+  {
+    clave: 'inventario', label: 'Inventario',
+    descripcion: 'Cada venta de mercancía lleva su costo al libro (Costo de ventas contra Inventario); las mermas, sobrantes y el stock inicial también.',
+    fuentes: [
+      { origen: 'costo_venta', label: 'Costo de ventas y sus devoluciones', pendientes: ['costos_venta'] },
+      { origen: 'ajuste_inventario', label: 'Mermas, sobrantes y stock inicial', pendientes: ['ajustes_inventario'] },
     ],
   },
   {
@@ -105,6 +113,7 @@ export const MODULOS_CONTABLES: ModuloContable[] = [
     descripcion: 'La depreciación de cada mes.',
     fuentes: [
       { origen: 'depreciacion', label: 'Depreciación', pendientes: [] },
+      { origen: 'activo_compra', label: 'Compra de activos fijos', pendientes: [] },
     ],
   },
   {

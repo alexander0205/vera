@@ -173,6 +173,8 @@ export const CATALOGO_BASE: CuentaBase[] = [
   { codigo: '5',    nombre: 'Costos',                      tipo: 'costo', imputable: false },
   { codigo: '51',   nombre: 'Costo de ventas',             tipo: 'costo', imputable: false },
   { codigo: '5101', nombre: 'Costo de mercancía vendida',  tipo: 'costo', imputable: true },
+  // Lo que se pierde (merma) o sobra (sobrante) al contar el inventario. Contrapartida de los ajustes de stock.
+  { codigo: '5102', nombre: 'Mermas y sobrantes de inventario', tipo: 'costo', imputable: true },
 
   // ─── 6 Gastos ───────────────────────────────────────────────────────────
   { codigo: '6',    nombre: 'Gastos',                      tipo: 'gasto', imputable: false },
@@ -456,4 +458,8 @@ export const CODIGO = {
   atencionEmpleados:  '6119',
   gananciaActivos:    '4105',
   perdidaActivos:     '6120',
+  inventario:         '1105',
+  costoVentas:        '5101',
+  mermasInventario:   '5102',
+  resultadosAcumulados: '3102',
 } as const;

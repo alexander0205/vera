@@ -19,7 +19,7 @@ import {
   PackagePlus, ArrowDownLeft, ArrowUpRight, Wrench, Package,
 } from 'lucide-react';
 import { DataTable, type ExportTabla, type DataTableColumn } from '@/components/data-table';
-import { fmtFechaRD } from '@/lib/utils/format';
+import { fmtFechaRD, fmtDOP } from '@/lib/utils/format';
 import { Autocomplete } from '@/app/(dashboard)/dashboard/facturas/nueva/components/Autocomplete';
 import { renderProductoOption } from '@/components/productos/ProductoOption';
 
@@ -32,6 +32,11 @@ interface Movimiento {
   stockDespues:   number;
   referenciaEncf: string | null;
   motivo:         string | null;
+  /** Costo promedio con que se valoró el movimiento (centavos); null = sin valorar. */
+  costoUnitarioCents: number | null;
+  costoTotalCents:    number | null;
+  /** Asiento de Contabilidad que lo registró, si ya existe. */
+  asientoId:          number | null;
   createdAt:      string;
   productoId:     number;
   productoNombre: string | null;
@@ -49,6 +54,8 @@ const EXPORTAR: ExportTabla<Movimiento> = {
     { titulo: 'Cantidad', valor: m => (m.esEntrada ? m.cantidad : -m.cantidad), tipo: 'numero', ancho: 0.7 },
     { titulo: 'Stock antes', valor: m => m.stockAntes, tipo: 'numero', ancho: 0.7 },
     { titulo: 'Stock después', valor: m => m.stockDespues, tipo: 'numero', ancho: 0.8 },
+    { titulo: 'Costo unitario', valor: m => (m.costoUnitarioCents == null ? null : m.costoUnitarioCents / 100), tipo: 'numero', ancho: 0.8 },
+    { titulo: 'Valor', valor: m => (m.costoTotalCents == null ? null : m.costoTotalCents / 100), tipo: 'numero', ancho: 0.8 },
     { titulo: 'Referencia', valor: m => m.referenciaEncf ?? m.motivo, ancho: 1.4 },
     { titulo: 'Usuario', valor: m => m.usuarioNombre, ancho: 1 },
   ],
@@ -314,6 +321,26 @@ export function InventarioPageClient({ almacenId }: { almacenId?: number | null 
       ),
     },
     {
+      id: 'costo',
+      header: 'Costo unitario',
+      align: 'right',
+      visibleAt: 'md',
+      render: (m) => m.costoUnitarioCents == null
+        ? <Typography component="span" sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>—</Typography>
+        : <Typography component="span" sx={{ fontSize: '0.875rem', color: '#374151', whiteSpace: 'nowrap' }}>{fmtDOP(m.costoUnitarioCents)}</Typography>,
+    },
+    {
+      id: 'valor',
+      header: 'Valor',
+      align: 'right',
+      visibleAt: 'md',
+      render: (m) => m.costoTotalCents == null
+        ? <Typography component="span" sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>—</Typography>
+        : <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 500, color: m.esEntrada ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
+            {m.esEntrada ? '+' : '-'}{fmtDOP(m.costoTotalCents)}
+          </Typography>,
+    },
+    {
       id: 'referencia',
       header: 'Referencia',
       visibleAt: 'lg',
@@ -358,7 +385,7 @@ export function InventarioPageClient({ almacenId }: { almacenId?: number | null 
         loading={loading}
         columns={columns}
         title="Movimientos de inventario"
-        description="Entradas, salidas y ajustes de stock"
+        description="El stock sube con las compras de mercancía (Compras) y baja con cada venta o factura. Cada movimiento se valora al costo promedio del momento (columna Valor); de ahí salen el costo de ventas y las mermas en Contabilidad. Aquí puedes corregir el conteo con un ajuste."
         filters={[
           {
             type:        'select',
@@ -401,7 +428,7 @@ export function InventarioPageClient({ almacenId }: { almacenId?: number | null 
             startIcon={<PackagePlus style={{ width: 16, height: 16 }} />}
             onClick={() => { setShowAjuste(true); setOpError(null); setAjuste(EMPTY_AJUSTE); }}
           >
-            Nuevo ajuste
+            Nuevo ajuste de stock
           </Button>
         }
       />
@@ -411,11 +438,20 @@ export function InventarioPageClient({ almacenId }: { almacenId?: number | null 
         onClose={() => setShowAjuste(false)}
         slotProps={{ paper: { sx: { width: '100%', maxWidth: 448 } } as object }}
       >
-        <DialogTitle>Registrar movimiento de inventario</DialogTitle>
+        <DialogTitle>Nuevo ajuste de stock</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           {opError && (
             <Alert severity="error" sx={{ borderRadius: '8px' }}>{opError}</Alert>
           )}
+          <Alert
+            severity="info"
+            sx={{ borderRadius: '8px' }}
+            action={<Button color="inherit" size="small" component="a" href="/dashboard/compras">Ir a Compras</Button>}
+          >
+            Las compras de mercancía se registran en Compras: ahí salen juntos el stock, el costo y el asiento.
+            Este ajuste mueve unidades y las valora al costo promedio actual; si usas Contabilidad,
+            la merma, el sobrante y el stock inicial se asientan solos contra Inventario (1105).
+          </Alert>
 
           <Box>
             <Typography component="label" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
@@ -426,11 +462,18 @@ export function InventarioPageClient({ almacenId }: { almacenId?: number | null 
                 value={ajuste.tipo}
                 onChange={(e) => setAjuste(a => ({ ...a, tipo: e.target.value as TipoAjuste }))}
               >
-                <MenuItem value="STOCK_INICIAL">Stock inicial (primer registro)</MenuItem>
-                <MenuItem value="ENTRADA">Entrada (compra / reabastecimiento)</MenuItem>
+                <MenuItem value="STOCK_INICIAL">Stock inicial (mercancía que ya tenías)</MenuItem>
+                <MenuItem value="ENTRADA">Entrada sin factura (regalo, devolución, traslado)</MenuItem>
                 <MenuItem value="AJUSTE_ENTRADA">Ajuste entrada (corrección positiva)</MenuItem>
                 <MenuItem value="AJUSTE_SALIDA">Ajuste salida (merma / pérdida)</MenuItem>
               </Select>
+              <Typography sx={{ mt: 0.75, fontSize: '0.75rem', color: '#6b7280' }}>
+                {ajuste.tipo === 'STOCK_INICIAL'
+                  ? 'Stock inicial: cuenta como apertura. En Contabilidad entra a Inventario contra Resultados acumulados (3102). Si tu mercancía ya existía y el libro no la tiene, también puedes cuadrarla de una vez en Contabilidad > Valor del inventario.'
+                  : ajuste.tipo === 'AJUSTE_SALIDA'
+                    ? 'Merma: sale de Inventario hacia Mermas y sobrantes (5102), al costo promedio.'
+                    : 'Sobrante o entrada sin factura: entra a Inventario contra Mermas y sobrantes (5102), al costo promedio. Si compraste, usa Compras.'}
+              </Typography>
             </FormControl>
           </Box>
 

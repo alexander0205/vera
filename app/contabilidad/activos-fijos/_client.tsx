@@ -14,6 +14,7 @@ import { RangoFechas } from '@/components/reportes/rango-fechas';
 import { ExportarListado } from '@/components/reportes/exportar-listado';
 import { armarEnvioTabla, type ExportTabla } from '@/lib/export/tabla';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Plus, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -48,6 +49,9 @@ interface ActivoFijo {
   categoria: string | null;
   /** Abierta desde una compra: falta confirmar categoría y vida útil. */
   enRevision: boolean;
+  asientoCompraId?: number | null;
+  compraId?: number | null;
+  proveedor?: string | null;
   costoVigenteCents: number;
   acumuladaVigenteCents: number;
   /** Aula donde está, estado y «solo control» (migración 0236). */
@@ -59,6 +63,9 @@ interface ActivoFijo {
 interface EspacioOpcion { id: number; nombre: string }
 
 interface CuentaCobro { id: number; codigo: string; nombre: string }
+
+/** Vida útil que se sugiere por categoría (meses): solo una guía, quien confirma la decide. */
+const VIDA_SUGERIDA: Record<string, number> = { edificios: 480, mobiliario: 120, transporte: 60, computo: 36, otros: 60 };
 
 const fmtDOP = (cents: number) =>
   `RD$${(cents / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -88,7 +95,7 @@ const EXPORTAR: ExportTabla<ActivoFijo> = {
   tachada: a => !a.activa,
   columnas: [
     { titulo: 'Activo', valor: a => a.nombre, sub: a => (a.activa ? (a.ubicacion ?? null) : 'Dada de baja'), ancho: 2 },
-    { titulo: 'Cant.', valor: a => (a.cantidad > 1 ? `${a.cantidadVigente} de ${a.cantidad}` : String(a.cantidadVigente)), ancho: 0.6 },
+    { titulo: 'Cant.', valor: a => (a.cantidadVigente !== a.cantidad ? `${a.cantidadVigente} de ${a.cantidad}` : String(a.cantidad)), ancho: 0.6 },
     { titulo: 'Categoría', valor: a => categoriaActivo(a.categoria)?.label ?? '—', ancho: 1.2 },
     { titulo: 'Adquirido', valor: a => fechaCorta(a.fechaAdquisicion), ancho: 0.8 },
     { titulo: 'Vida útil', valor: a => vidaLegible(a.vidaUtilMeses), sub: a => `${a.cuotasHechas} de ${a.vidaUtilMeses} cuotas`, ancho: 1.1 },
@@ -101,8 +108,15 @@ const EXPORTAR: ExportTabla<ActivoFijo> = {
 const CARD = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' } as const;
 
 export function ActivosFijosClient({
-  activos, hoy, puedeGestionar, cuentasCobro = [], espacios = [],
-}: { activos: ActivoFijo[]; hoy: string; puedeGestionar: boolean; cuentasCobro?: CuentaCobro[]; espacios?: EspacioOpcion[] }) {
+  activos, hoy, puedeGestionar, cuentasCobro = [], espacios = [], contabilidadActiva = true, cuentasActivo = [], nombresCuenta = {},
+}: {
+  activos: ActivoFijo[]; hoy: string; puedeGestionar: boolean; cuentasCobro?: CuentaCobro[]; espacios?: EspacioOpcion[];
+  /** Con la contabilidad apagada no se asienta nada: no se pregunta cómo se pagó. */
+  contabilidadActiva?: boolean;
+  cuentasActivo?: CuentaCobro[];
+  /** Nombre de cada cuenta por su código (para decir «Mobiliario y equipo (1205)»). */
+  nombresCuenta?: Record<string, string>;
+}) {
   const router = useRouter();
   // Rango por fecha de adquisición.
   const [desde, setDesde] = useState('');
@@ -111,6 +125,8 @@ export function ActivosFijosClient({
     const f = a.fechaAdquisicion.slice(0, 10);
     return (!desde || f >= desde) && (!hasta || f <= hasta);
   }), [activos, desde, hasta]);
+  // Las fichas de solo control no están en las cuentas 12xx: no entran a los totales.
+  const enBalance = useMemo(() => visibles.filter(a => !a.soloControl), [visibles]);
   const filtroTexto = desde && hasta ? `Adquiridos del ${fechaCorta(desde)} al ${fechaCorta(hasta)}`
     : desde ? `Adquiridos desde el ${fechaCorta(desde)}` : hasta ? `Adquiridos hasta el ${fechaCorta(hasta)}` : 'Todas las fechas';
 
@@ -126,6 +142,10 @@ export function ActivosFijosClient({
   const [categoria, setCategoria] = useState('');
   const [espacioId, setEspacioId] = useState('');
   const [soloControl, setSoloControl] = useState(false);
+  // Cómo se pagó: '' = sin elegir, 'ninguno' = ya está en los libros, o el id de la caja/banco.
+  const [pago, setPago] = useState('');
+  const [libroCuenta, setLibroCuenta] = useState('');
+  const [deprecAcum, setDeprecAcum] = useState('');
   const [guardando, setGuardando] = useState(false);
   // Baja y edición de una ficha
   const [baja, setBaja] = useState<ActivoFijo | null>(null);
@@ -140,6 +160,11 @@ export function ActivosFijosClient({
   const residualCents = residual.trim() === '' ? 0 : aCentavos(residual);
   const cat = categoriaActivo(categoria);
   const sinDepreciar = cat?.deprecia === false || soloControl;
+  const cuentaDeLaCategoria = cat && cat.clave !== 'otros'
+    ? `${nombresCuenta[cat.cuentaActivo] ?? cat.label} (${cat.cuentaActivo})`
+    : `${nombresCuenta['1201'] ?? 'Activos fijos'} (1201)`;
+  const cuentaPagoElegida = cuentasCobro.find((c) => String(c.id) === pago) ?? null;
+  const yaPasoUnMes = fecha !== '' && fecha.slice(0, 7) < hoy.slice(0, 7);
   const vidaMeses = sinDepreciar ? 1 : parseInt(vida, 10);
   const cantidadN = parseInt(cantidad, 10);
   const cuotaMensual = useMemo(() => {
@@ -152,7 +177,7 @@ export function ActivosFijosClient({
   const puedeGuardar =
     nombre.trim() !== '' && costoCents > 0 && residualCents >= 0 &&
     residualCents < costoCents && Number.isFinite(vidaMeses) && vidaMeses > 0 &&
-    Number.isInteger(cantidadN) && cantidadN >= 1 && fecha !== '' && !guardando;
+    Number.isInteger(cantidadN) && cantidadN >= 1 && fecha !== '' && (soloControl || !contabilidadActiva || (pago !== '' && pago !== 'compras')) && fecha <= hoy && !guardando;
 
   async function registrar() {
     setErrorAlta(null);
@@ -172,6 +197,10 @@ export function ActivosFijosClient({
           categoria: soloControl ? null : categoria || null,
           soloControl,
           espacioId: espacioId ? Number(espacioId) : null,
+          cuentaPagoId: contabilidadActiva && !soloControl && pago !== '' && pago !== 'ninguno' && pago !== 'compras' ? Number(pago) : null,
+          libros: contabilidadActiva && !soloControl && pago === 'ninguno'
+            ? { cuentaActivoId: libroCuenta ? Number(libroCuenta) : null, deprecAcumCents: sinDepreciar || deprecAcum.trim() === '' ? 0 : aCentavos(deprecAcum) }
+            : null,
         }),
       });
       const data = await res.json();
@@ -180,7 +209,13 @@ export function ActivosFijosClient({
         setGuardando(false);
         return;
       }
-      setNombre(''); setCosto(''); setResidual(''); setVida(''); setFecha(hoy); setCantidad('1'); setUbicacion(''); setCategoria(''); setEspacioId(''); setSoloControl(false);
+      setAviso({
+        tipo: 'success',
+        texto: cuentaPagoElegida && contabilidadActiva && !soloControl
+          ? `Activo guardado. Se asentó la compra por ${fmtDOP(costoCents)} desde ${cuentaPagoElegida.codigo} ${cuentaPagoElegida.nombre}.`
+          : 'Activo guardado.',
+      });
+      setNombre(''); setCosto(''); setResidual(''); setVida(''); setFecha(hoy); setCantidad('1'); setUbicacion(''); setCategoria(''); setEspacioId(''); setSoloControl(false); setPago(''); setLibroCuenta(''); setDeprecAcum('');
       setAbierto(false); setGuardando(false);
       router.refresh();
     } catch {
@@ -241,12 +276,18 @@ export function ActivosFijosClient({
             startIcon={<RefreshCw style={{ width: 16, height: 16 }} />}
             sx={{ color: '#2a45c4', borderColor: '#c7d2fc' }}
           >
-            {generando ? 'Generando…' : 'Generar depreciaciones'}
+            {generando ? 'Poniendo al día…' : 'Poner al día ahora'}
           </Button>
         </Box>
       )}
       </Box>
       </Box>
+
+      {puedeGestionar && activos.length > 0 && (
+        <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: -1 }}>
+          La depreciación se hace sola; la cuota de cada mes se asienta el día 1. «Poner al día ahora» genera ya las cuotas que falten (por ejemplo, si registraste un activo con fecha vieja).
+        </Typography>
+      )}
 
       {aviso && (
         <Alert
@@ -263,57 +304,102 @@ export function ActivosFijosClient({
       {puedeGestionar && abierto && (
         <Box sx={{ ...CARD, p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, color: '#111827' }}>Nuevo activo fijo</Typography>
+          {!soloControl && contabilidadActiva && (
+            <>
+              <Alert severity="info" sx={{ maxWidth: 720 }}>
+                Si lo compraste en <Link href="/dashboard/compras/registrar" style={{ fontWeight: 600 }}>Compras</Link> con
+                «Compra de activo fijo», ya está en la lista como «Por confirmar»: no lo registres otra vez.
+              </Alert>
+              <TextField
+                label="¿Cómo se pagó?" select required value={pago} onChange={(e) => setPago(e.target.value)} sx={{ maxWidth: 620, width: '100%' }}
+                helperText={pago === ''
+                  ? 'Elige una opción para poder guardar.'
+                  : pago === 'compras'
+                    ? 'Regístrala en Compras con la categoría «Compra de activo fijo»: así entra al 606 con su NCF. Al guardarla, el activo aparece aquí como «Por confirmar».'
+                    : pago === 'ninguno'
+                      ? 'No se asienta nada: el costo ya está en tus libros.'
+                      : `Se asienta la compra: Debe ${cuentaDeLaCategoria} · Haber ${cuentaPagoElegida ? `${cuentaPagoElegida.nombre} (${cuentaPagoElegida.codigo})` : 'la cuenta elegida'}.`}
+              >
+                {cuentasCobro.map((c) => <MenuItem key={c.id} value={String(c.id)} sx={{ whiteSpace: 'normal' }}>Pagué de contado sin NCF, desde {c.codigo} {c.nombre}</MenuItem>)}
+                <MenuItem value="compras" sx={{ whiteSpace: 'normal' }}>Tengo factura del proveedor (con NCF o a crédito): registrarla en Compras</MenuItem>
+                <MenuItem value="ninguno" sx={{ whiteSpace: 'normal' }}>Ya está en mis libros (saldo inicial o compra ya asentada)</MenuItem>
+              </TextField>
+              {pago === 'compras' && (
+                <Box><Button component={Link} href="/dashboard/compras/registrar" variant="contained" sx={{ bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>Ir a registrar la compra en Compras</Button></Box>
+              )}
+              {pago === 'ninguno' && (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+                  <TextField
+                    label="¿En qué cuenta está?" select value={libroCuenta} onChange={(e) => setLibroCuenta(e.target.value)} sx={{ width: { xs: '100%', sm: 340 } }}
+                    helperText="Donde está su costo en tus libros."
+                    slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+                  >
+                    <MenuItem value="">La de su categoría: {cuentaDeLaCategoria}</MenuItem>
+                    {cuentasActivo.map((c) => <MenuItem key={c.id} value={String(c.id)}>{c.codigo} {c.nombre}</MenuItem>)}
+                  </TextField>
+                  {!sinDepreciar && yaPasoUnMes && (
+                    <TextField
+                      label="Depreciación acumulada a hoy (RD$)" type="number" value={deprecAcum} onChange={(e) => setDeprecAcum(e.target.value)}
+                      placeholder="0.00" slotProps={{ htmlInput: { min: 0, step: '0.01' } }} sx={{ width: { xs: '100%', sm: 280 } }}
+                      helperText="Lo que ya llevas depreciado en tus libros. Con 0, Zero empieza a depreciar este mes."
+                    />
+                  )}
+                </Box>
+              )}
+            </>
+          )}
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
             {!soloControl && <TextField
               label="Categoría" select value={categoria} onChange={(e) => setCategoria(e.target.value)}
               helperText={cat ? `Cuenta ${cat.cuentaActivo}${cat.deprecia ? ` · depreciación ${cat.cuentaDeprecAcum}` : ' · no se deprecia'}` : 'Decide su cuenta contable'}
-              sx={{ width: 260 }}
+              sx={{ width: { xs: '100%', sm: 260 } }}
             >
               <MenuItem value="">Sin categoría (cuenta general)</MenuItem>
               {CATEGORIAS_ACTIVO.map((c) => <MenuItem key={c.clave} value={c.clave}>{c.label}</MenuItem>)}
             </TextField>}
             {espacios.length > 0 && (
-              <TextField label="Aula" select value={espacioId} onChange={(e) => setEspacioId(e.target.value)} helperText="Opcional" sx={{ width: 200 }}>
+              <TextField label="Aula" select value={espacioId} onChange={(e) => setEspacioId(e.target.value)} helperText="Opcional" sx={{ width: { xs: '100%', sm: 200 } }}>
                 <MenuItem value="">Sin aula</MenuItem>
                 {espacios.map((e) => <MenuItem key={e.id} value={String(e.id)}>{e.nombre}</MenuItem>)}
               </TextField>
             )}
             <TextField
               label="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)}
-              placeholder="Ej.: Edificio principal" sx={{ flex: 1, minWidth: 240 }}
+              placeholder="Ej.: Edificio principal" sx={{ flex: 1, minWidth: { xs: '100%', sm: 240 } }}
             />
             <TextField
               label="Cantidad" type="number" value={cantidad} onChange={(e) => setCantidad(e.target.value)}
               helperText="Unidades iguales en esta ficha"
-              slotProps={{ htmlInput: { min: 1, step: '1' } }} sx={{ width: 130 }}
+              slotProps={{ htmlInput: { min: 1, step: '1' } }} sx={{ width: { xs: '100%', sm: 130 } }}
             />
             <TextField
               label="Ubicación" value={ubicacion} onChange={(e) => setUbicacion(e.target.value)}
-              placeholder="Ej.: Aula 3, Oficina" slotProps={{ htmlInput: { maxLength: 160 } }} sx={{ width: 200 }}
+              placeholder="Ej.: Aula 3, Oficina" slotProps={{ htmlInput: { maxLength: 160 } }} sx={{ width: { xs: '100%', sm: 200 } }}
             />
             <TextField
               label="Fecha de adquisición" type="date" value={fecha}
               onChange={(e) => setFecha(e.target.value)}
-              slotProps={{ inputLabel: { shrink: true } }} sx={{ width: 190 }}
+              slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: hoy } }} sx={{ width: { xs: '100%', sm: 190 } }}
+              error={fecha > hoy} helperText={fecha > hoy ? 'No puede ser futura' : undefined}
             />
           </Box>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
             <TextField
               label={cantidadN > 1 ? 'Costo total (RD$)' : 'Costo (RD$)'} type="number" value={costo}
               onChange={(e) => setCosto(e.target.value)} placeholder="0.00"
-              slotProps={{ htmlInput: { min: 0, step: '0.01' } }} sx={{ width: 200 }}
+              slotProps={{ htmlInput: { min: 0, step: '0.01' } }} sx={{ width: { xs: '100%', sm: 200 } }}
             />
             <TextField
               label="Valor residual (RD$)" type="number" value={residual}
               onChange={(e) => setResidual(e.target.value)} placeholder="0.00"
               helperText="Opcional. Lo que valdrá al final."
-              slotProps={{ htmlInput: { min: 0, step: '0.01' } }} sx={{ width: 200 }}
+              slotProps={{ htmlInput: { min: 0, step: '0.01' } }} sx={{ width: { xs: '100%', sm: 200 } }}
             />
             {!sinDepreciar && <TextField
               label="Vida útil (meses)" type="number" value={vida}
               onChange={(e) => setVida(e.target.value)} placeholder="Ej.: 240"
               helperText={Number.isFinite(vidaMeses) && vidaMeses > 0 ? vidaLegible(vidaMeses) : 'En meses'}
-              slotProps={{ htmlInput: { min: 1, step: '1' } }} sx={{ width: 170 }}
+              slotProps={{ htmlInput: { min: 1, step: '1' } }} sx={{ width: { xs: '100%', sm: 170 } }}
             />}
           </Box>
 
@@ -337,12 +423,14 @@ export function ActivosFijosClient({
           )}
 
           <Box sx={{ display: 'flex', gap: 1.5 }}>
-            <Button
-              variant="contained" onClick={registrar} disabled={!puedeGuardar}
-              sx={{ bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
-            >
-              {guardando ? 'Guardando…' : 'Guardar activo'}
-            </Button>
+            {!(pago === 'compras' && !soloControl && contabilidadActiva) && (
+              <Button
+                variant="contained" onClick={registrar} disabled={!puedeGuardar}
+                sx={{ bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
+              >
+                {guardando ? 'Guardando…' : 'Guardar activo'}
+              </Button>
+            )}
             <Button color="inherit" onClick={() => setAbierto(false)} sx={{ color: '#6b7280' }}>
               Cancelar
             </Button>
@@ -352,13 +440,23 @@ export function ActivosFijosClient({
 
       {/* Listado */}
       {visibles.length === 0 ? (
-        <Typography sx={{ ...CARD, px: 2, py: 5, textAlign: 'center', fontSize: '0.875rem', color: '#6b7280' }}>
-          {activos.length ? 'Ningún activo adquirido en estas fechas.' : 'Todavía no hay activos fijos registrados.'}
-        </Typography>
+        <Box sx={{ ...CARD, px: 2, py: 5, textAlign: 'center', fontSize: '0.875rem', color: '#6b7280', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
+          {activos.length ? 'Ningún activo adquirido en estas fechas.' : (
+            <>
+              <span>Todavía no hay activos fijos registrados.</span>
+              {puedeGestionar && (
+                <Button variant="contained" onClick={() => setAbierto(true)} startIcon={<Plus style={{ width: 16, height: 16 }} />}
+                  sx={{ bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
+                  Registrar mi primer activo
+                </Button>
+              )}
+            </>
+          )}
+        </Box>
       ) : (
         <Box sx={{ ...CARD, overflow: 'hidden' }}>
           <Box sx={{ overflowX: 'auto' }}>
-            <Box component="table" sx={{ width: '100%', minWidth: 820, borderCollapse: 'collapse' }}>
+            <Box component="table" sx={{ width: '100%', minWidth: 980, borderCollapse: 'collapse' }}>
               <Box component="thead" sx={{ bgcolor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
                 <Box component="tr">
                   <Box component="th" sx={{ ...th, textAlign: 'left' }}>Activo</Box>
@@ -394,26 +492,52 @@ export function ActivosFijosClient({
                       )}
                     </Box>
                     <Box component="td" sx={celdaMonto}>
-                      {a.cantidad > 1 ? `${a.cantidadVigente} de ${a.cantidad}` : a.cantidadVigente}
+                      {a.cantidadVigente !== a.cantidad ? `${a.cantidadVigente} de ${a.cantidad}` : a.cantidad}
                     </Box>
-                    <Box component="td" sx={celda}>{a.fechaAdquisicion}</Box>
+                    <Box component="td" sx={celda}>{fechaCorta(a.fechaAdquisicion)}</Box>
                     <Box component="td" sx={celda}>
-                      {vidaLegible(a.vidaUtilMeses)}
-                      <Typography component="span" sx={{ display: 'block', fontSize: '0.6875rem', color: '#9ca3af' }}>
-                        {a.cuotasHechas} de {a.vidaUtilMeses} cuotas
-                      </Typography>
+                      {a.enRevision || a.soloControl ? '—' : (
+                        <>
+                          {vidaLegible(a.vidaUtilMeses)}
+                          <Typography component="span" sx={{ display: 'block', fontSize: '0.6875rem', color: '#9ca3af' }}>
+                            {a.cuotasHechas} de {a.vidaUtilMeses} cuotas
+                          </Typography>
+                        </>
+                      )}
                     </Box>
-                    <Box component="td" sx={celdaMonto}>{fmtDOP(a.costoVigenteCents)}</Box>
-                    <Box component="td" sx={celdaMonto}>{fmtDOP(a.acumuladaVigenteCents)}</Box>
-                    <Box component="td" sx={{ ...celdaMonto, fontWeight: 600, color: '#111827' }}>{fmtDOP(a.valorLibrosCents)}</Box>
+                    <Box component="td" sx={celdaMonto}>{a.soloControl ? '—' : fmtDOP(a.costoVigenteCents)}</Box>
+                    <Box component="td" sx={celdaMonto}>{a.soloControl ? '—' : fmtDOP(a.acumuladaVigenteCents)}</Box>
+                    <Box component="td" sx={{ ...celdaMonto, fontWeight: 600, color: '#111827' }}>{a.soloControl ? '—' : fmtDOP(a.valorLibrosCents)}</Box>
                     {puedeGestionar && (
                       <Box component="td" sx={{ ...celda, whiteSpace: 'nowrap' }}>
                         <Button size="small" onClick={() => setEdita(a)}>{a.enRevision ? 'Confirmar' : 'Editar'}</Button>
+                        {a.asientoCompraId == null && a.compraId != null && (
+                          <Button size="small" component={Link} href={`/dashboard/compras/local/${a.compraId}`}>Ver compra</Button>
+                        )}
+                        {a.asientoCompraId != null && (
+                          <Button size="small" component={Link} href={`/contabilidad/libro-diario?origenTipo=activo_compra&desde=${a.fechaAdquisicion}&hasta=${a.fechaAdquisicion}`}>Ver asiento</Button>
+                        )}
                         {a.activa && !a.enRevision && <Button size="small" color="error" onClick={() => setBaja(a)}>Dar de baja</Button>}
                       </Box>
                     )}
                   </Box>
                 ))}
+              </Box>
+              <Box component="tfoot" sx={{ bgcolor: '#f9fafb', borderTop: '1px solid #e5e7eb' }}>
+                <Box component="tr">
+                  <Box component="td" colSpan={4} sx={{ ...celda, fontWeight: 600 }}>
+                    {desde || hasta ? 'Total (fechas filtradas)' : 'Total'}
+                    {visibles.some((a) => a.soloControl) && (
+                      <Typography component="span" sx={{ display: 'block', fontSize: '0.6875rem', fontWeight: 400, color: '#9ca3af' }}>
+                        No suma las fichas de solo control: su costo fue al gasto, no está en el balance.
+                      </Typography>
+                    )}
+                  </Box>
+                  <Box component="td" sx={{ ...celdaMonto, fontWeight: 600 }}>{fmtDOP(enBalance.reduce((t, a) => t + a.costoVigenteCents, 0))}</Box>
+                  <Box component="td" sx={{ ...celdaMonto, fontWeight: 600 }}>{fmtDOP(enBalance.reduce((t, a) => t + a.acumuladaVigenteCents, 0))}</Box>
+                  <Box component="td" sx={{ ...celdaMonto, fontWeight: 700, color: '#111827' }}>{fmtDOP(enBalance.reduce((t, a) => t + a.valorLibrosCents, 0))}</Box>
+                  {puedeGestionar && <Box component="td" />}
+                </Box>
               </Box>
             </Box>
           </Box>
@@ -469,8 +593,8 @@ function BajaDialogo({ activo, hoy, onCerrar, onListo }: {
             slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: hoy } }} sx={{ width: 190 }} />
         </Box>
         <Alert severity="warning">
-          La baja retira el activo: lo que valía en libros se va a pérdida. Si lo vendiste, emite la factura en Facturación
-          y consulta a tu contable.
+          La baja retira el activo: lo que valía en libros se va a pérdida. ¿Lo vendiste? Emite la factura en Facturación
+          y dale de baja aquí; tu contador ajusta la ganancia o pérdida. (La venta de activos aún no está.)
         </Alert>
         <TextField label="Motivo (opcional)" value={motivo} onChange={(e) => setMotivo(e.target.value)} slotProps={{ htmlInput: { maxLength: 300 } }} />
         {valida && (
@@ -500,7 +624,8 @@ function EditarDialogo({ activo, espacios, onCerrar, onListo }: { activo: Activo
   const [nombre, setNombre] = useState(activo.nombre);
   const [ubicacion, setUbicacion] = useState(activo.ubicacion ?? '');
   const [categoria, setCategoria] = useState(activo.categoria ?? '');
-  const [vida, setVida] = useState(String(activo.vidaUtilMeses));
+  // Una ficha abierta desde una compra trae 60 meses de relleno: se deja vacía para que quien confirma la decida.
+  const [vida, setVida] = useState(activo.enRevision ? '' : String(activo.vidaUtilMeses));
   const [residual, setResidual] = useState((activo.valorResidualCents / 100).toFixed(2));
   const [espacioId, setEspacioId] = useState(activo.espacioId != null ? String(activo.espacioId) : '');
   const [estado, setEstado] = useState(activo.estado ?? 'bien');
@@ -508,6 +633,13 @@ function EditarDialogo({ activo, espacios, onCerrar, onListo }: { activo: Activo
   const [enviando, setEnviando] = useState(false);
   const soloControl = activo.soloControl === true;
   const sinDepreciar = categoriaActivo(categoria)?.deprecia === false || soloControl;
+
+  // Al elegir categoría en una ficha por confirmar, la vida útil sugerida se pone sola (se puede cambiar).
+  function cambiarCategoria(nueva: string) {
+    const antes = VIDA_SUGERIDA[categoria || 'otros'];
+    setCategoria(nueva);
+    if (activo.enRevision && nueva && (vida === '' || vida === String(antes))) setVida(String(VIDA_SUGERIDA[nueva] ?? ''));
+  }
 
   async function enviar() {
     setError(null); setEnviando(true);
@@ -535,11 +667,16 @@ function EditarDialogo({ activo, espacios, onCerrar, onListo }: { activo: Activo
       <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>{activo.enRevision ? 'Confirmar activo' : 'Editar activo'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
         {activo.enRevision && (
-          <Alert severity="info">Esta ficha se abrió sola desde una compra. Elige su categoría y su vida útil: hasta confirmarla no se deprecia.</Alert>
+          <Alert severity="info">
+            Esta ficha se abrió sola desde una compra. Elige su categoría y su vida útil: hasta confirmarla no se deprecia.
+            <Box component="span" sx={{ display: 'block', mt: 0.5, fontWeight: 600 }}>
+              Costo {fmtDOP(activo.costoCents)} · comprado el {fechaCorta(activo.fechaAdquisicion)}{activo.proveedor ? ` · ${activo.proveedor.replace(/ \(prueba[^)]*\)/i, '')}` : ''}
+            </Box>
+          </Alert>
         )}
         <TextField label="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} />
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-          <TextField label="Categoría" select value={categoria} onChange={(e) => setCategoria(e.target.value)} sx={{ minWidth: 260, flex: 1 }}>
+          <TextField label="Categoría" select value={categoria} onChange={(e) => cambiarCategoria(e.target.value)} sx={{ minWidth: 260, flex: 1 }}>
             <MenuItem value="">Sin categoría (cuenta general)</MenuItem>
             {CATEGORIAS_ACTIVO.map((c) => <MenuItem key={c.clave} value={c.clave}>{c.label}</MenuItem>)}
           </TextField>
@@ -562,17 +699,18 @@ function EditarDialogo({ activo, espacios, onCerrar, onListo }: { activo: Activo
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
           {!sinDepreciar && (
             <TextField label="Vida útil (meses)" type="number" value={vida} onChange={(e) => setVida(e.target.value)}
-              helperText={Number.isFinite(parseInt(vida, 10)) && parseInt(vida, 10) > 0 ? vidaLegible(parseInt(vida, 10)) : 'En meses'}
-              slotProps={{ htmlInput: { min: 1, step: '1' } }} sx={{ width: 180 }} />
+              helperText={(Number.isFinite(parseInt(vida, 10)) && parseInt(vida, 10) > 0 ? `${vidaLegible(parseInt(vida, 10))}. ` : 'En meses. ')
+                + (activo.enRevision && categoria && VIDA_SUGERIDA[categoria] ? `Sugerido para esta categoría: ${VIDA_SUGERIDA[categoria]} meses (${vidaLegible(VIDA_SUGERIDA[categoria])}).` : '')}
+              slotProps={{ htmlInput: { min: 1, step: '1' } }} sx={{ width: 240 }} />
           )}
           <TextField label="Valor residual (RD$)" type="number" value={residual} onChange={(e) => setResidual(e.target.value)}
-            helperText="Solo cambia las cuotas que faltan" slotProps={{ htmlInput: { min: 0, step: '0.01' } }} sx={{ width: 210 }} />
+            helperText={activo.enRevision ? 'Opcional. Lo que valdrá al final.' : 'Solo cambia las cuotas que faltan'} slotProps={{ htmlInput: { min: 0, step: '0.01' } }} sx={{ width: 210 }} />
         </Box>
         {error && <Alert severity="error">{error}</Alert>}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button color="inherit" onClick={onCerrar} disabled={enviando}>Cancelar</Button>
-        <Button variant="contained" onClick={enviar} disabled={enviando || nombre.trim() === ''} sx={{ bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
+        <Button variant="contained" onClick={enviar} disabled={enviando || nombre.trim() === '' || (!sinDepreciar && !(parseInt(vida, 10) > 0))} sx={{ bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
           {enviando ? 'Guardando…' : activo.enRevision ? 'Confirmar' : 'Guardar'}
         </Button>
       </DialogActions>

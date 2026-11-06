@@ -9,6 +9,7 @@
 import { db } from '@/lib/db/drizzle';
 import { products, inventoryMovements } from '@/lib/db/schema';
 import { and, eq, inArray, sql } from 'drizzle-orm';
+import { valorDeDevolucion, type MovimientoValorado } from './costo';
 
 export interface ItemParaDevolucion {
   productoId?:             number | null;
@@ -143,8 +144,28 @@ export async function restaurarInventario(
         `);
       }
 
+      // Costo con que salió la venta de ESTE documento: la devolución lo revierte
+      // tal cual (no al costo de hoy). Sin venta valorada, no hay costo que revertir.
+      const idsSql = sql.join(ids.map((i) => sql`${i}`), sql`, `);
+      const previas = (await tx.execute(sql`
+        SELECT producto_id AS "productoId", variant_id AS "variantId", tipo, cantidad,
+               costo_total_cents AS "costoTotalCents"
+        FROM inventory_movements
+        WHERE team_id = ${teamId} AND referencia_id = ${ecfDocumentId}
+          AND producto_id IN (${idsSql}) AND tipo IN ('VENTA', 'DEVOLUCION')
+      `)) as unknown as { productoId: number; variantId: number | null; tipo: string; cantidad: number; costoTotalCents: unknown }[];
+      const fotoDe = (c: { productoId: number; variantId: number | null; cantidad: number }) => {
+        const delProducto = previas.filter((m) => m.productoId === c.productoId);
+        const exactas = delProducto.filter((m) => (m.variantId ?? null) === c.variantId);
+        const base: MovimientoValorado[] = (exactas.length > 0 ? exactas : delProducto)
+          .map((m) => ({ tipo: m.tipo, cantidad: Number(m.cantidad), costoTotalCents: m.costoTotalCents == null ? null : Number(m.costoTotalCents) }));
+        return valorDeDevolucion(base, c.cantidad);
+      };
+
       await tx.insert(inventoryMovements).values(
         calculados.map((c) => ({
+          costoUnitarioCents: fotoDe(c)?.costoUnitarioCents ?? null,
+          costoTotalCents: fotoDe(c)?.costoTotalCents ?? null,
           teamId,
           productoId: c.productoId,
           variantId: c.variantId,

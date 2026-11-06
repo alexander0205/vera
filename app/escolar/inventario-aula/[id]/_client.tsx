@@ -272,6 +272,7 @@ function AgregarDialogo({ espacioId, hoy, onCerrar, onListo }: { espacioId: numb
   const [categoria, setCategoria] = useState('mobiliario');
   const [vida, setVida] = useState('60');
   const [residual, setResidual] = useState('');
+  const [deprecAcum, setDeprecAcum] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -289,7 +290,7 @@ function AgregarDialogo({ espacioId, hoy, onCerrar, onListo }: { espacioId: numb
         body: JSON.stringify({
           espacioId, nombre: nombre.trim(), cantidad: cant, costoPesos: costo, fechaAdquisicion: fecha, soloControl,
           categoria: soloControl ? null : categoria || null,
-          ...(sinDepreciar ? {} : { vidaUtilMeses: vidaN, valorResidualPesos: residual.trim() === '' ? 0 : residual }),
+          ...(sinDepreciar ? {} : { vidaUtilMeses: vidaN, valorResidualPesos: residual.trim() === '' ? 0 : residual, deprecAcumPesos: deprecAcum.trim() === '' ? 0 : deprecAcum }),
         }),
       });
       const d = await res.json().catch(() => ({}));
@@ -306,7 +307,7 @@ function AgregarDialogo({ espacioId, hoy, onCerrar, onListo }: { espacioId: numb
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
           <TextField label="Cantidad" type="number" value={cantidad} onChange={(e) => setCantidad(e.target.value)} slotProps={{ htmlInput: { min: 1, step: '1' } }} sx={{ width: 120 }} />
           <TextField label={cant > 1 ? 'Costo total (RD$)' : 'Costo (RD$)'} type="number" value={costo} onChange={(e) => setCosto(e.target.value)} slotProps={{ htmlInput: { min: 0, step: '0.01' } }} sx={{ width: 170 }} />
-          <TextField label="Fecha de compra" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ width: 180 }} />
+          <TextField label="Fecha de compra" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: hoy } }} sx={{ width: 180 }} />
         </Box>
         <FormControlLabel
           control={<Checkbox checked={soloControl} onChange={(e) => setSoloControl(e.target.checked)} />}
@@ -328,6 +329,20 @@ function AgregarDialogo({ espacioId, hoy, onCerrar, onListo }: { espacioId: numb
               </>
             )}
           </Box>
+        )}
+        {!soloControl && (
+          <>
+            <Alert severity="info">
+              Aquí el activo se anota en su ficha <strong>sin asiento</strong>: se supone que su costo ya está en tus libros
+              (una compra registrada en Compras o un saldo inicial). Si es una compra nueva, regístrala en Compras o en
+              Contabilidad › Activos fijos.
+            </Alert>
+            {!sinDepreciar && fecha !== '' && fecha.slice(0, 7) < hoy.slice(0, 7) && (
+              <TextField label="Depreciación acumulada a hoy (RD$)" type="number" value={deprecAcum} onChange={(e) => setDeprecAcum(e.target.value)}
+                slotProps={{ htmlInput: { min: 0, step: '0.01' } }} placeholder="0.00"
+                helperText="Lo que ya llevas depreciado en tus libros. Con 0, Zero empieza a depreciar este mes." />
+            )}
+          </>
         )}
         {error && <Alert severity="error">{error}</Alert>}
       </DialogContent>

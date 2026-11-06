@@ -353,7 +353,7 @@ export const MAPA_SISTEMA: EntradaMapa[] = [
     que: 'Historial de entradas, salidas y ajustes de inventario, y alta de ajustes manuales.',
     como: [
       'Entra a Inventario › Movimientos de stock.',
-      'Pulsa «Nuevo ajuste».',
+      'Pulsa «Nuevo ajuste de stock».',
       'Elige el tipo (entrada, ajuste de entrada o de salida, stock inicial), el producto y el almacén.',
       'Escribe cantidad y motivo, y guarda.',
     ],
@@ -1163,8 +1163,9 @@ export const MAPA_SISTEMA: EntradaMapa[] = [
     como: [
       'Entra a Contabilidad › Activos fijos.',
       'Pulsa «Registrar activo».',
-      'Escribe costo, fecha de adquisición y vida útil.',
-      'Cada mes pulsa «Generar depreciaciones».',
+      'Escribe costo, fecha de adquisición y vida útil, y en «¿Cómo se pagó?» elige la caja o el banco (o «Ya está en mis libros»).',
+      'Si compraste el activo en Compras con la categoría «Compra de activo fijo», la ficha se abre sola: solo confírmala.',
+      'La depreciación se genera sola cada mes; «Generar depreciaciones» es para verla ya.',
     ],
     palabras: ['activos fijos', 'depreciacion', 'depreciar', 'equipos', 'mobiliario', 'vehiculo', 'registrar activo', 'valor en libros', 'vida util'],
     permiso: 'contabilidad:ver',

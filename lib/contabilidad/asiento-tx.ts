@@ -43,6 +43,8 @@ export async function insertarAsientoManualTx(
   teamId: number,
   entrada: { fecha: string; concepto: string; lineas: LineaManualTx[] },
   userId: number | null,
+  /** Un origen propio (p. ej. la compra de un activo): su índice único impide asentarlo dos veces. Sin él, el asiento es manual. */
+  origen?: { tipo: string; id: number },
 ): Promise<{ asientoId: number }> {
   const concepto = (entrada.concepto ?? '').trim().slice(0, 255);
   if (!concepto) throw new AsientoManualError('El concepto es obligatorio.');
@@ -64,10 +66,11 @@ export async function insertarAsientoManualTx(
   if (debe === 0) throw new AsientoManualError('El asiento no puede ser por cero.');
   await validarCuentasDeAsiento(tx, teamId, entrada.lineas.map((l) => l.cuentaId));
 
-  const [{ origen_id: origenId }] = await tx.execute(sql`SELECT nextval('contabilidad_asiento_manual_seq')::int AS origen_id`) as unknown as { origen_id: number }[];
+  const origenTipo = origen?.tipo ?? 'manual';
+  const origenId = origen ? origen.id : ((await tx.execute(sql`SELECT nextval('contabilidad_asiento_manual_seq')::int AS origen_id`)) as unknown as { origen_id: number }[])[0].origen_id;
   const [asiento] = await tx.execute(sql`
     INSERT INTO contabilidad_asientos (team_id, fecha, concepto, origen_tipo, origen_id, total_cents, created_by)
-    VALUES (${teamId}, ${entrada.fecha}::date, ${concepto}, 'manual', ${origenId}, ${debe}, ${userId})
+    VALUES (${teamId}, ${entrada.fecha}::date, ${concepto}, ${origenTipo}, ${origenId}, ${debe}, ${userId})
     RETURNING id`) as unknown as { id: number }[];
   let orden = 0;
   for (const l of entrada.lineas) {

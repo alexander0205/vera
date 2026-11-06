@@ -141,7 +141,9 @@ export type MotivoSalto =
   | 'compra-anulada'
   | 'sin-cuenta-retenciones-por-pagar'
   | 'sin-cuenta-resultados-acumulados'
-  | 'cobro-de-migracion';
+  | 'cobro-de-migracion'
+  | 'sin-cuenta-costo-ventas'
+  | 'sin-cuenta-mermas';
 
 export interface ResultadoGeneracion {
   creado:  boolean;

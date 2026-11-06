@@ -25,7 +25,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   let valorResidualCents: number | undefined;
   if (b.valorResidualPesos !== undefined && b.valorResidualPesos !== '') {
-    const r = b.valorResidualPesos === 0 ? { ok: true as const, cents: 0 } : parseMontoPesos(b.valorResidualPesos, 'El valor residual');
+    // «0», «0.00» o 0: sin valor residual (parseMontoPesos no acepta cero).
+    const r = Number(b.valorResidualPesos) === 0 ? { ok: true as const, cents: 0 } : parseMontoPesos(b.valorResidualPesos, 'El valor residual');
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: 400 });
     valorResidualCents = r.cents;
   }

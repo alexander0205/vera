@@ -23,6 +23,8 @@ export interface BuildPayloadInput {
   razonModificacion?: string;
   /** Id del documento padre (flujo "crear nota desde factura") — tipos 33, 34. */
   origenDocumentoId?: number | null;
+  /** Nota de crédito: el cliente devolvió la mercancía (el stock vuelve y se revierte el costo). */
+  devuelveMercancia?: boolean;
   /** Tipo de ingresos (1..6) — tipos 31, 32, 44, 45, 46. Default '1'. */
   tipoIngresos?: string;
   items: ItemLinea[];
@@ -131,6 +133,7 @@ export function buildPayload(input: BuildPayloadInput) {
     fechaNcfModificado:   (ncfModificado && fechaNcfModificado) ? fechaNcfModificado : undefined,
     razonModificacion:    razonModificacion?.trim() || undefined,
     origenDocumentoId:    origenDocumentoId ?? undefined,
+    devuelveMercancia:    tipoEcf === '34' && input.devuelveMercancia ? true : undefined,
     tipoIngresos:         tipoIngresos ? Number(tipoIngresos) : undefined,
     items: items
       .filter(i => i.nombreItem.trim() && i.cantidadItem > 0 && i.precioUnitarioItem > 0)

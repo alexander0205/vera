@@ -640,6 +640,10 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // que ya no sirve porque BORRADOR también puede tener stock descontado).
   stockDescontado: boolean('stock_descontado').notNull().default(false),
 
+  // Solo notas de crédito (34): el cliente devolvió la mercancía, así que el
+  // stock vuelve y el costo de ventas se revierte (migración 0244).
+  devuelveMercancia: boolean('devuelve_mercancia').notNull().default(false),
+
   // Usuario que creó el documento (nullable para registros legacy)
   createdBy: integer('created_by').references(() => users.id),
   // Último usuario que editó el documento (anular, editar borrador, emitir)
@@ -1466,6 +1470,13 @@ export const inventoryMovements = pgTable('inventory_movements', {
   stockDespues:    integer('stock_despues').notNull(),
   referenciaId:    integer('referencia_id').references(() => ecfDocuments.id),
   referenciaEncf:  varchar('referencia_encf', { length: 40 }),
+  // Foto del costo promedio con que se valoró el movimiento (migración 0244).
+  // NULL = no se valoró (histórico, compras que asientan su propio inventario,
+  // producto sin costo): el movimiento no genera asiento.
+  costoUnitarioCents: integer('costo_unitario_cents'),
+  costoTotalCents:    bigint('costo_total_cents', { mode: 'number' }),
+  // Asiento que lo contabilizó (costo de ventas, merma, stock inicial).
+  asientoId:          integer('asiento_id'),
   // En qué almacén ocurrió. NULL = no se supo (ventas sin almacén, ajustes
   // globales, y todo el histórico anterior a la migración 0094).
   almacenId:       integer('almacen_id').references(() => almacenes.id),
