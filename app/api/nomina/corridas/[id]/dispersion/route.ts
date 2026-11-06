@@ -85,6 +85,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       totalBeneficiarios: archivo.totalBeneficiarios,
       totalCents: archivo.totalCents,
       incompletos: archivo.incompletos,
+      efectivo: archivo.efectivo,
       nombreArchivo: archivo.nombreArchivo,
       formato: archivo.formato,
       formatoNombre: archivo.formatoNombre,

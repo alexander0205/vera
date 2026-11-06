@@ -132,6 +132,7 @@ interface PreviewDispersion {
   totalBeneficiarios: number;
   totalCents: number;
   incompletos: { empleadoId: number; nombre: string; motivo: string }[];
+  efectivo?: { empleadoId: number; nombre: string }[];
   nota?: string;
 }
 
@@ -542,16 +543,24 @@ export default function CorridaDetalleClient({ id }: { id: string }) {
         </div>
       )}
 
-      {/* Aviso: empleados sin cuenta de banco que quedan fuera de la dispersión */}
+      {/* Aviso: fichas de banco a medias que quedan fuera de la dispersión */}
       {corrida.estado === 'aprobada' && preview && preview.incompletos.length > 0 && (
-        <div className="mb-5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+        <div className="mb-5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200" data-testid="aviso-ficha-banco">
           <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <div>
-            <span className="font-medium">{preview.incompletos.length} empleado(s) quedan fuera del archivo del banco</span>:{' '}
-            {preview.incompletos.map((i) => `${i.nombre}: ${i.motivo.toLowerCase()}`).join('; ')}. Complétalo en su
+            <span className="font-medium">{preview.incompletos.length} empleado(s) con la cuenta de banco incompleta quedan fuera del archivo</span>:{' '}
+            {preview.incompletos.map((i) => `${i.nombre}: ${i.motivo.toLowerCase()}`).join('; ')}. Complétala en su
             ficha para incluirlos.
           </div>
         </div>
+      )}
+
+      {/* Nota neutra: sin datos de banco = se pagan en efectivo */}
+      {corrida.estado === 'aprobada' && preview && (preview.efectivo?.length ?? 0) > 0 && (
+        <p className="mb-5 text-sm text-muted-foreground" data-testid="nota-pagan-efectivo">
+          Se pagan en efectivo: {preview.efectivo!.length} ({preview.efectivo!.map((e) => e.nombre).join(', ')}).
+          No salen en el archivo del banco; usa la constancia de efectivo.
+        </p>
       )}
 
       {/* Aviso de verificación cuando se elige un preset de banco */}

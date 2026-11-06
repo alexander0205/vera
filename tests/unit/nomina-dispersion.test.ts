@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generarArchivoDispersion, esTipoCuentaBanco, type BeneficiarioDispersion } from '@/lib/nomina/dispersion';
+import { generarArchivoDispersion, esTipoCuentaBanco, cobraEnEfectivo, type BeneficiarioDispersion } from '@/lib/nomina/dispersion';
 import { FORMATOS_BANCO } from '@/lib/nomina/formatos-banco';
 
 const ben = (id: number, neto: number, banco: string | null, cuenta: string | null, tipo = 'ahorros'): BeneficiarioDispersion => ({
@@ -76,6 +76,21 @@ describe('generarArchivoDispersion — presets por banco', () => {
       { periodo: '2026-07', referencia: 'r', formatoKey: 'inexistente' },
     );
     expect(a.formato).toBe('generico');
+  });
+});
+
+describe('generarArchivoDispersion — efectivo vs ficha incompleta', () => {
+  it('sin ningún dato de banco = efectivo (nota neutra); con datos a medias = incompleto (aviso)', () => {
+    const sinNada: BeneficiarioDispersion = { ...ben(1, 100_000, null, null, ''), bancoTipoCuenta: null };
+    const a = generarArchivoDispersion(
+      [sinNada, ben(2, 200_000, 'BHD', ''), ben(3, 300_000, 'Popular', '333')],
+      { periodo: '2026-10', referencia: 'r' },
+    );
+    expect(a.efectivo).toEqual([{ empleadoId: 1, nombre: 'Emp 1' }]);
+    expect(a.incompletos.map((i) => i.empleadoId)).toEqual([2]);
+    expect(a.totalBeneficiarios).toBe(1);
+    expect(cobraEnEfectivo(sinNada)).toBe(true);
+    expect(cobraEnEfectivo(ben(4, 1, 'BHD', null))).toBe(false);
   });
 });
 
