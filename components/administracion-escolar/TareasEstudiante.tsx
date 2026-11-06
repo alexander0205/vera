@@ -205,7 +205,7 @@ function espera(desde: string, ahora = Date.now()) {
 }
 
 /**
- * «Espera respuesta de Zero · 3 h» o «Espera respuesta del colegio · Lizandro ·
+ * «Espera respuesta de Zero · 3 h» o «Espera respuesta del colegio · Ana ·
  * 26 h»: a quién le toca contestar y cuánto lleva esperando. En rojo pasadas
  * las HORAS_ALERTA horas, que es cuando sale el aviso urgente.
  */
