@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { consultarEstadosEnSegundoPlano } from '@/lib/ecf-api/auto-consulta';
 import Link from 'next/link';
 import {
   Plus, Download, Ban, FileText, Upload, Eye, Store,
@@ -152,6 +153,16 @@ export default function FacturasPage() {
   }, [filterValues, page]);
 
   useEffect(() => { fetchDocs(); }, [fetchDocs]);
+
+  // Los «En proceso» visibles se consultan solos (máx. 5 por carga, 1 vez cada
+  // 2 min por documento); si alguno cambió, se recarga la lista.
+  useEffect(() => {
+    const ids = docs.filter(d => d.estado === 'EN_PROCESO').map(d => d.id);
+    if (ids.length === 0) return;
+    let vivo = true;
+    consultarEstadosEnSegundoPlano(ids).then(cambio => { if (vivo && cambio) fetchDocs(); });
+    return () => { vivo = false; };
+  }, [docs, fetchDocs]);
 
   async function bulkAnular(ids: (string | number)[]) {
     if (!confirm(`¿Anular ${ids.length} comprobante(s)?`)) return;

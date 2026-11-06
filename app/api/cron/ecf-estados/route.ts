@@ -7,6 +7,10 @@
  * hubiera aceptado. Cada corrida revisa los más antiguos, de a uno, con un
  * tope de tiempo; lo que falte sale en la siguiente.
  *
+ * Solo de día (vercel.json: cada 30 min, 7:00 a 19:30 hora de RD, UTC-4): no
+ * hay poller nocturno para que Neon pueda dormir. Además cada pantalla que
+ * muestra un «En proceso» lo consulta sola (lib/ecf-api/auto-consulta.ts).
+ *
  * Protegido con el mismo patrón que los demás: Authorization: Bearer ${CRON_SECRET}
  */
 import { NextRequest, NextResponse } from 'next/server';

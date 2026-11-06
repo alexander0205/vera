@@ -61,6 +61,7 @@ const TIPOS_EMIT_DGII: { value: string; label: string }[] = [
   { value: '47', label: 'e47 — Pagos al Exterior' },
 ];
 import { RncSearch } from '@/components/RncSearch';
+import { consultarEstadosEnSegundoPlano } from '@/lib/ecf-api/auto-consulta';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -628,6 +629,15 @@ export function DocumentoDetalle({ variant = 'factura', docIdFijo, onCerrar }: {
   useEffect(() => { cargar(); }, [cargar]);
 
   // ─── Polling de estado DGII ─────────────────────────────────────────────────
+
+  // Al abrir un e-CF «En proceso» con trackId se consulta solo, sin bloquear la
+  // pantalla y como máximo una vez cada 2 min por documento.
+  useEffect(() => {
+    if (!factura || factura.estado !== 'EN_PROCESO' || !factura.trackId) return;
+    let vivo = true;
+    consultarEstadosEnSegundoPlano([factura.id], 1).then(cambio => { if (vivo && cambio) cargar(); });
+    return () => { vivo = false; };
+  }, [factura?.id, factura?.estado, factura?.trackId, cargar]);
 
   async function consultarEstado() {
     if (!factura?.trackId) return;
