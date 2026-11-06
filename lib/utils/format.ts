@@ -78,6 +78,44 @@ export function fmtFechaRD(iso: string | Date | null | undefined): string {
   });
 }
 
+/** ¿Es una fecha pura guardada como medianoche UTC exacta? */
+function esMedianocheUTC(d: Date): boolean {
+  return d.getUTCHours() === 0 && d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0;
+}
+
+/**
+ * Fecha calendario (YYYY-MM-DD) con la que se muestra la emisión de un documento.
+ *
+ * Las fechas de emisión se guardan de dos formas: como instante real (borradores
+ * creados con `new Date()`) o como fecha pura a medianoche UTC (lo que devuelve
+ * el proveedor y las notas por mora). Formatear la segunda en hora RD la corre
+ * un día atrás (06/11 00:00Z → 05/11 8:00 p. m.). Una medianoche UTC exacta es
+ * una fecha calendario: se lee en UTC; un instante se lee en hora RD.
+ */
+export function fechaEmisionCalendario(iso: string | Date | null | undefined): string | null {
+  if (!iso) return null;
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (isNaN(d.getTime())) return null;
+  return esMedianocheUTC(d) ? d.toISOString().slice(0, 10) : fechaRD(d);
+}
+
+/** Fecha larga ("15 de junio de 2026") de una emisión, sin correrse un día. */
+export function fechaLargaPdf(f: Date | string): string {
+  const cal = fechaEmisionCalendario(f) ?? '';
+  return new Date(`${cal}T12:00:00Z`).toLocaleDateString('es-DO', {
+    timeZone: 'UTC', year: 'numeric', month: 'long', day: 'numeric',
+  });
+}
+
+/** Emisión para el encabezado: fecha pura sin hora; instante con hora RD. */
+export function fmtEmisionDocumento(iso: string | Date | null | undefined): string {
+  if (!iso) return '—';
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (isNaN(d.getTime())) return '—';
+  return esMedianocheUTC(d) ? fmtFechaCorta(d.toISOString().slice(0, 10)) : fmtFechaHora(d);
+}
+
 /** Fecha + hora en zona RD. Ej: "26/06/2026 8:03 p. m.". */
 export function fmtFechaHora(iso: string | Date | null | undefined): string {
   if (!iso) return '—';

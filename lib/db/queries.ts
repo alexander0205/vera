@@ -1384,6 +1384,8 @@ export async function registrarPagosSplit(input: {
     /** Cuenta de la empresa a la que entró. Se valida que sea SUYA. */
     cuentaBancoId?: number | null;
     notas?:        string | null;
+    /** NC consumida (metodo='nota_credito'); el sobrante de la NC sigue disponible. */
+    notaCreditoId?: number | null;
   }>;
 }) {
   if (input.pagos.length < 1) throw new Error('Debe incluir al menos un método de pago');
@@ -1446,6 +1448,7 @@ export async function registrarPagosSplit(input: {
       cuentaBancoId: cuentasPropias.has(p.cuentaBancoId ?? -1) ? p.cuentaBancoId! : null,
       fechaPago:     input.fechaPago,
       notas:         p.notas ?? null,
+      notaCreditoId: p.notaCreditoId ?? null,
       turnoCajaId:   input.turnoCajaId ?? null,
       createdBy:     input.createdBy ?? null,
       deMigracion:   input.deMigracion ?? false,

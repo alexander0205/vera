@@ -15,16 +15,8 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 import { emision, EcfApiError } from '@/lib/ecf-api/client';
 import { logAudit } from '@/lib/audit';
+import { estadoZeroDesdeEcfApi } from '@/lib/ecf-api/estado-dgii';
 
-// ecf-api estado → emitedo estado
-const MAPA_ESTADOS: Record<string, string> = {
-  ACEPTADO:             'ACEPTADO',
-  ACEPTADO_CONDICIONAL: 'ACEPTADO_CONDICIONAL',
-  ENVIADO:              'EN_PROCESO',
-  PENDIENTE:            'EN_PROCESO',
-  RECHAZADO:            'RECHAZADO',
-  ERROR:                'RECHAZADO',
-};
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
@@ -71,8 +63,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'No se pudo consultar el estado.' }, { status: 502 });
   }
 
-  const estadoUpper = String(resultado.estado ?? '').toUpperCase();
-  const estadoNuevo = MAPA_ESTADOS[estadoUpper] ?? doc.estado;
+  const estadoNuevo = estadoZeroDesdeEcfApi(resultado.estado, doc.estado);
 
   // Actualizar BD si el estado cambió
   if (estadoNuevo !== doc.estado || resultado.mensajesDgii) {

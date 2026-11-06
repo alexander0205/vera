@@ -14,6 +14,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { toleraMigracionPendiente } from '@/lib/nomina/migracion-pendiente';
 import { partesDeHoras, totalHorasTexto, type ResumenHoras } from '@/lib/nomina/horas';
 import { createElement } from 'react';
+import { fechaLargaPdf } from '@/lib/utils/format';
 import QRCode from 'qrcode';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
@@ -207,7 +208,7 @@ export async function generarFacturaPdf(opts: {
       moraOrigen = {
         codigo: padre.codigo ?? undefined,
         encf:   padre.encf && !padre.encf.startsWith('BOR-') ? padre.encf : undefined,
-        fecha:  padre.fechaEmision ? new Date(padre.fechaEmision).toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' }) : undefined,
+        fecha:  padre.fechaEmision ? fechaLargaPdf(padre.fechaEmision) : undefined,
       };
     }
   } else {

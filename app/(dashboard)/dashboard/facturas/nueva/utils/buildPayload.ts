@@ -66,9 +66,14 @@ export function buildPayload(input: BuildPayloadInput) {
       valor:  parseFloat(l.valor || '0') || 0,
       cuenta: l.cuenta?.trim() || '',
       cuentaBancoId: l.cuentaBancoId ?? null,
+      notaCreditoId: l.notaCreditoId ?? null,
     }))
     .filter(l => l.valor > 0);
-  const usarSplit = pagoRecibido && lineasValidas.length > 1;
+  // Una línea con nota de crédito siempre va por `pagos`: los campos single no
+  // llevan `notaCreditoId` y el pago quedaría sin ligar a la NC.
+  const usarSplit = pagoRecibido && (
+    lineasValidas.length > 1 || lineasValidas.some(l => l.metodo === 'nota_credito')
+  );
   // La cuenta y la referencia viajan por línea: `registrarPagosSplit` las acepta
   // desde siempre y esto las tiraba, así que un pago dividido perdía a qué banco
   // entró cada parte mientras que el pago simple sí lo guardaba.
@@ -78,6 +83,7 @@ export function buildPayload(input: BuildPayloadInput) {
         valor: l.valor,
         cuenta: l.cuenta || undefined,
         cuentaBancoId: l.cuentaBancoId ?? undefined,
+        notaCreditoId: l.notaCreditoId ?? undefined,
       }))
     : [];
   // En modo single tomamos la primera línea válida (o la primera si ninguna tiene valor).
