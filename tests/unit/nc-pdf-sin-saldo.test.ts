@@ -27,6 +27,7 @@ describe('PDF de la nota de crédito', () => {
   it('no trae «Balance pendiente» ni «Saldo», aunque el saldo sea > 0', () => {
     const t = textos(FacturaPDF({ data: datos('34', { ncfModificado: 'E310000000001' }) })).join('|');
     expect(t).not.toMatch(/Balance pendiente/);
+    expect(t).not.toMatch(/Pago: /);
     expect(t).not.toMatch(/Saldo:/);
     expect(t).not.toMatch(/PAGADA/);
     expect(t).toMatch(/Factura que modifica: /);

@@ -775,7 +775,9 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
               <Text style={S.ncfValue}>{data.encf}</Text>
             )}
             <Text style={S.ncfVenc}>Fecha: {data.fechaEmision}</Text>
-            <Text style={S.ncfVenc}>Pago: {data.tipoPagoNombre}</Text>
+            {!esNotaCredito && (
+              <Text style={S.ncfVenc}>Pago: {data.tipoPagoNombre}</Text>
+            )}
             {data.fechaVencimientoNcf && (
               <Text style={S.ncfVenc}>Vencimiento NCF: {data.fechaVencimientoNcf}</Text>
             )}
