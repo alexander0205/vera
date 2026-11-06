@@ -320,6 +320,7 @@ export async function generarFacturaPdf(opts: {
     codigo:        doc.codigo ?? undefined,
     tipoEcf:       doc.tipoEcf,
     tipoEcfNombre: TIPO_NOMBRE[doc.tipoEcf] ?? `Tipo ${doc.tipoEcf}`,
+    ncfModificado: doc.ncfModificado ?? undefined,
     fechaEmision:  new Date(doc.fechaEmision).toLocaleDateString('es-DO', {
       year: 'numeric', month: 'long', day: 'numeric',
     }),

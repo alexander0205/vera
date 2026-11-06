@@ -49,6 +49,8 @@ export interface FacturaPDFData {
   codigo?:                string;
   tipoEcf:                string;
   tipoEcfNombre:          string;
+  /** e-NCF de la factura que modifica (NC/ND). */
+  ncfModificado?:         string;
   fechaEmision:           string;
   fechaVencimientoFactura?: string;
   fechaVencimientoNcf?:   string;
@@ -696,6 +698,8 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
   const saldoPendiente = data.saldo ?? data.montoTotal;
   const montoPagado    = Math.max(0, data.montoTotal - saldoPendiente);
   const hayPendiente   = saldoPendiente > 0.005;
+  // Una nota de crédito no se cobra: acredita. Ni «Saldo» ni «Balance pendiente».
+  const esNotaCredito  = data.tipoEcf === '34';
   // Condición: Contado/Crédito + "Pago parcial" si abonó algo pero falta saldo.
   const esParcial      = montoPagado > 0.005 && hayPendiente;
   const condicionPago  = esParcial
@@ -808,7 +812,12 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
             <Text style={S.buyerField}>
               <Text style={S.buyerLabel}>Moneda: </Text>{moneda}
             </Text>
-            {(() => {
+            {esNotaCredito && data.ncfModificado ? (
+              <Text style={S.buyerField}>
+                <Text style={S.buyerLabel}>Factura que modifica: </Text>{data.ncfModificado}
+              </Text>
+            ) : null}
+            {!esNotaCredito && (() => {
               const saldo = data.saldo ?? data.montoTotal;
               if (saldo <= 0) {
                 return <Text style={[S.valorRestanteLabel, { color: '#16a34a', fontFamily: 'Helvetica-Bold' }]}>PAGADA</Text>;
@@ -903,12 +912,12 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
               </View>
             ))}
             <View style={S.montoTotalRow}>
-              <Text style={S.montoTotalLabel}>Total factura:</Text>
+              <Text style={S.montoTotalLabel}>{esNotaCredito ? 'Monto acreditado:' : 'Total factura:'}</Text>
               <Text style={S.montoTotalValor}>{fmt(data.montoTotal)}</Text>
             </View>
 
             {/* ── PAGO (situación de cobro, separada del total fiscal) ── */}
-            {(hayPendiente || montoPagado > 0.005) && (
+            {!esNotaCredito && (hayPendiente || montoPagado > 0.005) && (
               <View style={S.pagoResumen}>
                 <Text style={S.bloqueTitulo}>PAGO</Text>
                 <View style={S.totalesRow}>
