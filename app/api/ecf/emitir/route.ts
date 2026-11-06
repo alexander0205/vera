@@ -9,6 +9,7 @@
  * emitedo guarda el resultado para auditoría, PDFs y webhooks salientes.
  */
 
+import { bloqueoEmitirConBorrador } from '@/lib/facturas/promover-borrador';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
@@ -573,6 +574,14 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parsed.data;
+
+    // Un borrador existente no se emite por aquí: esta ruta INSERTA un documento
+    // nuevo (otro e-NCF, sin sus vínculos) y dejaría el borrador vivo para
+    // emitirlo otra vez. Se promueve por /api/facturas/[id]/emitir-ecf.
+    const bloqueoBorrador = bloqueoEmitirConBorrador({ modo: data.modo, borradorId: data.borradorId });
+    if (bloqueoBorrador) {
+      return NextResponse.json({ error: bloqueoBorrador.error, code: bloqueoBorrador.code }, { status: bloqueoBorrador.status });
+    }
 
     // Toda referencia del cuerpo (cliente, almacén, vendedor, lista, productos) debe ser de ESTA empresa.
     const errRefs = await validarReferenciasDeEmpresa(teamId, {

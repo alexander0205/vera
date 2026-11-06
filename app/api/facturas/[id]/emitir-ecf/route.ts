@@ -29,6 +29,7 @@ import { emision, EcfApiError } from '@/lib/ecf-api/client';
 import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente } from '@/lib/ecf-api/contribuyente';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
+import { bloqueoDocumentoYaEmitido, bloqueoMoraYaEmitida } from '@/lib/facturas/promover-borrador';
 import { fechaLimiteParaEmitir } from '@/lib/facturas/fecha-limite-pago';
 import { hoyRD } from '@/lib/utils/format';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
@@ -161,12 +162,24 @@ export async function POST(
     // Permitir emisión para documentos SIN e-CF real: BORRADOR, HISTORICA
     // (importadas por CSV) o sin-ncf. Bloquear los que ya fueron a DGII o
     // están anulados.
-    const yaEnDgii = ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(doc.estado);
-    if (doc.estado === 'ANULADO' || yaEnDgii) {
-      return NextResponse.json(
-        { error: `El documento ya fue procesado (estado: ${doc.estado}). Solo se pueden enviar a DGII facturas sin e-CF (borrador, histórica o sin-ncf).` },
-        { status: 422 },
-      );
+    const bloqueoEstado = bloqueoDocumentoYaEmitido(doc.estado);
+    if (bloqueoEstado) {
+      return NextResponse.json({ error: bloqueoEstado.error, code: bloqueoEstado.code }, { status: bloqueoEstado.status });
+    }
+
+    // Nota por mora: si ese período ya tiene otra nota emitida, esta sería la
+    // misma mora dos veces ante la DGII.
+    if (doc.moraOrigenId != null) {
+      const hermanas = await db
+        .select({ id: ecfDocuments.id, estado: ecfDocuments.estado, moraPeriodo: ecfDocuments.moraPeriodo })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.moraOrigenId, doc.moraOrigenId)));
+      const bloqueoMora = bloqueoMoraYaEmitida({
+        docId: doc.id, moraOrigenId: doc.moraOrigenId, moraPeriodo: doc.moraPeriodo ?? null, hermanas,
+      });
+      if (bloqueoMora) {
+        return NextResponse.json({ error: bloqueoMora.error, code: bloqueoMora.code }, { status: bloqueoMora.status });
+      }
     }
 
     if (!team?.rnc) {

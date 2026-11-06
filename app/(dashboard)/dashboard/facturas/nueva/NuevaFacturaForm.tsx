@@ -1902,17 +1902,33 @@ export default function NuevaFacturaForm({
       // borrador. Reintentar por esa ruta REUSA el mismo número; volver a
       // /api/ecf/emitir tomaría el siguiente y abriría un hueco en la secuencia.
       const payload = buildPayload(modoEfectivo);
-      const res = reservaDocId
-        ? await fetch(`/api/facturas/${reservaDocId}/emitir-ecf`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tipoEcf: payload.tipoEcf,
-              ...(payload.rncComprador         ? { rncComprador:         payload.rncComprador }         : {}),
-              ...(payload.razonSocialComprador ? { razonSocialComprador: payload.razonSocialComprador } : {}),
-            }),
-          })
-        : await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, _traza: traza }) });
+      // Editando un borrador existente: /api/ecf/emitir en modo emitir crearía un
+      // documento NUEVO (otro e-NCF, sin sus vínculos) y dejaría vivo el borrador.
+      // Se guardan los cambios sobre el MISMO documento y se promueve por
+      // emitir-ecf, igual que el reintento tras un fallo.
+      const idAPromover = reservaDocId ?? (modoEfectivo === 'emitir' && initialData?.id ? initialData.id : null);
+      const promover = (id: number) => fetch(`/api/facturas/${id}/emitir-ecf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipoEcf: payload.tipoEcf,
+          ...(payload.rncComprador         ? { rncComprador:         payload.rncComprador }         : {}),
+          ...(payload.razonSocialComprador ? { razonSocialComprador: payload.razonSocialComprador } : {}),
+        }),
+      });
+      const postEmitir = (body: unknown) => fetch('/api/ecf/emitir', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      let res: Response;
+      if (reservaDocId) {
+        res = await promover(reservaDocId);
+      } else if (idAPromover) {
+        // Guardar los cambios sobre el mismo borrador; solo si guardó, promoverlo.
+        res = await postEmitir({ ...buildPayload('borrador'), _traza: traza });
+        if (res.ok) res = await promover(idAPromover);
+      } else {
+        res = await postEmitir({ ...payload, _traza: traza });
+      }
       const data = await res.json();
       if (!res.ok) {
         // Sin turno de caja abierto (solo si la empresa usa el módulo de caja):
