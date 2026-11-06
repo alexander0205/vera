@@ -32,7 +32,7 @@ import { insertarAsientoManualTx } from './asiento-tx';
 import { asegurarCuentaBase, CODIGO } from './catalogo-base';
 import { getConfig } from './config';
 import {
-  emparejar, huellasDeFilas, DIAS_SUGERENCIA,
+  emparejar, huellasDeFilas, DIAS_SUGERENCIA, archivoDescendente, elegirUltimoSaldo,
   type ExtractoLeido, type LineaExtractoPorEmparejar, type LineaLibroPorEmparejar,
 } from './extracto';
 
@@ -84,6 +84,20 @@ export interface ResultadoImportacion {
 }
 
 const LOTE = 400;
+
+/** Cuántas líneas de este archivo ya están importadas (para decirlo en la vista previa). */
+export async function contarYaImportadas(teamId: number, cuentaId: number, filas: ExtractoLeido['filas']): Promise<number> {
+  for (const t of TABLAS) if (!await tablaExiste(t)) return 0;
+  const huellas = huellasDeFilas(cuentaId, filas);
+  let total = 0;
+  for (let i = 0; i < huellas.length; i += 1000) {
+    const [r] = await db.execute(sql`
+      SELECT count(*)::int AS n FROM contabilidad_extracto_lineas
+      WHERE team_id = ${teamId} AND huella IN (${sql.join(huellas.slice(i, i + 1000).map((h) => sql`${h}`), sql`, `)})`) as unknown as { n: number }[];
+    total += n(r?.n);
+  }
+  return total;
+}
 
 export async function importarExtracto(input: {
   teamId: number; userId: number; cuentaId: number; archivoNombre: string | null; lectura: ExtractoLeido;
@@ -280,6 +294,11 @@ export interface LineaExtractoVista {
   clienteNombre: string | null;
   cargoReferencia: string | null;
   nota: string | null;
+  /** Solo en las emparejadas: el apunte del libro con el que quedó unida. */
+  libroFecha?: string | null;
+  libroConcepto?: string | null;
+  /** Solo en las pendientes: hay un apunte libre del libro con este mismo monto a tantos días (hasta 45). */
+  posibleParejaDias?: number | null;
 }
 
 export interface Bandeja {
@@ -289,6 +308,15 @@ export interface Bandeja {
   depositosSinIdentificar: LineaExtractoVista[];
   /** Retiros y cargos del banco sin pareja en el libro. */
   retirosSinRegistrar: LineaExtractoVista[];
+  /** Las últimas emparejadas (para poder deshacerlas) y las ignoradas (para restaurarlas). */
+  emparejadas: LineaExtractoVista[];
+  ignoradas: LineaExtractoVista[];
+  /** Cuántas líneas abiertas hay en total: si pasa de lo que se muestra, la pantalla lo dice. */
+  totalAbiertas: number;
+  /** Lo máximo que se muestra en cada lista. */
+  tope: number;
+  /** El saldo que trae el archivo en su último movimiento: es el «saldo según tu estado de cuenta» para cuadrar. */
+  ultimoSaldo: { fecha: string; cents: number } | null;
   resumen: {
     emparejadas: number; pendientes: number; registradas: number; asignadas: number; ignoradas: number;
     depositosPendientesCents: number; retirosPendientesCents: number;
@@ -300,11 +328,12 @@ export interface Bandeja {
 }
 
 const VACIA: Bandeja = {
-  pendientes: [], depositosSinIdentificar: [], retirosSinRegistrar: [], disponible: false, depositosActivo: false,
+  pendientes: [], depositosSinIdentificar: [], retirosSinRegistrar: [], emparejadas: [], ignoradas: [], totalAbiertas: 0, tope: 500, ultimoSaldo: null, disponible: false, depositosActivo: false,
   resumen: { emparejadas: 0, pendientes: 0, registradas: 0, asignadas: 0, ignoradas: 0, depositosPendientesCents: 0, retirosPendientesCents: 0 },
 };
 
 const TOPE_BANDEJA = 500;
+const TOPE_RESUELTAS = 100;
 
 function aVista(f: Record<string, unknown>): LineaExtractoVista {
   return {
@@ -312,6 +341,7 @@ function aVista(f: Record<string, unknown>): LineaExtractoVista {
     montoCents: n(f.monto), estado: String(f.estado), lineaId: f.lineaId == null ? null : n(f.lineaId),
     metodoEmparejado: (f.metodo as string) ?? null, clienteId: f.clienteId == null ? null : n(f.clienteId),
     clienteNombre: (f.clienteNombre as string) ?? null, cargoReferencia: (f.cargo as string) ?? null, nota: (f.nota as string) ?? null,
+    posibleParejaDias: f.dias == null ? null : n(f.dias),
   };
 }
 
@@ -332,7 +362,13 @@ export async function bandejaExtracto(teamId: number, cuentaId: number): Promise
   const filas = await db.execute(sql`
     SELECT e.id, to_char(e.fecha, 'YYYY-MM-DD') AS fecha, e.descripcion, e.referencia, e.monto_cents AS monto, e.estado,
            e.linea_id AS "lineaId", e.metodo_emparejado AS metodo, e.cliente_id AS "clienteId",
-           c.razon_social AS "clienteNombre", e.cargo_referencia AS cargo, e.nota
+           c.razon_social AS "clienteNombre", e.cargo_referencia AS cargo, e.nota,
+           CASE WHEN e.estado = 'pendiente' THEN (
+             SELECT min(abs(a.fecha - e.fecha)) FROM contabilidad_asiento_lineas l JOIN contabilidad_asientos a ON a.id = l.asiento_id
+             WHERE l.team_id = e.team_id AND l.cuenta_id = e.cuenta_id AND (l.debe_cents - l.haber_cents) = e.monto_cents
+               AND abs(a.fecha - e.fecha) <= ${DIAS_SUGERENCIA}
+               AND NOT EXISTS (SELECT 1 FROM contabilidad_extracto_lineas x WHERE x.team_id = e.team_id AND x.linea_id = l.id)
+           ) END AS "dias"
     FROM contabilidad_extracto_lineas e
     LEFT JOIN clients c ON c.id = e.cliente_id
     WHERE e.team_id = ${teamId} AND e.cuenta_id = ${cuentaId} AND e.estado IN ('pendiente', 'registrada', 'asignada')
@@ -340,9 +376,43 @@ export async function bandejaExtracto(teamId: number, cuentaId: number): Promise
     LIMIT ${TOPE_BANDEJA}`) as unknown as Record<string, unknown>[];
   const vistas = filas.map(aVista);
 
+  // Lo ya resuelto, para poder deshacerlo: emparejadas (con su apunte del libro) e ignoradas.
+  const resueltasDe = (estado: 'emparejada' | 'ignorada') => db.execute(sql`
+    SELECT e.id, to_char(e.fecha, 'YYYY-MM-DD') AS fecha, e.descripcion, e.referencia, e.monto_cents AS monto, e.estado,
+           e.linea_id AS "lineaId", e.metodo_emparejado AS metodo, NULL::int AS "clienteId", NULL::text AS "clienteNombre",
+           NULL::text AS cargo, e.nota, to_char(a.fecha, 'YYYY-MM-DD') AS "libroFecha", a.concepto AS "libroConcepto"
+    FROM contabilidad_extracto_lineas e
+    LEFT JOIN contabilidad_asiento_lineas l ON l.id = e.linea_id
+    LEFT JOIN contabilidad_asientos a ON a.id = l.asiento_id
+    WHERE e.team_id = ${teamId} AND e.cuenta_id = ${cuentaId} AND e.estado = ${estado}
+    ORDER BY e.fecha DESC, e.id DESC
+    LIMIT ${TOPE_RESUELTAS}`) as unknown as Promise<Record<string, unknown>[]>;
+  const [filasEmp, filasIgn] = await Promise.all([resueltasDe('emparejada'), resueltasDe('ignorada')]);
+  // El saldo final es el de la ÚLTIMA línea del archivo del último día; si el banco exporta lo más nuevo primero, es la primera.
+  const delUltimoDia = await db.execute(sql`
+    SELECT id, extracto_id AS "extractoId", to_char(fecha, 'YYYY-MM-DD') AS fecha, saldo_cents AS saldo
+    FROM contabilidad_extracto_lineas
+    WHERE team_id = ${teamId} AND cuenta_id = ${cuentaId} AND saldo_cents IS NOT NULL
+      AND fecha = (SELECT max(fecha) FROM contabilidad_extracto_lineas WHERE team_id = ${teamId} AND cuenta_id = ${cuentaId} AND saldo_cents IS NOT NULL)`) as unknown as
+    { id: number; extractoId: number; fecha: string; saldo: unknown }[];
+  let ult: { fecha: string; saldo: unknown } | null = null;
+  if (delUltimoDia.length > 0) {
+    const ultimoExtracto = Math.max(...delUltimoDia.map((x) => x.extractoId));
+    const filasDe = delUltimoDia.filter((x) => x.extractoId === ultimoExtracto);
+    const fechas = await db.execute(sql`
+      SELECT to_char(fecha, 'YYYY-MM-DD') AS fecha FROM contabilidad_extracto_lineas
+      WHERE team_id = ${teamId} AND extracto_id = ${ultimoExtracto} ORDER BY id`) as unknown as { fecha: string }[];
+    ult = elegirUltimoSaldo(filasDe, archivoDescendente(fechas.map((f) => f.fecha)));
+  }
+  const conLibro = (f: Record<string, unknown>): LineaExtractoVista => ({ ...aVista(f), libroFecha: (f.libroFecha as string) ?? null, libroConcepto: (f.libroConcepto as string) ?? null });
+  const emparejadas = filasEmp.map(conLibro);
+  const ignoradas = filasIgn.map(conLibro);
+
   return {
     disponible: true,
     depositosActivo: depositosSinIdentificarActivo(),
+    emparejadas, ignoradas, tope: TOPE_BANDEJA, ultimoSaldo: ult ? { fecha: ult.fecha, cents: n(ult.saldo) } : null,
+    totalAbiertas: n(cuentas.pendientes) + n(cuentas.registradas),
     pendientes: vistas.filter((v) => v.estado === 'pendiente'),
     // Un depósito sin identificar lo es desde que llega hasta que se asigna.
     depositosSinIdentificar: vistas.filter((v) => v.montoCents > 0 && (v.estado === 'pendiente' || v.estado === 'registrada')),
@@ -359,8 +429,8 @@ export async function bandejaExtracto(teamId: number, cuentaId: number): Promise
 export async function candidatosManuales(teamId: number, extractoLineaId: number): Promise<{ lineaId: number; fecha: string; concepto: string; montoCents: number }[]> {
   await exigirTablas();
   const [e] = await db.execute(sql`
-    SELECT cuenta_id AS "cuentaId", monto_cents AS monto FROM contabilidad_extracto_lineas
-    WHERE id = ${extractoLineaId} AND team_id = ${teamId}`) as unknown as { cuentaId: number; monto: unknown }[];
+    SELECT cuenta_id AS "cuentaId", monto_cents AS monto, to_char(fecha, 'YYYY-MM-DD') AS fecha FROM contabilidad_extracto_lineas
+    WHERE id = ${extractoLineaId} AND team_id = ${teamId}`) as unknown as { cuentaId: number; monto: unknown; fecha: string }[];
   if (!e) throw new ConciliacionError('La línea del estado de cuenta no existe.', 404);
   const filas = await db.execute(sql`
     SELECT l.id AS "lineaId", to_char(a.fecha, 'YYYY-MM-DD') AS fecha, a.concepto, (l.debe_cents - l.haber_cents) AS monto
@@ -369,7 +439,8 @@ export async function candidatosManuales(teamId: number, extractoLineaId: number
     WHERE l.team_id = ${teamId} AND l.cuenta_id = ${e.cuentaId}
       AND NOT EXISTS (SELECT 1 FROM contabilidad_extracto_lineas x WHERE x.team_id = ${teamId} AND x.linea_id = l.id)
       AND (l.debe_cents - l.haber_cents) = ${n(e.monto)}
-    ORDER BY a.fecha DESC, l.id DESC LIMIT 30`) as unknown as { lineaId: number; fecha: string; concepto: string; monto: unknown }[];
+    -- Los más cercanos en fecha a la línea del banco primero: con muchos apuntes iguales, el bueno no queda fuera del tope.
+    ORDER BY abs(a.fecha - ${e.fecha}::date), l.id DESC LIMIT 30`) as unknown as { lineaId: number; fecha: string; concepto: string; monto: unknown }[];
   return filas.map((f) => ({ lineaId: f.lineaId, fecha: f.fecha, concepto: f.concepto, montoCents: n(f.monto) }));
 }
 

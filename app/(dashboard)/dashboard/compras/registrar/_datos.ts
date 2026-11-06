@@ -111,6 +111,7 @@ export async function contextoRegistro(
     cuentaSalidaPorMetodo: salida.porMetodo,
     rncEmpresa: team?.rnc ?? null,
     hoy: hoyRD(),
+    contabilidadActiva: cfg.activa,
     inicial,
     avisoEcf,
     captura,

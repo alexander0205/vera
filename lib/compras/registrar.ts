@@ -260,6 +260,18 @@ export async function registrarCompra(teamId: number, userId: number, r: Registr
 
   // ── Guardar ──
   const compraId = await db.transaction(async (tx) => {
+    // El aviso de NCF repetido de arriba corre fuera de esta transacción y no hay índice único: dos envíos a la
+    // vez (doble clic, dos pestañas) pasarían los dos. Un candado por empresa, RNC y NCF hace que el segundo espere
+    // al primero y vuelva a mirar ya con el registro guardado.
+    if (!reglas.gastoSinNcf && info.ncf && !r.permitirNcfRepetido) {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`compra|${teamId}|${id.limpio}|${info.ncf}`}))`);
+      const [otro] = await tx.execute(sql`
+        SELECT id FROM compras_locales
+        WHERE team_id = ${teamId} AND referencia_encf = ${info.ncf} AND estado = 'registrada'
+          AND coalesce(regexp_replace(proveedor_rnc, '\\D', '', 'g'), '') = ${id.limpio}
+        ORDER BY id LIMIT 1`) as unknown as { id: number }[];
+      if (otro) throw new CompraError(`Ya registraste el ${info.ncf} de este proveedor (compra #${otro.id})`, 409, 'ncf-repetido', Number(otro.id));
+    }
     const [c] = await tx.insert(comprasLocales).values({
       teamId,
       clase: r.clase === 'gasto' ? 'gasto' : 'compra',

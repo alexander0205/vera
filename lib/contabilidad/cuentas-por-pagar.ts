@@ -9,6 +9,8 @@ export interface CuentaPorPagar {
   estadoPago: string; vencida: boolean; diasVencido: number;
 }
 
+/** Cuántas cuentas se traen de una vez: la pantalla avisa si hay más y se filtra para ver el resto. */
+export const TOPE_CXP = 200;
 export type CubetaCxP = 'porVencer'|'d1a30'|'d31a60'|'d61a90'|'d90mas';
 export async function listarCuentasPorPagar(teamId: number, opts: { search?:string; estado?:'vencidas'|'al-dia'; cubeta?:CubetaCxP; limit?:number; offset?:number } = {}) {
   const rows = await db.execute(sql`
@@ -34,7 +36,7 @@ export async function listarCuentasPorPagar(teamId: number, opts: { search?:stri
   if (opts.estado === 'al-dia') filtrada = filtrada.filter(c=>!c.vencida);
   const antiguedad = Object.fromEntries((['porVencer','d1a30','d31a60','d61a90','d90mas'] as CubetaCxP[]).map(k=>[k,{saldo:todas.filter(c=>cubetaDe(c)===k).reduce((s,c)=>s+c.saldo,0),count:todas.filter(c=>cubetaDe(c)===k).length}])) as Record<CubetaCxP,{saldo:number;count:number}>;
   if (opts.cubeta) filtrada=filtrada.filter(c=>cubetaDe(c)===opts.cubeta);
-  const count=filtrada.length, limit=Math.min(Math.max(opts.limit??25,1),200), offset=Math.max(opts.offset??0,0);
+  const count=filtrada.length, limit=Math.min(Math.max(opts.limit??TOPE_CXP,1),TOPE_CXP), offset=Math.max(opts.offset??0,0);
   return { cuentas:filtrada.slice(offset,offset+limit), totales: {
     pendiente: filtrada.reduce((s,c)=>s+c.saldo,0), vencido: filtrada.filter(c=>c.vencida).reduce((s,c)=>s+c.saldo,0), count, countVencidas:filtrada.filter(c=>c.vencida).length,
   }, antiguedad };
@@ -62,6 +64,11 @@ export async function registrarPagoProveedor(input: { teamId:number; compraId:nu
     if (compra.estado === 'anulada') throw new PagoProveedorError('La compra está anulada.');
     const sums = await tx.execute(sql`SELECT coalesce(sum(monto_cents),0) AS pagado FROM pagos_proveedores WHERE compra_id=${input.compraId} AND team_id=${input.teamId}`);
     const saldo = Number((sums as unknown as { pagado:number }[])[0].pagado);
+    // Un doble clic o dos pestañas: el mismo pago (compra, monto, fecha y referencia) hace segundos es el mismo pago.
+    const repetido = await tx.execute(sql`SELECT id FROM pagos_proveedores
+      WHERE team_id=${input.teamId} AND compra_id=${input.compraId} AND monto_cents=${input.montoCents} AND fecha_pago=${input.fechaPago}::date
+        AND referencia IS NOT DISTINCT FROM ${input.referencia??null} AND created_at > now() - interval '20 seconds' LIMIT 1`);
+    if ((repetido as unknown as unknown[]).length > 0 && !input.solicitudId) throw new PagoProveedorError('Ya registraste este mismo pago hace unos segundos. ¿Fue un doble clic?');
     if (input.montoCents > Number(compra.monto_total) - saldo) throw new PagoProveedorError('El pago excede saldo pendiente.');
     // `solicitud_id` (migración 0222) solo se nombra cuando el pago viene de una solicitud: los pagos de siempre
     // no dependen de esa columna.
